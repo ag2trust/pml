@@ -1,0 +1,25 @@
+verification: verification-example-001
+version: abc123
+environment: local_integrated
+verifier:
+  agent: verifier-session-001
+  provider: openai
+  model: gpt-5
+  effort: high
+targets:
+  - assistants.creation
+verdict: verified
+checks:
+  - target: assistants.creation.rules.ownership
+    result: passed
+    observation: The created Assistant belonged to the active Member's Customer.
+    evidence:
+      - evidence/example/creation-run.json
+  - target: assistants.creation.use_cases.create_from_scratch
+    result: passed
+    observation: The Assistant appeared after refresh and responded to its first message.
+    evidence:
+      - evidence/example/assistant-created.png
+limitations:
+  - Production was not evaluated.
+

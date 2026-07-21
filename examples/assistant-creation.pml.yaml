@@ -1,0 +1,122 @@
+pml: "0.1-draft"
+
+project:
+  id: example_product
+  name: Example Product
+  purpose: Demonstrate the proposed PML grammar.
+
+vocabulary:
+  Customer:
+    meaning: An organization that owns product resources.
+    forbidden_synonyms:
+      - tenant
+      - client
+  Member:
+    meaning: An authenticated person belonging to one Customer.
+    forbidden_synonyms:
+      - user
+  Assistant:
+    meaning: A Customer-owned AI worker configured by a Member.
+
+actors:
+  member:
+    term: Member
+
+concepts:
+  assistant:
+    term: Assistant
+    owned_by: Customer
+    lifecycle:
+      - draft
+      - active
+      - paused
+      - retired
+
+events:
+  assistant_created:
+    meaning: A usable Assistant has been created successfully.
+    subject: assistant
+  assistant_paused:
+    meaning: An Assistant has transitioned to paused.
+    subject: assistant
+
+domains:
+  assistants:
+    purpose: Allow Members to create and operate Assistants.
+
+    features:
+      creation:
+        purpose: Allow a Member to create a usable Assistant.
+        actors:
+          - member
+
+        inputs:
+          - Assistant identity.
+          - Operating instructions.
+          - Requested capabilities.
+
+        outputs:
+          - A configured and usable Assistant.
+
+        produces:
+          - assistant_created
+
+        rules:
+          ownership:
+            statement: A Member MUST create an Assistant only for the Member's Customer.
+            severity: critical
+          atomic_failure:
+            statement: WHEN creation fails, THE SYSTEM MUST leave no partial Assistant.
+            severity: high
+          entitlement:
+            statement: A Member MUST enable only capabilities available to the Member's Customer.
+            severity: critical
+
+        use_cases:
+          create_from_scratch:
+            actor: member
+            goal: Create and begin using an Assistant.
+            given:
+              - The Member is authenticated.
+              - The Member may create another Assistant.
+            when:
+              - The Member provides valid configuration.
+              - The Member requests creation.
+            then:
+              - The Assistant is created for the Member's Customer.
+              - The Assistant appears in the Assistant list.
+              - The Assistant can respond to a message.
+            otherwise:
+              - No partial Assistant remains.
+              - The Member receives an actionable explanation.
+
+        experience:
+          surfaces:
+            creation_flow:
+              purpose: Collect the information required to create an Assistant.
+              contains:
+                - Assistant identity input.
+                - Operating instructions input.
+                - Capability selection.
+                - Creation action.
+              states:
+                submitting:
+                  - Progress MUST be visible.
+                  - Duplicate submission MUST be prevented.
+                failure:
+                  - Entered information MUST be preserved.
+                  - A retry action MUST be available.
+
+        security:
+          - Customer ownership MUST be enforced for every affected resource.
+          - Credentials MUST NOT be exposed to the browser.
+
+        reactions:
+          - when: assistant_created
+            target: assistants.list
+            must: The created Assistant MUST appear without a new login.
+
+        acceptance:
+          - Every rule MUST have current verification evidence.
+          - Every use case MUST have current end-to-end evidence.
+          - Every critical security expectation MUST have a passing verdict.

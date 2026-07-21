@@ -1,0 +1,108 @@
+pml: "0.1-draft"
+
+project:
+  id: pml
+  name: Product Manifest Language
+  purpose: >-
+    Provide a predictable natural-language programming format through which people
+    and agents can agree on a product, build it, detect gaps, and monitor continued
+    conformance.
+
+actors:
+  owner:
+    meaning: The person with authority to approve product intent.
+  authoring_agent:
+    meaning: An agent that proposes or updates a product definition.
+  verification_agent:
+    meaning: An independent agent that evaluates product conformance.
+
+domains:
+  language:
+    purpose: Define and validate PML programs.
+
+    features:
+      definition_authoring:
+        purpose: Express product intent using a small and predictable grammar.
+
+        inputs:
+          - Product intent expressed by an Owner.
+
+        outputs:
+          - A structurally valid PML definition.
+          - A semantic product graph.
+
+        rules:
+          controlled_structure:
+            statement: An Authoring Agent MUST use only language-defined sections and fields.
+            severity: critical
+          stable_terms:
+            statement: Each product concept MUST have one canonical term and one stable identifier.
+            severity: critical
+          implementation_independence:
+            statement: A product definition MUST describe required behavior without prescribing code organization.
+            severity: critical
+          approval_boundary:
+            statement: An Agent MUST NOT change approved product intent without Owner approval.
+            severity: critical
+
+        use_cases:
+          define_product:
+            actor: authoring_agent
+            goal: Convert agreed product intent into a valid PML definition.
+            given:
+              - The Owner has expressed a product goal.
+            when:
+              - The Authoring Agent writes the product definition.
+            then:
+              - The definition uses only canonical language constructs.
+              - Every reference resolves to a declared semantic identifier.
+              - Validation reports ambiguity and missing information.
+            otherwise:
+              - The invalid definition is rejected.
+              - Validation identifies each violation precisely.
+
+        acceptance:
+          - Every accepted definition MUST pass structural and semantic validation.
+          - Invalid definitions MUST identify each detected violation.
+
+      conformance_monitoring:
+        purpose: Determine whether a product continues to satisfy its approved definition.
+
+        inputs:
+          - An approved PML definition.
+          - Current product evidence.
+
+        outputs:
+          - Calculated conformance state.
+          - Evidence-backed product gaps.
+
+        rules:
+          independent_evidence:
+            statement: A Verification Agent MUST derive conformance from observable evidence.
+            severity: critical
+          stale_verification:
+            statement: A change to a referenced product component MUST invalidate that component's verification state.
+            severity: critical
+          no_self_redefinition:
+            statement: Failed conformance MUST NOT be resolved by automatically weakening the approved definition.
+            severity: critical
+
+        use_cases:
+          evaluate_conformance:
+            actor: verification_agent
+            goal: Determine whether the current product conforms to its approved definition.
+            given:
+              - The product definition is approved.
+            when:
+              - Current evidence is evaluated against the product graph.
+            then:
+              - Every evaluated rule receives a typed state.
+              - Every failure includes evidence and affected semantic identifiers.
+              - Parent status is derived from required children and dependencies.
+            otherwise:
+              - Missing evidence produces an unknown or stale state.
+              - Missing evidence is not reported as passing.
+
+        acceptance:
+          - Every passing verdict MUST reference current observable evidence.
+          - Failed conformance MUST produce an evidence-backed gap.

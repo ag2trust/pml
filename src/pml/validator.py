@@ -1,0 +1,183 @@
+"""Restricted-YAML, structural, reference, and language validation."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date, datetime
+import json
+from pathlib import Path
+import re
+from typing import Any, Iterable
+
+from jsonschema import Draft202012Validator
+import yaml
+
+
+AMBIGUOUS_WORDS = (
+    "appropriately",
+    "etc",
+    "normally",
+    "properly",
+    "relevant",
+    "seamlessly",
+    "should",
+)
+NORMATIVE_MARKER = re.compile(r"\b(MUST|MUST NOT)\b")
+
+
+class UniqueKeyLoader(yaml.SafeLoader):
+    """Safe YAML loader rejecting aliases, duplicate keys, and implicit dates."""
+
+    def compose_node(self, parent: Any, index: Any) -> yaml.Node:
+        if self.check_event(yaml.AliasEvent):
+            event = self.peek_event()
+            raise yaml.constructor.ConstructorError(
+                None, None, f"aliases are forbidden ({event.anchor})", event.start_mark
+            )
+        return super().compose_node(parent, index)
+
+
+def _construct_mapping(loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False) -> dict:
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"duplicate key: {key}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_mapping
+)
+
+
+@dataclass(frozen=True)
+class Diagnostic:
+    path: str
+    code: str
+    message: str
+
+    def format(self) -> str:
+        return f"{self.path}: [{self.code}] {self.message}"
+
+
+def _schema() -> dict[str, Any]:
+    schema_path = Path(__file__).resolve().parents[2] / "schema" / "pml.schema.json"
+    return json.loads(schema_path.read_text())
+
+
+def _path(parts: Iterable[Any]) -> str:
+    rendered = ""
+    for part in parts:
+        if isinstance(part, int):
+            rendered += f"[{part}]"
+        else:
+            rendered += ("." if rendered else "") + str(part)
+    return rendered or "$"
+
+
+def _walk(value: Any, path: tuple[Any, ...] = ()) -> Iterable[tuple[tuple[Any, ...], Any]]:
+    yield path, value
+    if isinstance(value, dict):
+        for key, child in value.items():
+            yield from _walk(child, path + (key,))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from _walk(child, path + (index,))
+
+
+def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
+    diagnostics: list[Diagnostic] = []
+
+    vocabulary = document.get("vocabulary", {})
+    forbidden: dict[str, str] = {}
+    for canonical, definition in vocabulary.items():
+        for synonym in definition.get("forbidden_synonyms", []):
+            forbidden[synonym.casefold()] = canonical
+
+    normative_fields = {"statement", "must"}
+    normative_list_parents = {"security", "acceptance"}
+    for parts, value in _walk(document):
+        if isinstance(value, (date, datetime)):
+            diagnostics.append(
+                Diagnostic(_path(parts), "implicit-type", "dates must be quoted strings")
+            )
+        if not isinstance(value, str):
+            continue
+        lowered = value.casefold()
+        defining_forbidden_synonym = len(parts) > 1 and parts[-2] == "forbidden_synonyms"
+        if not defining_forbidden_synonym:
+            for synonym, canonical in forbidden.items():
+                if re.search(rf"\b{re.escape(synonym)}\b", lowered):
+                    diagnostics.append(
+                        Diagnostic(
+                            _path(parts),
+                            "forbidden-term",
+                            f"use canonical term '{canonical}' instead of '{synonym}'",
+                        )
+                    )
+        is_normative = bool(parts) and (
+            parts[-1] in normative_fields
+            or (len(parts) > 1 and isinstance(parts[-1], int) and parts[-2] in normative_list_parents)
+        )
+        if is_normative:
+            if not NORMATIVE_MARKER.search(value):
+                diagnostics.append(
+                    Diagnostic(
+                        _path(parts),
+                        "non-normative",
+                        "normative statements must contain MUST or MUST NOT",
+                    )
+                )
+            for word in AMBIGUOUS_WORDS:
+                if re.search(rf"\b{re.escape(word)}\b", lowered):
+                    diagnostics.append(
+                        Diagnostic(
+                            _path(parts),
+                            "ambiguous-language",
+                            f"replace ambiguous term '{word}' with an observable obligation",
+                        )
+                    )
+
+    actor_ids = set(document.get("actors", {}))
+    event_ids = set(document.get("events", {}))
+    for domain_id, domain in document.get("domains", {}).items():
+        for feature_id, feature in domain.get("features", {}).items():
+            prefix = f"domains.{domain_id}.features.{feature_id}"
+            for actor in feature.get("actors", []):
+                if actor not in actor_ids:
+                    diagnostics.append(Diagnostic(f"{prefix}.actors", "undefined-reference", f"unknown actor '{actor}'"))
+            for use_case_id, use_case in feature.get("use_cases", {}).items():
+                actor = use_case.get("actor")
+                if actor and actor not in actor_ids:
+                    diagnostics.append(Diagnostic(f"{prefix}.use_cases.{use_case_id}.actor", "undefined-reference", f"unknown actor '{actor}'"))
+            for event in feature.get("produces", []) + feature.get("consumes", []):
+                if event not in event_ids:
+                    diagnostics.append(Diagnostic(prefix, "undefined-reference", f"unknown event '{event}'"))
+            for index, reaction in enumerate(feature.get("reactions", [])):
+                event = reaction.get("when")
+                if event not in event_ids:
+                    diagnostics.append(Diagnostic(f"{prefix}.reactions[{index}].when", "undefined-reference", f"unknown event '{event}'"))
+    return diagnostics
+
+
+def validate_file(path: Path) -> list[Diagnostic]:
+    try:
+        document = yaml.load(path.read_text(), Loader=UniqueKeyLoader)
+    except (OSError, yaml.YAMLError) as exc:
+        return [Diagnostic(str(path), "yaml", str(exc))]
+    if not isinstance(document, dict):
+        return [Diagnostic("$", "structure", "a PML document must be a mapping")]
+
+    diagnostics: list[Diagnostic] = []
+    validator = Draft202012Validator(_schema())
+    for error in sorted(validator.iter_errors(document), key=lambda item: list(item.absolute_path)):
+        diagnostics.append(Diagnostic(_path(error.absolute_path), "schema", error.message))
+    diagnostics.extend(_semantic_diagnostics(document))
+    return diagnostics

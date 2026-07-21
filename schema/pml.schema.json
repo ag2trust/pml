@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pml.dev/schema/0.1/pml.schema.json",
+  "title": "Product Manifest Language 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pml", "project", "domains"],
+  "properties": {
+    "pml": {"type": "string", "const": "0.1-draft"},
+    "project": {"$ref": "#/$defs/project"},
+    "imports": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "vocabulary": {"$ref": "#/$defs/vocabularyMap"},
+    "actors": {"$ref": "#/$defs/actorMap"},
+    "concepts": {"$ref": "#/$defs/conceptMap"},
+    "events": {"$ref": "#/$defs/eventMap"},
+    "policies": {"$ref": "#/$defs/ruleMap"},
+    "domains": {"$ref": "#/$defs/domainMap"}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "nonEmpty": {"type": "string", "minLength": 1},
+    "stringList": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/nonEmpty"}},
+    "project": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "purpose"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "name": {"$ref": "#/$defs/nonEmpty"}, "purpose": {"$ref": "#/$defs/nonEmpty"}
+      }
+    },
+    "vocabularyMap": {"type": "object", "additionalProperties": {"$ref": "#/$defs/vocabulary"}},
+    "vocabulary": {
+      "type": "object", "additionalProperties": false, "required": ["meaning"],
+      "properties": {"meaning": {"$ref": "#/$defs/nonEmpty"}, "forbidden_synonyms": {"type": "array", "items": {"$ref": "#/$defs/nonEmpty"}, "uniqueItems": true}}
+    },
+    "actorMap": {"type": "object", "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/actor"}},
+    "actor": {
+      "type": "object", "additionalProperties": false, "minProperties": 1,
+      "properties": {"term": {"$ref": "#/$defs/nonEmpty"}, "meaning": {"$ref": "#/$defs/nonEmpty"}}
+    },
+    "conceptMap": {"type": "object", "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/concept"}},
+    "concept": {
+      "type": "object", "additionalProperties": false, "required": ["term"],
+      "properties": {"term": {"$ref": "#/$defs/nonEmpty"}, "owned_by": {"$ref": "#/$defs/nonEmpty"}, "lifecycle": {"$ref": "#/$defs/stringList"}}
+    },
+    "eventMap": {"type": "object", "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/event"}},
+    "event": {
+      "type": "object", "additionalProperties": false, "required": ["meaning", "subject"],
+      "properties": {"meaning": {"$ref": "#/$defs/nonEmpty"}, "subject": {"$ref": "#/$defs/id"}}
+    },
+    "ruleMap": {"type": "object", "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/rule"}},
+    "rule": {
+      "type": "object", "additionalProperties": false, "required": ["statement", "severity"],
+      "properties": {"statement": {"$ref": "#/$defs/nonEmpty"}, "severity": {"enum": ["critical", "high", "normal", "low"]}}
+    },
+    "domainMap": {"type": "object", "minProperties": 1, "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/domain"}},
+    "domain": {
+      "type": "object", "additionalProperties": false, "required": ["purpose", "features"],
+      "properties": {"purpose": {"$ref": "#/$defs/nonEmpty"}, "features": {"$ref": "#/$defs/featureMap"}}
+    },
+    "featureMap": {"type": "object", "minProperties": 1, "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/feature"}},
+    "feature": {
+      "type": "object", "additionalProperties": false, "required": ["purpose", "inputs", "outputs", "rules", "use_cases", "acceptance"],
+      "properties": {
+        "purpose": {"$ref": "#/$defs/nonEmpty"},
+        "actors": {"type": "array", "items": {"$ref": "#/$defs/id"}, "uniqueItems": true},
+        "inputs": {"$ref": "#/$defs/stringList"}, "outputs": {"$ref": "#/$defs/stringList"},
+        "owns": {"$ref": "#/$defs/stringList"}, "uses": {"$ref": "#/$defs/stringList"},
+        "produces": {"type": "array", "items": {"$ref": "#/$defs/id"}, "uniqueItems": true},
+        "consumes": {"type": "array", "items": {"$ref": "#/$defs/id"}, "uniqueItems": true},
+        "updates": {"$ref": "#/$defs/stringList"}, "displays": {"$ref": "#/$defs/stringList"},
+        "protects": {"$ref": "#/$defs/stringList"}, "blocks": {"$ref": "#/$defs/stringList"},
+        "rules": {"$ref": "#/$defs/ruleMap"}, "use_cases": {"$ref": "#/$defs/useCaseMap"},
+        "components": {"$ref": "#/$defs/componentMap"},
+        "experience": {"$ref": "#/$defs/experience"}, "security": {"$ref": "#/$defs/stringList"},
+        "reactions": {"type": "array", "items": {"$ref": "#/$defs/reaction"}},
+        "dependencies": {"type": "array", "items": {"$ref": "#/$defs/nonEmpty"}, "uniqueItems": true},
+        "operations": {"$ref": "#/$defs/operations"}, "acceptance": {"$ref": "#/$defs/stringList"}
+      }
+    },
+    "componentMap": {"type": "object", "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/component"}},
+    "component": {
+      "type": "object", "additionalProperties": false, "required": ["purpose"],
+      "properties": {
+        "purpose": {"$ref": "#/$defs/nonEmpty"},
+        "inputs": {"$ref": "#/$defs/stringList"}, "outputs": {"$ref": "#/$defs/stringList"},
+        "rules": {"$ref": "#/$defs/ruleMap"}, "security": {"$ref": "#/$defs/stringList"},
+        "interactions": {"type": "array", "items": {"$ref": "#/$defs/reaction"}},
+        "components": {"$ref": "#/$defs/componentMap"}, "acceptance": {"$ref": "#/$defs/stringList"}
+      }
+    },
+    "useCaseMap": {"type": "object", "minProperties": 1, "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/useCase"}},
+    "useCase": {
+      "type": "object", "additionalProperties": false, "required": ["actor", "goal", "given", "when", "then"],
+      "properties": {"actor": {"$ref": "#/$defs/id"}, "goal": {"$ref": "#/$defs/nonEmpty"}, "given": {"$ref": "#/$defs/stringList"}, "when": {"$ref": "#/$defs/stringList"}, "then": {"$ref": "#/$defs/stringList"}, "otherwise": {"$ref": "#/$defs/stringList"}}
+    },
+    "experience": {
+      "type": "object", "additionalProperties": false, "required": ["surfaces"],
+      "properties": {"surfaces": {"type": "object", "additionalProperties": {"$ref": "#/$defs/surface"}}}
+    },
+    "surface": {
+      "type": "object", "additionalProperties": false, "required": ["purpose", "contains"],
+      "properties": {"purpose": {"$ref": "#/$defs/nonEmpty"}, "contains": {"$ref": "#/$defs/stringList"}, "actions": {"$ref": "#/$defs/stringList"}, "states": {"type": "object", "additionalProperties": {"$ref": "#/$defs/stringList"}}, "accessibility": {"$ref": "#/$defs/stringList"}, "responsive_behavior": {"$ref": "#/$defs/stringList"}}
+    },
+    "reaction": {
+      "type": "object", "additionalProperties": false, "required": ["when", "target", "must"],
+      "properties": {"when": {"$ref": "#/$defs/id"}, "target": {"$ref": "#/$defs/nonEmpty"}, "must": {"$ref": "#/$defs/nonEmpty"}}
+    },
+    "operations": {
+      "type": "object", "additionalProperties": false,
+      "properties": {"observable_signals": {"$ref": "#/$defs/stringList"}, "health_outcomes": {"$ref": "#/$defs/stringList"}}
+    }
+  }
+}
