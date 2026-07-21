@@ -167,17 +167,85 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
     return diagnostics
 
 
-def validate_file(path: Path) -> list[Diagnostic]:
+MAX_COMPONENT_DEPTH = 2
+
+
+def _component_depth_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
+    diagnostics: list[Diagnostic] = []
+    for parts, value in _walk(document):
+        depth = sum(1 for part in parts if part == "components")
+        if depth > MAX_COMPONENT_DEPTH and parts[-1] == "components" and isinstance(value, dict):
+            diagnostics.append(
+                Diagnostic(
+                    _path(parts),
+                    "component-depth",
+                    f"component nesting is limited to {MAX_COMPONENT_DEPTH} levels",
+                )
+            )
+    return diagnostics
+
+
+def _merge(base: Any, extra: Any, source: str, parts: tuple[Any, ...], diagnostics: list[Diagnostic]) -> Any:
+    if base is None:
+        return extra
+    if isinstance(base, dict) and isinstance(extra, dict):
+        for key, value in extra.items():
+            base[key] = _merge(base.get(key), value, source, parts + (key,), diagnostics)
+        return base
+    diagnostics.append(
+        Diagnostic(_path(parts), "conflict", f"'{_path(parts)}' is already defined; duplicate in {source}")
+    )
+    return base
+
+
+def _load(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
     try:
         document = yaml.load(path.read_text(), Loader=UniqueKeyLoader)
     except (OSError, yaml.YAMLError) as exc:
-        return [Diagnostic(str(path), "yaml", str(exc))]
+        return None, [Diagnostic(str(path), "yaml", str(exc))]
     if not isinstance(document, dict):
-        return [Diagnostic("$", "structure", "a PML document must be a mapping")]
+        return None, [Diagnostic(str(path), "structure", "a PML document must be a mapping")]
+    return document, []
 
+
+SUFFIX = ".pml.yaml"
+INDEX = "index"
+
+
+def _mounted(root: Path, source: Path, fragment: dict[str, Any]) -> Any:
+    parts = source.parent.relative_to(root).parts
+    name = source.name[: -len(SUFFIX)]
+    if name != INDEX:
+        parts = parts + (name,)
+    mounted: Any = fragment
+    for key in reversed(parts):
+        mounted = {key: mounted}
+    return mounted
+
+
+def validate_file(path: Path) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
+    document: dict[str, Any] = {}
+    if path.is_dir():
+        sources = sorted(path.rglob(f"*{SUFFIX}"))
+        if not sources:
+            return [Diagnostic(str(path), "structure", f"no *{SUFFIX} files found")]
+        for source in sources:
+            fragment, load_diagnostics = _load(source)
+            diagnostics.extend(load_diagnostics)
+            if fragment is not None:
+                _merge(document, _mounted(path, source, fragment), str(source), (), diagnostics)
+    else:
+        fragment, load_diagnostics = _load(path)
+        diagnostics.extend(load_diagnostics)
+        if fragment is not None:
+            document = fragment
+    if diagnostics:
+        return diagnostics
+
     validator = Draft202012Validator(_schema())
     for error in sorted(validator.iter_errors(document), key=lambda item: list(item.absolute_path)):
         diagnostics.append(Diagnostic(_path(error.absolute_path), "schema", error.message))
     diagnostics.extend(_semantic_diagnostics(document))
+    diagnostics.extend(_component_depth_diagnostics(document))
     return diagnostics

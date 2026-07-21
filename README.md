@@ -32,6 +32,19 @@ python3 -m venv .venv
 .venv/bin/pml validate pml.yaml
 ```
 
+`pml validate` accepts a single file or a directory. A directory is one modular
+definition with path-derived mounting: each `*.pml.yaml` file's relative path is its
+mount point in the document tree (`domains/billing/features/checkout.pml.yaml`
+defines `domains.billing.features.checkout`), and `index.pml.yaml` mounts at its
+directory itself. Fragments contain only their body. Defining the same field in two
+fragments is a `conflict` diagnostic. Component nesting is limited to 2 levels.
+
+Size limits force decomposition instead of overloading one object: every container
+(rules, use cases, features, domains, components, reactions, and all string lists)
+holds at most 7 entries; project-wide registries (vocabulary, actors, concepts,
+events) hold at most 25. Exceeding a limit is a schema diagnostic — split into a new
+component, feature, or domain instead.
+
 Validation covers restricted YAML, exact structure, references, forbidden vocabulary,
 and controlled normative language. Product verification is a separate agent workflow;
 see [`docs/verification.md`](docs/verification.md).

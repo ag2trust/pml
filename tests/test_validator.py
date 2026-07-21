@@ -70,6 +70,146 @@ def test_rejects_undefined_actor(tmp_path: Path) -> None:
     assert any(item.code == "undefined-reference" for item in validate_file(manifest))
 
 
+def test_validates_directory_with_path_derived_mounting(tmp_path: Path) -> None:
+    (tmp_path / "index.pml.yaml").write_text(
+        """\
+pml: 0.1-draft
+project:
+  id: sample
+  name: Sample
+  purpose: Sample product.
+"""
+    )
+    (tmp_path / "actors.pml.yaml").write_text(
+        """\
+someone:
+  meaning: Any participant.
+"""
+    )
+    feature_dir = tmp_path / "domains" / "core" / "features"
+    feature_dir.mkdir(parents=True)
+    (tmp_path / "domains" / "core" / "index.pml.yaml").write_text(
+        "purpose: Sample domain.\n"
+    )
+    (feature_dir / "sample.pml.yaml").write_text(
+        """\
+purpose: Sample feature.
+inputs: [Input.]
+outputs: [Output.]
+rules:
+  only:
+    statement: THE SYSTEM MUST accept the input.
+    severity: normal
+use_cases:
+  run:
+    actor: someone
+    goal: Run.
+    given: [Ready.]
+    when: [Runs.]
+    then: [Done.]
+acceptance:
+  - The rule MUST have current verification evidence.
+"""
+    )
+    assert validate_file(tmp_path) == []
+
+
+def test_rejects_conflicting_fragments(tmp_path: Path) -> None:
+    (tmp_path / "index.pml.yaml").write_text("project:\n  purpose: One.\n")
+    (tmp_path / "project.pml.yaml").write_text("purpose: Two.\n")
+    diagnostics = validate_file(tmp_path)
+    assert any(item.code == "conflict" and "project.purpose" in item.message for item in diagnostics)
+
+
+def test_rejects_excessive_component_depth(tmp_path: Path) -> None:
+    manifest = tmp_path / "deep.pml.yaml"
+    manifest.write_text(
+        """\
+pml: 0.1-draft
+project:
+  id: sample
+  name: Sample
+  purpose: Sample product.
+domains:
+  core:
+    purpose: Sample domain.
+    features:
+      sample:
+        purpose: Sample feature.
+        inputs: [Input.]
+        outputs: [Output.]
+        rules:
+          only:
+            statement: THE SYSTEM MUST accept the input.
+            severity: normal
+        use_cases:
+          run:
+            actor: someone
+            goal: Run.
+            given: [Ready.]
+            when: [Runs.]
+            then: [Done.]
+        acceptance:
+          - The rule MUST have current verification evidence.
+        components:
+          level_one:
+            purpose: Level one.
+            components:
+              level_two:
+                purpose: Level two.
+                components:
+                  level_three:
+                    purpose: Too deep.
+"""
+    )
+    diagnostics = validate_file(manifest)
+    assert any(item.code == "component-depth" for item in diagnostics)
+
+
+def test_rejects_overloaded_rule_map(tmp_path: Path) -> None:
+    rules = "\n".join(
+        f"""\
+          rule_{index}:
+            statement: THE SYSTEM MUST accept input {index}.
+            severity: normal"""
+        for index in range(8)
+    )
+    manifest = tmp_path / "overloaded.pml.yaml"
+    manifest.write_text(
+        f"""\
+pml: 0.1-draft
+project:
+  id: sample
+  name: Sample
+  purpose: Sample product.
+actors:
+  someone:
+    meaning: Any participant.
+domains:
+  core:
+    purpose: Sample domain.
+    features:
+      sample:
+        purpose: Sample feature.
+        inputs: [Input.]
+        outputs: [Output.]
+        rules:
+{rules}
+        use_cases:
+          run:
+            actor: someone
+            goal: Run.
+            given: [Ready.]
+            when: [Runs.]
+            then: [Done.]
+        acceptance:
+          - Every rule MUST have current verification evidence.
+"""
+    )
+    diagnostics = validate_file(manifest)
+    assert any(item.code == "schema" and "too many properties" in item.message for item in diagnostics)
+
+
 def test_verification_report_matches_schema() -> None:
     schema = json.loads((ROOT / "schema" / "verification-report.schema.json").read_text())
     report = yaml.safe_load((ROOT / "examples" / "verification-report.yaml").read_text())

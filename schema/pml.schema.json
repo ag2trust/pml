@@ -4,110 +4,522 @@
   "title": "Product Manifest Language 0.1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["pml", "project", "domains"],
+  "required": [
+    "pml",
+    "project",
+    "domains"
+  ],
   "properties": {
-    "pml": {"type": "string", "const": "0.1-draft"},
-    "project": {"$ref": "#/$defs/project"},
-    "imports": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
-    "vocabulary": {"$ref": "#/$defs/vocabularyMap"},
-    "actors": {"$ref": "#/$defs/actorMap"},
-    "concepts": {"$ref": "#/$defs/conceptMap"},
-    "events": {"$ref": "#/$defs/eventMap"},
-    "policies": {"$ref": "#/$defs/ruleMap"},
-    "domains": {"$ref": "#/$defs/domainMap"}
+    "pml": {
+      "type": "string",
+      "const": "0.1-draft"
+    },
+    "project": {
+      "$ref": "#/$defs/project"
+    },
+    "imports": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "vocabulary": {
+      "$ref": "#/$defs/vocabularyMap"
+    },
+    "actors": {
+      "$ref": "#/$defs/actorMap"
+    },
+    "concepts": {
+      "$ref": "#/$defs/conceptMap"
+    },
+    "events": {
+      "$ref": "#/$defs/eventMap"
+    },
+    "policies": {
+      "$ref": "#/$defs/ruleMap"
+    },
+    "domains": {
+      "$ref": "#/$defs/domainMap"
+    }
   },
   "$defs": {
-    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
-    "nonEmpty": {"type": "string", "minLength": 1},
-    "stringList": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/nonEmpty"}},
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "nonEmpty": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stringList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/nonEmpty"
+      },
+      "maxItems": 7
+    },
     "project": {
-      "type": "object", "additionalProperties": false,
-      "required": ["id", "name", "purpose"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "purpose"
+      ],
       "properties": {
-        "id": {"$ref": "#/$defs/id"}, "name": {"$ref": "#/$defs/nonEmpty"}, "purpose": {"$ref": "#/$defs/nonEmpty"}
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "purpose": {
+          "$ref": "#/$defs/nonEmpty"
+        }
       }
     },
-    "vocabularyMap": {"type": "object", "additionalProperties": {"$ref": "#/$defs/vocabulary"}},
+    "vocabularyMap": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/vocabulary"
+      },
+      "maxProperties": 25
+    },
     "vocabulary": {
-      "type": "object", "additionalProperties": false, "required": ["meaning"],
-      "properties": {"meaning": {"$ref": "#/$defs/nonEmpty"}, "forbidden_synonyms": {"type": "array", "items": {"$ref": "#/$defs/nonEmpty"}, "uniqueItems": true}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "meaning"
+      ],
+      "properties": {
+        "meaning": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "forbidden_synonyms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          },
+          "uniqueItems": true
+        }
+      }
     },
-    "actorMap": {"type": "object", "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/actor"}},
+    "actorMap": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/actor"
+      },
+      "maxProperties": 25
+    },
     "actor": {
-      "type": "object", "additionalProperties": false, "minProperties": 1,
-      "properties": {"term": {"$ref": "#/$defs/nonEmpty"}, "meaning": {"$ref": "#/$defs/nonEmpty"}}
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "term": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "meaning": {
+          "$ref": "#/$defs/nonEmpty"
+        }
+      }
     },
-    "conceptMap": {"type": "object", "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/concept"}},
+    "conceptMap": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/concept"
+      },
+      "maxProperties": 25
+    },
     "concept": {
-      "type": "object", "additionalProperties": false, "required": ["term"],
-      "properties": {"term": {"$ref": "#/$defs/nonEmpty"}, "owned_by": {"$ref": "#/$defs/nonEmpty"}, "lifecycle": {"$ref": "#/$defs/stringList"}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "term"
+      ],
+      "properties": {
+        "term": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "owned_by": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/stringList"
+        }
+      }
     },
-    "eventMap": {"type": "object", "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/event"}},
+    "eventMap": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/event"
+      },
+      "maxProperties": 25
+    },
     "event": {
-      "type": "object", "additionalProperties": false, "required": ["meaning", "subject"],
-      "properties": {"meaning": {"$ref": "#/$defs/nonEmpty"}, "subject": {"$ref": "#/$defs/id"}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "meaning",
+        "subject"
+      ],
+      "properties": {
+        "meaning": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "subject": {
+          "$ref": "#/$defs/id"
+        }
+      }
     },
-    "ruleMap": {"type": "object", "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/rule"}},
+    "ruleMap": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/rule"
+      },
+      "maxProperties": 7
+    },
     "rule": {
-      "type": "object", "additionalProperties": false, "required": ["statement", "severity"],
-      "properties": {"statement": {"$ref": "#/$defs/nonEmpty"}, "severity": {"enum": ["critical", "high", "normal", "low"]}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "statement",
+        "severity"
+      ],
+      "properties": {
+        "statement": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "severity": {
+          "enum": [
+            "critical",
+            "high",
+            "normal",
+            "low"
+          ]
+        }
+      }
     },
-    "domainMap": {"type": "object", "minProperties": 1, "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/domain"}},
+    "domainMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/domain"
+      },
+      "maxProperties": 7
+    },
     "domain": {
-      "type": "object", "additionalProperties": false, "required": ["purpose", "features"],
-      "properties": {"purpose": {"$ref": "#/$defs/nonEmpty"}, "features": {"$ref": "#/$defs/featureMap"}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purpose",
+        "features"
+      ],
+      "properties": {
+        "purpose": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "features": {
+          "$ref": "#/$defs/featureMap"
+        }
+      }
     },
-    "featureMap": {"type": "object", "minProperties": 1, "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/feature"}},
+    "featureMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/feature"
+      },
+      "maxProperties": 7
+    },
     "feature": {
-      "type": "object", "additionalProperties": false, "required": ["purpose", "inputs", "outputs", "rules", "use_cases", "acceptance"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purpose",
+        "inputs",
+        "outputs",
+        "rules",
+        "use_cases",
+        "acceptance"
+      ],
       "properties": {
-        "purpose": {"$ref": "#/$defs/nonEmpty"},
-        "actors": {"type": "array", "items": {"$ref": "#/$defs/id"}, "uniqueItems": true},
-        "inputs": {"$ref": "#/$defs/stringList"}, "outputs": {"$ref": "#/$defs/stringList"},
-        "owns": {"$ref": "#/$defs/stringList"}, "uses": {"$ref": "#/$defs/stringList"},
-        "produces": {"type": "array", "items": {"$ref": "#/$defs/id"}, "uniqueItems": true},
-        "consumes": {"type": "array", "items": {"$ref": "#/$defs/id"}, "uniqueItems": true},
-        "updates": {"$ref": "#/$defs/stringList"}, "displays": {"$ref": "#/$defs/stringList"},
-        "protects": {"$ref": "#/$defs/stringList"}, "blocks": {"$ref": "#/$defs/stringList"},
-        "rules": {"$ref": "#/$defs/ruleMap"}, "use_cases": {"$ref": "#/$defs/useCaseMap"},
-        "components": {"$ref": "#/$defs/componentMap"},
-        "experience": {"$ref": "#/$defs/experience"}, "security": {"$ref": "#/$defs/stringList"},
-        "reactions": {"type": "array", "items": {"$ref": "#/$defs/reaction"}},
-        "dependencies": {"type": "array", "items": {"$ref": "#/$defs/nonEmpty"}, "uniqueItems": true},
-        "operations": {"$ref": "#/$defs/operations"}, "acceptance": {"$ref": "#/$defs/stringList"}
+        "purpose": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "actors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true,
+          "maxItems": 7
+        },
+        "inputs": {
+          "$ref": "#/$defs/stringList"
+        },
+        "outputs": {
+          "$ref": "#/$defs/stringList"
+        },
+        "owns": {
+          "$ref": "#/$defs/stringList"
+        },
+        "uses": {
+          "$ref": "#/$defs/stringList"
+        },
+        "produces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true,
+          "maxItems": 7
+        },
+        "consumes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true,
+          "maxItems": 7
+        },
+        "updates": {
+          "$ref": "#/$defs/stringList"
+        },
+        "displays": {
+          "$ref": "#/$defs/stringList"
+        },
+        "protects": {
+          "$ref": "#/$defs/stringList"
+        },
+        "blocks": {
+          "$ref": "#/$defs/stringList"
+        },
+        "rules": {
+          "$ref": "#/$defs/ruleMap"
+        },
+        "use_cases": {
+          "$ref": "#/$defs/useCaseMap"
+        },
+        "components": {
+          "$ref": "#/$defs/componentMap"
+        },
+        "experience": {
+          "$ref": "#/$defs/experience"
+        },
+        "security": {
+          "$ref": "#/$defs/stringList"
+        },
+        "reactions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reaction"
+          },
+          "maxItems": 7
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          },
+          "uniqueItems": true,
+          "maxItems": 7
+        },
+        "operations": {
+          "$ref": "#/$defs/operations"
+        },
+        "acceptance": {
+          "$ref": "#/$defs/stringList"
+        }
       }
     },
-    "componentMap": {"type": "object", "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/component"}},
+    "componentMap": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/component"
+      },
+      "maxProperties": 7
+    },
     "component": {
-      "type": "object", "additionalProperties": false, "required": ["purpose"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purpose"
+      ],
       "properties": {
-        "purpose": {"$ref": "#/$defs/nonEmpty"},
-        "inputs": {"$ref": "#/$defs/stringList"}, "outputs": {"$ref": "#/$defs/stringList"},
-        "rules": {"$ref": "#/$defs/ruleMap"}, "security": {"$ref": "#/$defs/stringList"},
-        "interactions": {"type": "array", "items": {"$ref": "#/$defs/reaction"}},
-        "components": {"$ref": "#/$defs/componentMap"}, "acceptance": {"$ref": "#/$defs/stringList"}
+        "purpose": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "inputs": {
+          "$ref": "#/$defs/stringList"
+        },
+        "outputs": {
+          "$ref": "#/$defs/stringList"
+        },
+        "rules": {
+          "$ref": "#/$defs/ruleMap"
+        },
+        "security": {
+          "$ref": "#/$defs/stringList"
+        },
+        "interactions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reaction"
+          }
+        },
+        "components": {
+          "$ref": "#/$defs/componentMap"
+        },
+        "acceptance": {
+          "$ref": "#/$defs/stringList"
+        }
       }
     },
-    "useCaseMap": {"type": "object", "minProperties": 1, "propertyNames": {"$ref": "#/$defs/id"}, "additionalProperties": {"$ref": "#/$defs/useCase"}},
+    "useCaseMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/useCase"
+      },
+      "maxProperties": 7
+    },
     "useCase": {
-      "type": "object", "additionalProperties": false, "required": ["actor", "goal", "given", "when", "then"],
-      "properties": {"actor": {"$ref": "#/$defs/id"}, "goal": {"$ref": "#/$defs/nonEmpty"}, "given": {"$ref": "#/$defs/stringList"}, "when": {"$ref": "#/$defs/stringList"}, "then": {"$ref": "#/$defs/stringList"}, "otherwise": {"$ref": "#/$defs/stringList"}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actor",
+        "goal",
+        "given",
+        "when",
+        "then"
+      ],
+      "properties": {
+        "actor": {
+          "$ref": "#/$defs/id"
+        },
+        "goal": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "given": {
+          "$ref": "#/$defs/stringList"
+        },
+        "when": {
+          "$ref": "#/$defs/stringList"
+        },
+        "then": {
+          "$ref": "#/$defs/stringList"
+        },
+        "otherwise": {
+          "$ref": "#/$defs/stringList"
+        }
+      }
     },
     "experience": {
-      "type": "object", "additionalProperties": false, "required": ["surfaces"],
-      "properties": {"surfaces": {"type": "object", "additionalProperties": {"$ref": "#/$defs/surface"}}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "surfaces"
+      ],
+      "properties": {
+        "surfaces": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/surface"
+          },
+          "maxProperties": 7
+        }
+      }
     },
     "surface": {
-      "type": "object", "additionalProperties": false, "required": ["purpose", "contains"],
-      "properties": {"purpose": {"$ref": "#/$defs/nonEmpty"}, "contains": {"$ref": "#/$defs/stringList"}, "actions": {"$ref": "#/$defs/stringList"}, "states": {"type": "object", "additionalProperties": {"$ref": "#/$defs/stringList"}}, "accessibility": {"$ref": "#/$defs/stringList"}, "responsive_behavior": {"$ref": "#/$defs/stringList"}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purpose",
+        "contains"
+      ],
+      "properties": {
+        "purpose": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "contains": {
+          "$ref": "#/$defs/stringList"
+        },
+        "actions": {
+          "$ref": "#/$defs/stringList"
+        },
+        "states": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/stringList"
+          },
+          "maxProperties": 7
+        },
+        "accessibility": {
+          "$ref": "#/$defs/stringList"
+        },
+        "responsive_behavior": {
+          "$ref": "#/$defs/stringList"
+        }
+      }
     },
     "reaction": {
-      "type": "object", "additionalProperties": false, "required": ["when", "target", "must"],
-      "properties": {"when": {"$ref": "#/$defs/id"}, "target": {"$ref": "#/$defs/nonEmpty"}, "must": {"$ref": "#/$defs/nonEmpty"}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "when",
+        "target",
+        "must"
+      ],
+      "properties": {
+        "when": {
+          "$ref": "#/$defs/id"
+        },
+        "target": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "must": {
+          "$ref": "#/$defs/nonEmpty"
+        }
+      }
     },
     "operations": {
-      "type": "object", "additionalProperties": false,
-      "properties": {"observable_signals": {"$ref": "#/$defs/stringList"}, "health_outcomes": {"$ref": "#/$defs/stringList"}}
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "observable_signals": {
+          "$ref": "#/$defs/stringList"
+        },
+        "health_outcomes": {
+          "$ref": "#/$defs/stringList"
+        }
+      }
     }
   }
 }
