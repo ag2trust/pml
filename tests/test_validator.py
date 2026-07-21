@@ -18,6 +18,17 @@ def test_assistant_creation_example_is_valid() -> None:
     assert validate_file(ROOT / "examples" / "assistant-creation.pml.yaml") == []
 
 
+def test_minimal_example_is_valid() -> None:
+    assert validate_file(ROOT / "examples" / "minimal.pml.yaml") == []
+
+
+def test_invalid_example_has_documented_diagnostics() -> None:
+    diagnostics = validate_file(ROOT / "examples" / "invalid.pml.yaml")
+    actual = "\n".join(item.format() for item in diagnostics) + "\n"
+    expected = (ROOT / "examples" / "invalid.expected.txt").read_text()
+    assert actual == expected
+
+
 def test_rejects_unknown_structure(tmp_path: Path) -> None:
     manifest = tmp_path / "invalid.yaml"
     manifest.write_text(

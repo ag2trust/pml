@@ -1,0 +1,43 @@
+# This file is intentionally invalid. It demonstrates deterministic authoring errors.
+pml: "0.1-draft"
+
+project:
+  id: invalid_example
+  name: Invalid Example
+  purpose: Demonstrate PML diagnostics.
+
+actors:
+  member:
+    meaning: A person authorized to use the product.
+
+domains:
+  notes:
+    purpose: Allow Members to manage Notes.
+    features:
+      creation:
+        purpose: Allow a Member to create a Note.
+        actors:
+          - unknown_actor
+        inputs:
+          - Note content.
+        outputs:
+          - A durable Note.
+        invented_section:
+          - Agents cannot add arbitrary feature attributes.
+        rules:
+          vague_behavior:
+            statement: The system should properly preserve the Note.
+            severity: high
+        use_cases:
+          create_note:
+            actor: member
+            goal: Record information.
+            given:
+              - The Member is authorized.
+            when:
+              - The Member submits content.
+            then:
+              - The Note is available later.
+        acceptance:
+          - The feature MUST work.
+

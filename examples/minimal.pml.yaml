@@ -1,0 +1,42 @@
+pml: "0.1-draft"
+
+project:
+  id: sample_product
+  name: Sample Product
+  purpose: Help a Member record durable Notes.
+
+actors:
+  member:
+    meaning: A person authorized to use the product.
+
+domains:
+  notes:
+    purpose: Allow Members to manage Notes.
+    features:
+      creation:
+        purpose: Allow a Member to create a Note.
+        actors:
+          - member
+        inputs:
+          - Note content.
+        outputs:
+          - A durable Note.
+        rules:
+          preserve_content:
+            statement: THE SYSTEM MUST preserve accepted Note content.
+            severity: high
+        use_cases:
+          create_note:
+            actor: member
+            goal: Record information for later use.
+            given:
+              - The Member is authorized.
+            when:
+              - The Member submits Note content.
+            then:
+              - The Note is available in a later session.
+            otherwise:
+              - The Member receives an actionable explanation.
+        acceptance:
+          - The create_note use case MUST have current verification evidence.
+

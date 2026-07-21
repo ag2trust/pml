@@ -36,6 +36,21 @@ Validation covers restricted YAML, exact structure, references, forbidden vocabu
 and controlled normative language. Product verification is a separate agent workflow;
 see [`docs/verification.md`](docs/verification.md).
 
+## Documentation
+
+- [Quickstart](docs/quickstart.md) — write and validate a small manifest.
+- [Language reference](docs/language-reference.md) — every PML 0.1 attribute.
+- [Authoring guide](docs/authoring-guide.md) — write precise, implementation-free contracts.
+- [Verification protocol](docs/verification.md) — verify an implementation against PML.
+- [Language design](docs/specs/0001-language-design.md) — normative rationale and semantics.
+
+Examples:
+
+- [Minimal valid manifest](examples/minimal.pml.yaml)
+- [Richer Assistant creation manifest](examples/assistant-creation.pml.yaml)
+- [Invalid manifest](examples/invalid.pml.yaml) with expected diagnostics
+- [Verification report](examples/verification-report.yaml)
+
 ## Repository layout
 
 ```text
@@ -45,4 +60,3 @@ schema/           Reserved for the approved structural schema
 src/              Parser and validator
 tests/            Language conformance tests
 ```
-
