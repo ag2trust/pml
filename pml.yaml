@@ -86,6 +86,15 @@ domains:
           no_self_redefinition:
             statement: Failed conformance MUST NOT be resolved by automatically weakening the approved definition.
             severity: critical
+          deterministic_critical_evidence:
+            statement: A critical rule MUST pass only through deterministic probe evidence or Owner attestation.
+            severity: critical
+          protected_probes:
+            statement: An Agent MUST NOT change an approved probe definition without Owner approval.
+            severity: critical
+          replayable_judgment:
+            statement: An agent judgment MUST include reproduction steps that allow independent replay.
+            severity: critical
 
         use_cases:
           evaluate_conformance:

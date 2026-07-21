@@ -12,11 +12,17 @@ verdict: verified
 checks:
   - target: assistants.creation.rules.ownership
     result: passed
-    observation: The created Assistant belonged to the active Member's Customer.
+    method: deterministic_probe
+    probe: assistant_ownership
+    observation: Probe passed; artifact sha256 recorded in the evidence file.
     evidence:
       - evidence/example/creation-run.json
   - target: assistants.creation.use_cases.create_from_scratch
     result: passed
+    method: agent_judgment
+    reproduction:
+      - Authenticate as a Member and create an Assistant from the empty state.
+      - Reload the Assistants list and send the Assistant one message.
     observation: The Assistant appeared after refresh and responded to its first message.
     evidence:
       - evidence/example/assistant-created.png

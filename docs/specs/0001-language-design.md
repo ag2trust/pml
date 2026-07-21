@@ -237,6 +237,8 @@ overall: unknown | planned | partial | healthy | degraded | failing | blocked
 
 An evidence record states its kind, observed result, product version, time, producer,
 confidence, and affected semantic IDs. A passing claim without evidence is invalid.
+Evidence kinds, deterministic probes, and severity-based evidence routing are defined
+in [`0002-deterministic-verification.md`](0002-deterministic-verification.md).
 
 Overall state is calculated, never freely authored. Required child failures propagate
 to parents. A failed required dependency blocks the dependent node. Relevant changes
@@ -303,4 +305,4 @@ definition.
 5. Implement controlled-language linting.
 6. Compile the normalized product graph.
 7. Add generated conformance-state and change-impact views.
-8. Pilot against one complete Breezy Assist feature dossier.
+8. Pilot against one complete feature dossier from a real host product.

@@ -1,0 +1,16 @@
+# Example probe definition. Probes are owned by the contract: this file requires
+# Owner approval to change and is executed verbatim by the probe runner.
+probe: assistant_config_persistence
+verifies: domains.assistants.features.creation.rules.persistent_configuration
+env: staging
+steps:
+  - http: POST /assistants
+    as: member
+    body_from: fixtures/assistant.json
+    expect: {status: 201, body_has: [id]}
+    capture: {assistant_id: body.id}
+  - session: reset
+  - http: GET /assistants/{assistant_id}
+    as: member
+    within: 5s
+    expect: {status: 200, body_matches_fixture: assistant.json#configuration}

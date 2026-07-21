@@ -17,8 +17,10 @@
     "checks": {
       "type": "array", "minItems": 1,
       "items": {
-        "type": "object", "additionalProperties": false, "required": ["target", "result", "observation"],
-        "properties": {"target": {"type": "string"}, "result": {"enum": ["passed", "failed", "not_evaluated", "blocked"]}, "observation": {"type": "string"}, "evidence": {"type": "array", "items": {"type": "string"}}}
+        "type": "object", "additionalProperties": false, "required": ["target", "result", "method", "observation"],
+        "properties": {"target": {"type": "string"}, "result": {"enum": ["passed", "failed", "not_evaluated", "blocked"]}, "method": {"enum": ["deterministic_probe", "human_attestation", "agent_judgment"]}, "probe": {"type": "string"}, "reproduction": {"type": "array", "items": {"type": "string"}}, "observation": {"type": "string"}, "evidence": {"type": "array", "items": {"type": "string"}}},
+        "if": {"properties": {"method": {"const": "agent_judgment"}, "result": {"const": "passed"}}, "required": ["method", "result"]},
+        "then": {"required": ["reproduction"]}
       }
     },
     "limitations": {"type": "array", "items": {"type": "string"}}

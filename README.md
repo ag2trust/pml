@@ -43,6 +43,7 @@ see [`docs/verification.md`](docs/verification.md).
 - [Authoring guide](docs/authoring-guide.md) — write precise, implementation-free contracts.
 - [Verification protocol](docs/verification.md) — verify an implementation against PML.
 - [Language design](docs/specs/0001-language-design.md) — normative rationale and semantics.
+- [Deterministic verification](docs/specs/0002-deterministic-verification.md) — probes, evidence kinds, and governance.
 
 Examples:
 
@@ -50,6 +51,7 @@ Examples:
 - [Richer Assistant creation manifest](examples/assistant-creation.pml.yaml)
 - [Invalid manifest](examples/invalid.pml.yaml) with expected diagnostics
 - [Verification report](examples/verification-report.yaml)
+- [Probe definition](examples/assistant-persistence.probe.yaml)
 
 ## Repository layout
 
