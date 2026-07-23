@@ -77,6 +77,7 @@ A probe has two parts. Only one is authored.
   No per-probe code exists.
 
 ```yaml
+pml_probe: "0.1"
 probe: assistant_config_persistence
 verifies: domains.assistants.features.creation.rules.persistent_configuration
 env: staging
@@ -100,6 +101,20 @@ The 0.1 vocabulary covers HTTP and CLI interactions: `http`, `cli`, `session`,
 exactly as new relationship types require a language version change. A free-form
 `script` step type is forbidden permanently: the day arbitrary code is a step, the
 reading-surface guarantee dies.
+
+CLI steps use an argument array and are executed directly without a shell:
+
+```yaml
+- cli: [notes, show, "{note_id}"]
+  as: member
+  within: 5s
+  expect: {exit: 0, stdout_has: [configuration]}
+```
+
+Pipes, redirects, shell expressions, environment assignments, arbitrary working
+directories, regular expressions, and scripts are not part of the vocabulary.
+HTTP response selectors and captures are likewise limited to schema-defined fields
+in 0.1; arbitrary JSONPath is not accepted.
 
 ### Code may observe; only the definition may judge
 

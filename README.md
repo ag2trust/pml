@@ -72,6 +72,15 @@ Inspect derived implementation progress and per-obligation verification signals 
 pml status path/to/approved-definition.pml.yaml path/to/product-repository
 ```
 
+Validate owner-approved probes and their semantic obligation bindings with:
+
+```bash
+pml validate-probes path/to/approved-definition.pml.yaml path/to/probes/
+```
+
+Add `--require-complete` in CI when every obligation requiring a deterministic lane
+must have at least one approved probe.
+
 Verification requirements are approved per obligation. State stores implementation
 facts and typed evidence by method; it never stores authored scores or freshness
 flags. See [`docs/specs/0003-product-state.md`](docs/specs/0003-product-state.md).

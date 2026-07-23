@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Sequence
 
 from pml.obligations import enumerate_obligations, iter_nodes
+from pml.probes import load_probes, missing_probe_diagnostics
 from pml.project_state import validate_product_state
 from pml.status import product_status
 from pml.validator import load_document, validate_file
@@ -28,6 +29,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     status_parser = subparsers.add_parser("status", help="show derived product state")
     status_parser.add_argument("manifest", type=Path)
     status_parser.add_argument("product_root", type=Path)
+    probes_parser = subparsers.add_parser("validate-probes", help="validate approved probe definitions")
+    probes_parser.add_argument("manifest", type=Path)
+    probes_parser.add_argument("probes", type=Path)
+    probes_parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args(argv)
 
     path = args.path if args.command == "validate" else args.manifest
@@ -44,6 +49,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
             for obligation in node.obligations:
                 print(f"  {obligation.obligation_id} {obligation.signal} {obligation.satisfied_lanes}/{obligation.required_lanes}")
+        return 0
+    if args.command == "validate-probes":
+        document, _ = load_document(path)
+        assert document is not None
+        probes, probe_diagnostics = load_probes(args.probes, document)
+        if args.require_complete:
+            probe_diagnostics.extend(missing_probe_diagnostics(probes, document))
+        for diagnostic in probe_diagnostics:
+            print(diagnostic.format())
+        if probe_diagnostics:
+            print(f"PML PROBES INVALID: {len(probe_diagnostics)} violation(s)")
+            return 1
+        print(f"PML PROBES VALID: {args.probes}")
         return 0
     if args.command == "check":
         document, _ = load_document(path)
