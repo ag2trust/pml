@@ -100,6 +100,7 @@ rules:
   only:
     statement: THE SYSTEM MUST accept the input.
     severity: normal
+    verification: {requires: [deterministic_probe]}
 use_cases:
   run:
     actor: someone
@@ -107,8 +108,11 @@ use_cases:
     given: [Ready.]
     when: [Runs.]
     then: [Done.]
+    verification: {requires: [agent_judgment]}
 acceptance:
-  - The rule MUST have current verification evidence.
+  input_is_accepted:
+    statement: THE SYSTEM MUST accept valid input.
+    verification: {requires: [deterministic_probe]}
 """
     )
     assert validate_file(tmp_path) == []

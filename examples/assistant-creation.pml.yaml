@@ -65,12 +65,15 @@ domains:
           ownership:
             statement: A Member MUST create an Assistant only for the Member's Customer.
             severity: critical
+            verification: {requires: [deterministic_probe]}
           atomic_failure:
             statement: WHEN creation fails, THE SYSTEM MUST leave no partial Assistant.
             severity: high
+            verification: {requires: [deterministic_probe]}
           entitlement:
             statement: A Member MUST enable only capabilities available to the Member's Customer.
             severity: critical
+            verification: {requires: [deterministic_probe]}
 
         use_cases:
           create_from_scratch:
@@ -89,6 +92,7 @@ domains:
             otherwise:
               - No partial Assistant remains.
               - The Member receives an actionable explanation.
+            verification: {requires: [deterministic_probe, agent_judgment]}
 
         experience:
           surfaces:
@@ -108,15 +112,21 @@ domains:
                   - A retry action MUST be available.
 
         security:
-          - Customer ownership MUST be enforced for every affected resource.
-          - Credentials MUST NOT be exposed to the browser.
+          customer_ownership:
+            statement: Customer ownership MUST be enforced for every affected resource.
+            verification: {requires: [deterministic_probe]}
+          credentials_not_exposed:
+            statement: Credentials MUST NOT be exposed to the browser.
+            verification: {requires: [deterministic_probe]}
 
         reactions:
-          - when: assistant_created
+          created_assistant_appears:
+            when: assistant_created
             target: assistants.list
             must: The created Assistant MUST appear without a new login.
+            verification: {requires: [deterministic_probe]}
 
         acceptance:
-          - Every rule MUST have current verification evidence.
-          - Every use case MUST have current end-to-end evidence.
-          - Every critical security expectation MUST have a passing verdict.
+          created_assistant_is_usable:
+            statement: The Member MUST be able to use the created Assistant.
+            verification: {requires: [deterministic_probe, agent_judgment]}

@@ -25,6 +25,7 @@ domains:
           preserve_content:
             statement: THE SYSTEM MUST preserve accepted Note content.
             severity: high
+            verification: {requires: [deterministic_probe]}
         use_cases:
           create_note:
             actor: member
@@ -37,6 +38,8 @@ domains:
               - The Note is available in a later session.
             otherwise:
               - The Member receives an actionable explanation.
+            verification: {requires: [deterministic_probe, agent_judgment]}
         acceptance:
-          - The create_note use case MUST have current verification evidence.
-
+          note_is_available_later:
+            statement: The Member MUST be able to access the accepted Note in a later session.
+            verification: {requires: [deterministic_probe]}

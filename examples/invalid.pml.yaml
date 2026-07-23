@@ -28,6 +28,7 @@ domains:
           vague_behavior:
             statement: The system should properly preserve the Note.
             severity: high
+            verification: {requires: [agent_judgment]}
         use_cases:
           create_note:
             actor: member
@@ -38,6 +39,8 @@ domains:
               - The Member submits content.
             then:
               - The Note is available later.
+            verification: {requires: [agent_judgment]}
         acceptance:
-          - The feature MUST work.
-
+          feature_works:
+            statement: The feature MUST work.
+            verification: {requires: [agent_judgment]}
