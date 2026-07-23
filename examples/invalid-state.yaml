@@ -1,0 +1,10 @@
+pml_state: "0.1"
+node: domains.notes.features.creation
+definition_hash: sha256:1111111111111111111111111111111111111111111111111111111111111111
+input_fingerprint: sha256:2222222222222222222222222222222222222222222222222222222222222222
+verification_score: 0.75
+obligations:
+  domains.notes.features.creation.rules.preserve_content:
+    implemented: implemented
+    freshness: fresh
+    evidence: {}
