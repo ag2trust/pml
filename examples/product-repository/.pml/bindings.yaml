@@ -1,0 +1,5 @@
+pml_bindings: "0.1"
+bindings:
+  domains.notes.features.creation:
+    paths:
+      - src/notes.txt

@@ -49,6 +49,33 @@ Validation covers restricted YAML, exact structure, references, forbidden vocabu
 and controlled normative language. Product verification is a separate agent workflow;
 see [`docs/verification.md`](docs/verification.md).
 
+## Product-local state
+
+Approved definitions remain in an owner-controlled PML repository. An implementing
+product repository carries `.pml/pml.lock`, `.pml/bindings.yaml`, and one state file
+per feature or component under `.pml/state/`. Validate that metadata, including
+definition and relevant-input fingerprints, with:
+
+```bash
+pml check path/to/approved-definition.pml.yaml path/to/product-repository
+```
+
+List the stable obligations that state must cover with:
+
+```bash
+pml obligations path/to/approved-definition.pml.yaml [node-id]
+```
+
+Inspect derived implementation progress and per-obligation verification signals with:
+
+```bash
+pml status path/to/approved-definition.pml.yaml path/to/product-repository
+```
+
+Verification requirements are approved per obligation. State stores implementation
+facts and typed evidence by method; it never stores authored scores or freshness
+flags. See [`docs/specs/0003-product-state.md`](docs/specs/0003-product-state.md).
+
 ## Documentation
 
 - [Quickstart](docs/quickstart.md) — write and validate a small manifest.
@@ -57,6 +84,7 @@ see [`docs/verification.md`](docs/verification.md).
 - [Verification protocol](docs/verification.md) — verify an implementation against PML.
 - [Language design](docs/specs/0001-language-design.md) — normative rationale and semantics.
 - [Deterministic verification](docs/specs/0002-deterministic-verification.md) — probes, evidence kinds, and governance.
+- [Product state and evidence lanes](docs/specs/0003-product-state.md) — bindings, fingerprints, and derived signals.
 
 Examples:
 
@@ -65,6 +93,7 @@ Examples:
 - [Invalid manifest](examples/invalid.pml.yaml) with expected diagnostics
 - [Verification report](examples/verification-report.yaml)
 - [Probe definition](examples/assistant-persistence.probe.yaml)
+- [Product-local state](examples/product-repository/.pml/state/domains/notes/features/creation.state.yaml)
 
 ## Repository layout
 
