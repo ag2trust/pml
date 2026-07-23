@@ -62,3 +62,6 @@ operational behavior.
 
 The verifier writes a report conforming to
 [`schema/verification-report.schema.json`](../schema/verification-report.schema.json).
+The report includes one quoted `recorded` timestamp. `pml ingest-report` validates
+the report against the pinned definition and approved probes before updating
+product-local state; invalid or partially resolved reports are not written.

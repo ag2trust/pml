@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Sequence
 
 from pml.obligations import enumerate_obligations, iter_nodes
+from pml.ingest import ingest_report
 from pml.probes import load_probes, missing_probe_diagnostics
-from pml.project_state import validate_product_state
+from pml.project_state import validate_probe_evidence, validate_product_state
 from pml.status import product_status
 from pml.validator import load_document, validate_file
 
@@ -26,6 +27,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     check_parser = subparsers.add_parser("check", help="validate product-local PML state")
     check_parser.add_argument("manifest", type=Path)
     check_parser.add_argument("product_root", type=Path)
+    check_parser.add_argument("--probes", type=Path)
     status_parser = subparsers.add_parser("status", help="show derived product state")
     status_parser.add_argument("manifest", type=Path)
     status_parser.add_argument("product_root", type=Path)
@@ -33,6 +35,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     probes_parser.add_argument("manifest", type=Path)
     probes_parser.add_argument("probes", type=Path)
     probes_parser.add_argument("--require-complete", action="store_true")
+    ingest_parser = subparsers.add_parser("ingest-report", help="ingest verification evidence into product state")
+    ingest_parser.add_argument("manifest", type=Path)
+    ingest_parser.add_argument("product_root", type=Path)
+    ingest_parser.add_argument("probes", type=Path)
+    ingest_parser.add_argument("report", type=Path)
     args = parser.parse_args(argv)
 
     path = args.path if args.command == "validate" else args.manifest
@@ -63,10 +70,31 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         print(f"PML PROBES VALID: {args.probes}")
         return 0
+    if args.command == "ingest-report":
+        document, _ = load_document(path)
+        assert document is not None
+        probes, ingest_diagnostics = load_probes(args.probes, document)
+        if not ingest_diagnostics:
+            ingest_diagnostics = ingest_report(
+                args.report, args.product_root, document, probes
+            )
+        for diagnostic in ingest_diagnostics:
+            print(diagnostic.format())
+        if ingest_diagnostics:
+            print(f"PML REPORT NOT INGESTED: {len(ingest_diagnostics)} violation(s)")
+            return 1
+        print(f"PML REPORT INGESTED: {args.report}")
+        return 0
     if args.command == "check":
         document, _ = load_document(path)
         assert document is not None
         state_diagnostics = validate_product_state(args.product_root, document)
+        if args.probes is not None:
+            probes, probe_diagnostics = load_probes(args.probes, document)
+            state_diagnostics.extend(probe_diagnostics)
+            state_diagnostics.extend(missing_probe_diagnostics(probes, document))
+            if not probe_diagnostics:
+                state_diagnostics.extend(validate_probe_evidence(args.product_root, document, probes))
         for diagnostic in state_diagnostics:
             print(diagnostic.format())
         if state_diagnostics:

@@ -159,23 +159,61 @@ def validate_product_state(repo_root: Path, definition: dict[str, Any]) -> list[
             for method in obligation_state["evidence"]:
                 if method not in allowed:
                     diagnostics.append(Diagnostic(f"{state_path}:obligations.{obligation_id}.evidence.{method}", "unexpected-evidence", f"'{method}' is not required by the approved obligation"))
-            evidence = obligation_state["evidence"]
-            records = list(evidence.get("deterministic_probe", {}).values())
-            records.extend(
-                evidence[method]
-                for method in ("agent_judgment", "human_attestation")
-                if method in evidence
-            )
-            for record in records:
-                if record["input_fingerprint"] != state["input_fingerprint"]:
-                    diagnostics.append(Diagnostic(
-                        f"{state_path}:obligations.{obligation_id}.evidence",
-                        "stale-evidence",
-                        "evidence input fingerprint does not match the node state",
-                    ))
         expected_obligations = {item.id for item in enumerate_obligations(definition, node_id)}
         missing = expected_obligations.difference(state["obligations"])
         for obligation_id in sorted(missing):
             diagnostics.append(Diagnostic(f"{state_path}:obligations", "missing-obligation", f"state is missing '{obligation_id}'"))
 
+    return diagnostics
+
+
+def validate_probe_evidence(
+    repo_root: Path,
+    definition: dict[str, Any],
+    probes: dict[str, dict[str, Any]],
+) -> list[Diagnostic]:
+    """Enforce complete, current, passing evidence for every approved probe."""
+
+    diagnostics: list[Diagnostic] = []
+    metadata = repo_root / ".pml"
+    bindings, _ = _load(metadata / "bindings.yaml")
+    if bindings is None:
+        return diagnostics
+    probe_by_obligation: dict[str, dict[str, dict[str, Any]]] = {}
+    for probe_id, probe in probes.items():
+        probe_by_obligation.setdefault(probe["verifies"], {})[probe_id] = probe
+
+    for node_id, _ in iter_nodes(definition):
+        state_path = metadata / "state" / Path(*node_id.split("."))
+        state_path = state_path.with_suffix(".state.yaml")
+        state, _ = _load(state_path)
+        if state is None:
+            continue
+        current_input = input_fingerprint(
+            repo_root, bindings.get("bindings", {}).get(node_id, {}).get("paths", [])
+        )
+        for obligation in enumerate_obligations(definition, node_id):
+            approved = probe_by_obligation.get(obligation.id, {})
+            if "deterministic_probe" not in obligation.required_methods:
+                continue
+            obligation_state = state.get("obligations", {}).get(obligation.id, {})
+            evidence = obligation_state.get("evidence", {}).get("deterministic_probe", {})
+            for probe_id, probe in approved.items():
+                record = evidence.get(probe_id)
+                location = f"{state_path}:obligations.{obligation.id}.evidence.deterministic_probe.{probe_id}"
+                if record is None:
+                    diagnostics.append(Diagnostic(location, "missing-probe-evidence", "approved probe has no evidence"))
+                    continue
+                if record["input_fingerprint"] != current_input:
+                    diagnostics.append(Diagnostic(location, "stale-probe-evidence", "probe evidence does not cover current bound inputs"))
+                if record["probe_fingerprint"] != canonical_hash(probe):
+                    diagnostics.append(Diagnostic(location, "probe-mismatch", "evidence does not match the approved probe definition"))
+                if record["result"] != "passed":
+                    diagnostics.append(Diagnostic(location, "probe-failed", f"approved probe result is {record['result']}"))
+            for probe_id in set(evidence).difference(approved):
+                diagnostics.append(Diagnostic(
+                    f"{state_path}:obligations.{obligation.id}.evidence.deterministic_probe.{probe_id}",
+                    "unknown-probe-evidence",
+                    "evidence does not identify an approved probe for this obligation",
+                ))
     return diagnostics

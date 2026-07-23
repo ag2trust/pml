@@ -81,6 +81,17 @@ pml validate-probes path/to/approved-definition.pml.yaml path/to/probes/
 Add `--require-complete` in CI when every obligation requiring a deterministic lane
 must have at least one approved probe.
 
+Ingest a runner or verifier report into the appropriate product-local state files:
+
+```bash
+pml ingest-report definition.pml.yaml product/ probes/ verification-report.yaml
+```
+
+Ingestion validates every target and evidence method against the approved definition.
+Deterministic evidence additionally records the canonical approved-probe fingerprint.
+It does not execute probes; probe execution and environment profiles are the next
+runner-specific layer.
+
 Verification requirements are approved per obligation. State stores implementation
 facts and typed evidence by method; it never stores authored scores or freshness
 flags. See [`docs/specs/0003-product-state.md`](docs/specs/0003-product-state.md).
