@@ -134,6 +134,9 @@ project:
   id: sample
   name: Sample
   purpose: Sample product.
+actors:
+  someone:
+    meaning: Any participant.
 domains:
   core:
     purpose: Sample domain.
@@ -146,6 +149,7 @@ domains:
           only:
             statement: THE SYSTEM MUST accept the input.
             severity: normal
+            verification: {requires: [deterministic_probe]}
         use_cases:
           run:
             actor: someone
@@ -153,8 +157,11 @@ domains:
             given: [Ready.]
             when: [Runs.]
             then: [Done.]
+            verification: {requires: [agent_judgment]}
         acceptance:
-          - The rule MUST have current verification evidence.
+          input_is_accepted:
+            statement: THE SYSTEM MUST accept valid input.
+            verification: {requires: [deterministic_probe]}
         components:
           level_one:
             purpose: Level one.
@@ -167,7 +174,7 @@ domains:
 """
     )
     diagnostics = validate_file(manifest)
-    assert any(item.code == "component-depth" for item in diagnostics)
+    assert [item.code for item in diagnostics] == ["component-depth"]
 
 
 def test_rejects_overloaded_rule_map(tmp_path: Path) -> None:
@@ -175,7 +182,8 @@ def test_rejects_overloaded_rule_map(tmp_path: Path) -> None:
         f"""\
           rule_{index}:
             statement: THE SYSTEM MUST accept input {index}.
-            severity: normal"""
+            severity: normal
+            verification: {{requires: [deterministic_probe]}}"""
         for index in range(8)
     )
     manifest = tmp_path / "overloaded.pml.yaml"
@@ -206,12 +214,16 @@ domains:
             given: [Ready.]
             when: [Runs.]
             then: [Done.]
+            verification: {{requires: [agent_judgment]}}
         acceptance:
-          - Every rule MUST have current verification evidence.
+          every_rule_verified:
+            statement: Every rule MUST have current verification evidence.
+            verification: {{requires: [deterministic_probe]}}
 """
     )
     diagnostics = validate_file(manifest)
-    assert any(item.code == "schema" and "too many properties" in item.message for item in diagnostics)
+    assert [item.code for item in diagnostics] == ["schema"]
+    assert "too many properties" in diagnostics[0].message
 
 
 def test_verification_report_matches_schema() -> None:
