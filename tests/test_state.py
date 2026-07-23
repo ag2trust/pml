@@ -6,7 +6,7 @@ import yaml
 
 from pml.obligations import Obligation, enumerate_obligations
 from pml.project_state import canonical_hash, input_fingerprint, validate_product_state
-from pml.status import derive_obligation_status
+from pml.status import ObligationStatus, derive_obligation_status
 from pml.validator import load_document
 
 
@@ -139,3 +139,8 @@ def test_two_lane_obligation_moves_from_stale_to_partial_to_verified() -> None:
     state["evidence"]["agent_judgment"]["input_fingerprint"] = current
     verified = derive_obligation_status(obligation, state, current, True)
     assert (verified.signal, verified.satisfied_lanes) == ("VERIFIED", 2)
+
+
+def test_verification_percent_handles_zero_required_lanes() -> None:
+    status = ObligationStatus("obligation", "VERIFIED", 0, 0)
+    assert status.verification_percent == 100.0

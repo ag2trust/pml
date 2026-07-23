@@ -20,6 +20,8 @@ class ObligationStatus:
 
     @property
     def verification_percent(self) -> float:
+        if self.required_lanes == 0:
+            return 100.0
         return 100.0 * self.satisfied_lanes / self.required_lanes
 
 

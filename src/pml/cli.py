@@ -39,7 +39,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     if args.command == "status":
         document, _ = load_document(path)
-        assert document is not None
+        if document is None:
+            return 1
         for node in product_status(args.product_root, document):
             print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
             for obligation in node.obligations:
@@ -47,7 +48,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "check":
         document, _ = load_document(path)
-        assert document is not None
+        if document is None:
+            return 1
         state_diagnostics = validate_product_state(args.product_root, document)
         for diagnostic in state_diagnostics:
             print(diagnostic.format())
@@ -58,7 +60,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "obligations":
         document, _ = load_document(path)
-        assert document is not None
+        if document is None:
+            return 1
         node_ids = {node_id for node_id, _ in iter_nodes(document)}
         if args.node_id is not None and args.node_id not in node_ids:
             print(f"{args.node_id}: [unknown-node] node does not exist")
