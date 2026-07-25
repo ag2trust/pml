@@ -71,6 +71,7 @@ Events are semantic occurrences, not transport messages.
 |---|---:|---|---|
 | `statement` | yes | One controlled-natural-language obligation. | Must contain `MUST` or `MUST NOT`. |
 | `severity` | yes | Consequence of violation. | `critical`, `high`, `normal`, `low` |
+| `verification` | yes | Approved evidence lanes. | One or more evidence methods. |
 
 ## `domains.<id>`
 
@@ -101,11 +102,11 @@ Domains follow product meaning rather than services, repositories, or deployment
 | `use_cases` | yes | End-to-end behavioral contracts. |
 | `components` | no | Recursive semantic decomposition. |
 | `experience` | no | Actor-visible surfaces and states. |
-| `security` | no | Feature-specific security obligations. Each statement uses `MUST` or `MUST NOT`. |
-| `reactions` | no | Cross-component consequences of events. |
-| `dependencies` | no | Required external semantic components or outcomes. |
+| `security` | no | ID-keyed feature-specific security obligations. |
+| `reactions` | no | ID-keyed cross-component consequences of events. |
+| `depends_on` | no | Semantic node IDs whose outcomes this node requires. |
 | `operations` | no | Observable runtime signals and health outcomes. |
-| `acceptance` | yes | Evidence-backed conditions for considering the feature conforming. |
+| `acceptance` | yes | ID-keyed observable outcomes required for acceptance. |
 
 ## `use_cases.<id>`
 
@@ -117,6 +118,7 @@ Domains follow product meaning rather than services, repositories, or deployment
 | `when` | yes | Triggering actor or system actions. |
 | `then` | yes | Required successful outcomes. |
 | `otherwise` | no | Required rejection, failure, or recovery outcomes. Use whenever failure is possible. |
+| `verification` | yes | Owner-approved evidence methods required for this obligation. |
 
 Use cases describe behavior, not click-by-click UI scripts.
 
@@ -129,7 +131,8 @@ Use cases describe behavior, not click-by-click UI scripts.
 | `outputs` | no | Observable results. |
 | `rules` | no | Component-specific obligations. |
 | `security` | no | Component-specific security obligations. |
-| `interactions` | no | Event-driven effects on other components. |
+| `reactions` | no | ID-keyed event-driven effects on other components. |
+| `depends_on` | no | Semantic node IDs whose outcomes this component requires. |
 | `components` | no | Nested semantic components at any useful depth. |
 | `acceptance` | no | Conditions demonstrating component conformance. |
 
@@ -146,7 +149,7 @@ Use cases describe behavior, not click-by-click UI scripts.
 
 Surfaces describe experience contracts, not framework components or pixel layouts.
 
-## `reactions[]` and component `interactions[]`
+## `reactions.<id>`
 
 | Attribute | Required | Meaning |
 |---|---:|---|
@@ -172,4 +175,3 @@ The following belong in external mappings, evidence, state, or history:
 - current status and evidence;
 - issues, pull requests, commits, and artifacts;
 - agent names, providers, models, and effort.
-

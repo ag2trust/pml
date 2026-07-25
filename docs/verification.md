@@ -5,13 +5,16 @@ required by an approved PML component. It is performed after code review and bef
 merge when a suitable environment is available. The design rationale is in
 [`specs/0002-deterministic-verification.md`](specs/0002-deterministic-verification.md).
 
-Verification has two paths, and the deterministic one always wins:
+Verification has three evidence methods. The approved obligation declares which
+methods are required; satisfying one lane does not replace another required lane:
 
 1. **Probe execution.** Obligations covered by approved probes are verified by
    running the probes. No agent judgment is involved; the runner's report becomes
    `deterministic_probe` evidence.
-2. **Agent judgment.** Obligations not yet covered by a probe are evaluated by an
-   independent verification agent.
+2. **Agent judgment.** Obligations requiring qualitative examination are evaluated
+   by an independent verification agent.
+3. **Human attestation.** Obligations permitting accountable direct observation may
+   be attested by a named person.
 
 ## Inputs
 
@@ -26,10 +29,10 @@ Verification has two paths, and the deterministic one always wins:
    `deterministic_probe` evidence.
 2. Load each affected component, its rules, use cases, security expectations,
    acceptance statements, and connected reactions.
-3. For obligations without probes, interact with the product through realistic
+3. For obligations requiring agent judgment, interact with the product through realistic
    actor-facing or system-facing surfaces and observe required success, failure,
    persistence, and cross-component outcomes.
-4. **Author probes.** For each obligation judged without a probe, emit a probe
+4. **Author probes.** For each suitable obligation lacking a probe, emit a probe
    definition proposal whenever the closed step vocabulary can express it. Probe
    proposals are a primary output of verification, not a courtesy: they are what
    makes the next verification deterministic.

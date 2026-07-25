@@ -1,6 +1,6 @@
 # PML 0.1 Language Design
 
-Status: Approved for 0.1 MVP implementation  
+Status: Approved for 0.1 MVP implementation; amended by spec 0003
 Approved direction: 2026-07-21
 
 ## 1. Purpose
@@ -78,7 +78,7 @@ The following graph objects may cross containment boundaries:
 - concepts;
 - policies;
 - events;
-- dependencies;
+- `depends_on` dependencies;
 - reactions;
 - state and evidence references.
 
@@ -139,7 +139,7 @@ A product capability delivering a meaningful outcome. A feature may contain only
 ```text
 purpose, actors, inputs, outputs, owns, uses, produces, consumes, updates,
 displays, protects, blocks, rules, use_cases, experience, security,
-reactions, dependencies, operations, components, acceptance
+reactions, depends_on, operations, components, acceptance
 ```
 
 `components` is recursive. Authors may stop at any semantic level that fully expresses
@@ -149,7 +149,7 @@ behavior; they must not mirror source-code organization.
 ### Rule
 
 A stable behavioral or policy constraint with a unique ID, controlled-natural-language
-statement, and severity.
+statement, severity, and approved verification requirements.
 
 ### Use case
 
@@ -181,7 +181,11 @@ A reaction defines cross-component consequences:
   must: The created Assistant MUST appear without a new login.
 ```
 
-Events and reactions provide change-impact edges in the compiled graph.
+Events and ID-keyed reactions provide change-impact edges in the compiled graph.
+
+Rules, use cases, security expectations, reactions, and acceptance outcomes are
+ID-keyed obligations. Each declares the evidence methods required for verification,
+as specified by [0003](0003-product-state.md).
 
 ## 6. Controlled natural language
 

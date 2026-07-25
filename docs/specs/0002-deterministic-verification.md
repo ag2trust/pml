@@ -1,6 +1,6 @@
 # PML 0.1 Deterministic Verification Design
 
-Status: Approved direction, schema and runner pending  
+Status: Approved direction, amended by spec 0003
 Approved direction: 2026-07-21
 
 ## 1. Purpose

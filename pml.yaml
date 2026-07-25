@@ -35,15 +35,19 @@ domains:
           controlled_structure:
             statement: An Authoring Agent MUST use only language-defined sections and fields.
             severity: critical
+            verification: {requires: [deterministic_probe]}
           stable_terms:
             statement: Each product concept MUST have one canonical term and one stable identifier.
             severity: critical
+            verification: {requires: [deterministic_probe]}
           implementation_independence:
             statement: A product definition MUST describe required behavior without prescribing code organization.
             severity: critical
+            verification: {requires: [deterministic_probe]}
           approval_boundary:
             statement: An Agent MUST NOT change approved product intent without Owner approval.
             severity: critical
+            verification: {requires: [deterministic_probe]}
 
         use_cases:
           define_product:
@@ -60,10 +64,15 @@ domains:
             otherwise:
               - The invalid definition is rejected.
               - Validation identifies each violation precisely.
+            verification: {requires: [deterministic_probe, agent_judgment]}
 
         acceptance:
-          - Every accepted definition MUST pass structural and semantic validation.
-          - Invalid definitions MUST identify each detected violation.
+          accepted_definition_is_valid:
+            statement: Every accepted definition MUST pass structural and semantic validation.
+            verification: {requires: [deterministic_probe]}
+          invalid_definition_has_diagnostics:
+            statement: Invalid definitions MUST identify each detected violation.
+            verification: {requires: [deterministic_probe]}
 
       conformance_monitoring:
         purpose: Determine whether a product continues to satisfy its approved definition.
@@ -80,21 +89,27 @@ domains:
           independent_evidence:
             statement: A Verification Agent MUST derive conformance from observable evidence.
             severity: critical
+            verification: {requires: [deterministic_probe]}
           stale_verification:
             statement: A change to a referenced product component MUST invalidate that component's verification state.
             severity: critical
+            verification: {requires: [deterministic_probe]}
           no_self_redefinition:
             statement: Failed conformance MUST NOT be resolved by automatically weakening the approved definition.
             severity: critical
+            verification: {requires: [deterministic_probe]}
           deterministic_critical_evidence:
             statement: A critical rule MUST pass only through deterministic probe evidence or Owner attestation.
             severity: critical
+            verification: {requires: [deterministic_probe]}
           protected_probes:
             statement: An Agent MUST NOT change an approved probe definition without Owner approval.
             severity: critical
+            verification: {requires: [deterministic_probe]}
           replayable_judgment:
             statement: An agent judgment MUST include reproduction steps that allow independent replay.
             severity: critical
+            verification: {requires: [deterministic_probe]}
 
         use_cases:
           evaluate_conformance:
@@ -111,7 +126,12 @@ domains:
             otherwise:
               - Missing evidence produces an unknown or stale state.
               - Missing evidence is not reported as passing.
+            verification: {requires: [deterministic_probe, agent_judgment]}
 
         acceptance:
-          - Every passing verdict MUST reference current observable evidence.
-          - Failed conformance MUST produce an evidence-backed gap.
+          passing_verdict_has_evidence:
+            statement: Every passing verdict MUST reference current observable evidence.
+            verification: {requires: [deterministic_probe]}
+          failed_conformance_has_gap:
+            statement: Failed conformance MUST produce an evidence-backed gap.
+            verification: {requires: [deterministic_probe]}

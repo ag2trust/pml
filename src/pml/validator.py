@@ -12,6 +12,8 @@ from typing import Any, Iterable
 from jsonschema import Draft202012Validator
 import yaml
 
+from pml.obligations import iter_nodes
+
 
 AMBIGUOUS_WORDS = (
     "appropriately",
@@ -102,7 +104,6 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
             forbidden[synonym.casefold()] = canonical
 
     normative_fields = {"statement", "must"}
-    normative_list_parents = {"security", "acceptance"}
     for parts, value in _walk(document):
         if isinstance(value, (date, datetime)):
             diagnostics.append(
@@ -124,7 +125,6 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                     )
         is_normative = bool(parts) and (
             parts[-1] in normative_fields
-            or (len(parts) > 1 and isinstance(parts[-1], int) and parts[-2] in normative_list_parents)
         )
         if is_normative:
             if not NORMATIVE_MARKER.search(value):
@@ -160,10 +160,24 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
             for event in feature.get("produces", []) + feature.get("consumes", []):
                 if event not in event_ids:
                     diagnostics.append(Diagnostic(prefix, "undefined-reference", f"unknown event '{event}'"))
-            for index, reaction in enumerate(feature.get("reactions", [])):
-                event = reaction.get("when")
-                if event not in event_ids:
-                    diagnostics.append(Diagnostic(f"{prefix}.reactions[{index}].when", "undefined-reference", f"unknown event '{event}'"))
+    node_ids = {node_id for node_id, _ in iter_nodes(document)}
+    for node_id, node in iter_nodes(document):
+        for dependency in node.get("depends_on", []):
+            if dependency not in node_ids:
+                diagnostics.append(Diagnostic(f"{node_id}.depends_on", "undefined-reference", f"unknown node '{dependency}'"))
+        for reaction_id, reaction in node.get("reactions", {}).items():
+            event = reaction.get("when")
+            if event not in event_ids:
+                diagnostics.append(Diagnostic(f"{node_id}.reactions.{reaction_id}.when", "undefined-reference", f"unknown event '{event}'"))
+        for rule_id, rule in node.get("rules", {}).items():
+            if rule.get("severity") == "critical":
+                required = set(rule.get("verification", {}).get("requires", []))
+                if not required.intersection({"deterministic_probe", "human_attestation"}):
+                    diagnostics.append(Diagnostic(
+                        f"{node_id}.rules.{rule_id}.verification.requires",
+                        "evidence-routing",
+                        "critical rules require deterministic_probe or human_attestation",
+                    ))
     return diagnostics
 
 
@@ -223,13 +237,13 @@ def _mounted(root: Path, source: Path, fragment: dict[str, Any]) -> Any:
     return mounted
 
 
-def validate_file(path: Path) -> list[Diagnostic]:
+def load_document(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
     diagnostics: list[Diagnostic] = []
     document: dict[str, Any] = {}
     if path.is_dir():
         sources = sorted(path.rglob(f"*{SUFFIX}"))
         if not sources:
-            return [Diagnostic(str(path), "structure", f"no *{SUFFIX} files found")]
+            return None, [Diagnostic(str(path), "structure", f"no *{SUFFIX} files found")]
         for source in sources:
             fragment, load_diagnostics = _load(source)
             diagnostics.extend(load_diagnostics)
@@ -241,6 +255,14 @@ def validate_file(path: Path) -> list[Diagnostic]:
         if fragment is not None:
             document = fragment
     if diagnostics:
+        return None, diagnostics
+
+    return document, []
+
+
+def validate_file(path: Path) -> list[Diagnostic]:
+    document, diagnostics = load_document(path)
+    if document is None:
         return diagnostics
 
     validator = Draft202012Validator(_schema())
