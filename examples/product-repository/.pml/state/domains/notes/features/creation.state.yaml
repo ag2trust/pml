@@ -1,0 +1,15 @@
+pml_state: "0.1"
+node: domains.notes.features.creation
+definition_hash: sha256:c83692b81af809dcb9674518067cf20e068f7946cffb734ce78318e6edc2b122
+input_fingerprint: sha256:ef137bfc1a0b5ac3ba684c458a0f830000cad06e28567759f4b42073b6cb5843
+obligations:
+  domains.notes.features.creation.rules.preserve_content:
+    implemented: implemented
+    evidence:
+      deterministic_probe: {}
+  domains.notes.features.creation.use_cases.create_note:
+    implemented: partial
+    evidence: {}
+  domains.notes.features.creation.acceptance.note_is_available_later:
+    implemented: unknown
+    evidence: {}

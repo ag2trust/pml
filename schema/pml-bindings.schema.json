@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pml.dev/schema/0.1/pml-bindings.schema.json",
+  "title": "PML implementation bindings 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pml_bindings", "bindings"],
+  "properties": {
+    "pml_bindings": {"const": "0.1"},
+    "bindings": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.components\\.[a-z][a-z0-9_]*)*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["paths"],
+        "properties": {
+          "paths": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?!/)(?!\\.?$)(?!\\.pml(?:/|$))(?!\\.git(?:/|$))(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+            }
+          }
+        }
+      }
+    }
+  }
+}
