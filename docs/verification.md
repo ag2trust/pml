@@ -15,5 +15,7 @@ Changes to a node or a `related_to` node make its evidence stale. `pml sync` may
 refresh deterministic probes; agent and human evidence require explicit
 re-verification.
 
-Probe validation, report ingestion, and executable sync are separate tooling layers;
-they are not implemented by the normalized language slice.
+Reports conform to
+[`schema/verification-report.schema.json`](../schema/verification-report.schema.json)
+and are validated before state is updated. Executable sync remains a separate tooling
+layer.

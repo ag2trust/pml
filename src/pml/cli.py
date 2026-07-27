@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
+from pml.ingest import ingest_report
 from pml.obligations import enumerate_obligations, iter_nodes
 from pml.probes import load_probes, missing_probe_diagnostics
 from pml.project_state import (
@@ -39,6 +40,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     probes_parser.add_argument("probes", type=Path)
     probes_parser.add_argument("--bindings", type=Path, help="product-local bindings used to validate probe coverage")
     probes_parser.add_argument("--require-complete", action="store_true")
+    ingest_parser = subparsers.add_parser(
+        "ingest-report", help="ingest verification evidence into product state"
+    )
+    ingest_parser.add_argument("manifest", type=Path)
+    ingest_parser.add_argument("product_root", type=Path)
+    ingest_parser.add_argument("probes", type=Path)
+    ingest_parser.add_argument("report", type=Path)
     args = parser.parse_args(argv)
 
     path = args.path if args.command == "validate" else args.manifest
@@ -80,6 +88,31 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"PML PROBES INVALID: {len(probe_diagnostics)} violation(s)")
             return 1
         print(f"PML PROBES VALID: {args.probes}")
+        return 0
+    if args.command == "ingest-report":
+        document, _ = load_document(path)
+        if document is None:
+            return 1
+        bindings, binding_diagnostics = load_bindings(
+            args.product_root / ".pml" / "bindings.yaml"
+        )
+        ingest_diagnostics = list(binding_diagnostics)
+        probes, probe_diagnostics = load_probes(
+            args.probes, document, bindings
+        )
+        ingest_diagnostics.extend(probe_diagnostics)
+        if bindings is not None and not ingest_diagnostics:
+            ingest_diagnostics = ingest_report(
+                args.report, args.product_root, document, probes
+            )
+        for diagnostic in ingest_diagnostics:
+            print(diagnostic.format())
+        if ingest_diagnostics:
+            print(
+                f"PML REPORT NOT INGESTED: {len(ingest_diagnostics)} violation(s)"
+            )
+            return 1
+        print(f"PML REPORT INGESTED: {args.report}")
         return 0
     if args.command == "check":
         document, _ = load_document(path)

@@ -3,10 +3,11 @@
   "title": "PML verification report",
   "type": "object",
   "additionalProperties": false,
-  "required": ["verification", "version", "environment", "verifier", "targets", "verdict", "checks", "limitations"],
+  "required": ["verification", "version", "recorded", "environment", "verifier", "targets", "verdict", "checks", "limitations"],
   "properties": {
     "verification": {"type": "string", "minLength": 1},
     "version": {"type": "string", "minLength": 1},
+    "recorded": {"type": "string", "format": "date-time"},
     "environment": {"enum": ["isolated", "local_integrated", "staging", "production"]},
     "verifier": {
       "type": "object", "additionalProperties": false, "required": ["agent", "provider", "model", "effort"],
@@ -18,12 +19,15 @@
       "type": "array", "minItems": 1,
       "items": {
         "type": "object", "additionalProperties": false, "required": ["target", "result", "method", "observation"],
-        "properties": {"target": {"type": "string"}, "result": {"enum": ["passed", "failed", "not_evaluated", "blocked"]}, "method": {"enum": ["deterministic_probe", "human_attestation", "agent_judgment"]}, "probe": {"type": "string"}, "reproduction": {"type": "array", "items": {"type": "string"}}, "observation": {"type": "string"}, "evidence": {"type": "array", "items": {"type": "string"}}},
-        "if": {"properties": {"method": {"const": "agent_judgment"}, "result": {"const": "passed"}}, "required": ["method", "result"]},
-        "then": {"required": ["reproduction"]}
+        "properties": {"target": {"type": "string", "minLength": 1}, "result": {"enum": ["passed", "failed", "not_evaluated", "blocked"]}, "method": {"enum": ["deterministic_probe", "human_attestation", "agent_judgment"]}, "probe": {"type": "string"}, "attester": {"type": "string", "minLength": 1}, "reproduction": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "observation": {"type": "string", "minLength": 1}, "evidence": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}},
+        "if": {"properties": {"method": {"const": "agent_judgment"}}, "required": ["method"]},
+        "then": {"required": ["reproduction"]},
+        "allOf": [
+          {"if": {"properties": {"method": {"const": "deterministic_probe"}}, "required": ["method"]}, "then": {"required": ["probe"]}},
+          {"if": {"properties": {"method": {"const": "human_attestation"}}, "required": ["method"]}, "then": {"required": ["attester"]}}
+        ]
       }
     },
     "limitations": {"type": "array", "items": {"type": "string"}}
   }
 }
-
