@@ -81,6 +81,21 @@ def load_bindings(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
     return bindings, diagnostics
 
 
+def load_state(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
+    """Load an existing state file only when it conforms to the state schema."""
+
+    if not path.exists():
+        return None, []
+    state, diagnostics = _load(path)
+    if state is None:
+        return None, diagnostics
+    schema_diagnostics = _schema_diagnostics(path, state, "pml-state.schema.json")
+    diagnostics.extend(schema_diagnostics)
+    if schema_diagnostics:
+        return None, diagnostics
+    return state, diagnostics
+
+
 def validate_product_state(repo_root: Path, definition: dict[str, Any]) -> list[Diagnostic]:
     """Validate lock, bindings and state, including current-input fingerprints."""
 

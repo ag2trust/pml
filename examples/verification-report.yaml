@@ -1,5 +1,6 @@
 verification: verification-example-001
 version: abc123
+recorded: "2026-07-22T10:00:00Z"
 environment: local_integrated
 verifier:
   agent: verifier-session-001
@@ -7,25 +8,22 @@ verifier:
   model: gpt-5
   effort: high
 targets:
-  - assistants.creation
+  - domains.assistants.features.creation
 verdict: verified
 checks:
-  - target: assistants.creation.rules.ownership
+  - target: domains.assistants.features.creation.rules.ownership
     result: passed
     method: deterministic_probe
     probe: assistant_ownership
     observation: Probe passed; artifact sha256 recorded in the evidence file.
     evidence:
       - evidence/example/creation-run.json
-  - target: assistants.creation.use_cases.create_from_scratch
+  - target: domains.assistants.features.creation.use_cases.create_from_scratch
     result: passed
     method: agent_judgment
     reproduction:
       - Authenticate as a Member and create an Assistant from the empty state.
       - Reload the Assistants list and send the Assistant one message.
     observation: The Assistant appeared after refresh and responded to its first message.
-    evidence:
-      - evidence/example/assistant-created.png
 limitations:
   - Production was not evaluated.
-

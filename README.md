@@ -86,6 +86,16 @@ pml validate-probes definition.pml.yaml probes/ \
 Add `--probes probes/` to `pml check` to validate the approved definitions and their
 recorded evidence in product-local state.
 
+Ingest a validated runner or verifier report into product-local state with:
+
+```bash
+pml ingest-report definition.pml.yaml product/ probes/ verification-report.yaml
+```
+
+Ingestion validates every check against the approved obligation, verification method,
+coverage binding, and probe definition before updating touched state files. It does
+not execute probes.
+
 Verification coverage is approved per obligation in product-local bindings. State
 stores implementation facts and typed evidence; confidence and freshness are derived.
 See [`docs/specs/0003-product-state.md`](docs/specs/0003-product-state.md).
