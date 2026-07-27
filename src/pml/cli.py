@@ -11,7 +11,7 @@ from pml.ingest import ingest_report
 from pml.probes import load_probes, missing_probe_diagnostics
 from pml.project_state import validate_probe_evidence, validate_product_state
 from pml.status import product_status
-from pml.validator import load_document, validate_file
+from pml.validator import Diagnostic, _load, load_document, validate_file
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -34,6 +34,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     probes_parser = subparsers.add_parser("validate-probes", help="validate approved probe definitions")
     probes_parser.add_argument("manifest", type=Path)
     probes_parser.add_argument("probes", type=Path)
+    probes_parser.add_argument(
+        "--bindings",
+        type=Path,
+        help="product-local bindings used to validate probe coverage",
+    )
     probes_parser.add_argument("--require-complete", action="store_true")
     ingest_parser = subparsers.add_parser("ingest-report", help="ingest verification evidence into product state")
     ingest_parser.add_argument("manifest", type=Path)
@@ -55,14 +60,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         for node in product_status(args.product_root, document):
             print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
             for obligation in node.obligations:
-                print(f"  {obligation.obligation_id} {obligation.signal} {obligation.satisfied_lanes}/{obligation.required_lanes}")
+                print(f"  {obligation.obligation_id} {obligation.signal} {obligation.verification_percent:.0f}%")
         return 0
     if args.command == "validate-probes":
         document, _ = load_document(path)
         assert document is not None
-        probes, probe_diagnostics = load_probes(args.probes, document)
+        bindings = None
+        binding_diagnostics: list[Diagnostic] = []
+        if args.bindings is not None:
+            bindings, binding_diagnostics = _load(args.bindings)
+        probes, probe_diagnostics = load_probes(args.probes, document, bindings)
+        probe_diagnostics.extend(binding_diagnostics)
         if args.require_complete:
-            probe_diagnostics.extend(missing_probe_diagnostics(probes, document))
+            if bindings is None:
+                probe_diagnostics.append(Diagnostic(
+                    str(args.probes),
+                    "missing-bindings",
+                    "--require-complete requires --bindings",
+                ))
+            else:
+                probe_diagnostics.extend(
+                    missing_probe_diagnostics(probes, document, bindings)
+                )
         for diagnostic in probe_diagnostics:
             print(diagnostic.format())
         if probe_diagnostics:
@@ -73,7 +92,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "ingest-report":
         document, _ = load_document(path)
         assert document is not None
-        probes, ingest_diagnostics = load_probes(args.probes, document)
+        bindings, binding_diagnostics = _load(args.product_root / ".pml" / "bindings.yaml")
+        ingest_diagnostics = list(binding_diagnostics)
+        probes, probe_diagnostics = load_probes(args.probes, document, bindings)
+        ingest_diagnostics.extend(probe_diagnostics)
         if not ingest_diagnostics:
             ingest_diagnostics = ingest_report(
                 args.report, args.product_root, document, probes
@@ -90,9 +112,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         assert document is not None
         state_diagnostics = validate_product_state(args.product_root, document)
         if args.probes is not None:
-            probes, probe_diagnostics = load_probes(args.probes, document)
+            bindings, binding_load_diagnostics = _load(args.product_root / ".pml" / "bindings.yaml")
+            state_diagnostics.extend(binding_load_diagnostics)
+            probes, probe_diagnostics = load_probes(args.probes, document, bindings)
             state_diagnostics.extend(probe_diagnostics)
-            state_diagnostics.extend(missing_probe_diagnostics(probes, document))
+            if bindings is not None:
+                state_diagnostics.extend(missing_probe_diagnostics(probes, document, bindings))
             if not probe_diagnostics:
                 state_diagnostics.extend(validate_probe_evidence(args.product_root, document, probes))
         for diagnostic in state_diagnostics:

@@ -3,9 +3,9 @@
 Product Manifest Language (PML) is a small, opinionated, declarative language for
 describing what a software product is and what it must do.
 
-PML captures product concepts, actors, features, rules, use cases, experiences,
-security expectations, events, relationships, and operational outcomes without
-prescribing source files, frameworks, APIs, database tables, or tests.
+PML captures product concepts, actors, features, components, rules, use cases,
+signals, reactions, relationships, experiences, and selected owner-mandated
+architecture without prescribing code organization, APIs, database schemas, or tests.
 
 The intended workflow is:
 
@@ -37,13 +37,11 @@ definition with path-derived mounting: each `*.pml.yaml` file's relative path is
 mount point in the document tree (`domains/billing/features/checkout.pml.yaml`
 defines `domains.billing.features.checkout`), and `index.pml.yaml` mounts at its
 directory itself. Fragments contain only their body. Defining the same field in two
-fragments is a `conflict` diagnostic. Component nesting is limited to 2 levels.
+fragments is a `conflict` diagnostic. Components are direct children of features and
+do not nest.
 
-Size limits force decomposition instead of overloading one object: every container
-(rules, use cases, features, domains, components, reactions, and all string lists)
-holds at most 7 entries; project-wide registries (vocabulary, actors, concepts,
-events) hold at most 25. Exceeding a limit is a schema diagnostic — split into a new
-component, feature, or domain instead.
+Closed schemas prevent ad hoc sections. Product registries and behavioral maps have
+explicit size and shape constraints.
 
 Validation covers restricted YAML, exact structure, references, forbidden vocabulary,
 and controlled normative language. Product verification is a separate agent workflow;
@@ -78,8 +76,13 @@ Validate owner-approved probes and their semantic obligation bindings with:
 pml validate-probes path/to/approved-definition.pml.yaml path/to/probes/
 ```
 
-Add `--require-complete` in CI when every obligation requiring a deterministic lane
-must have at least one approved probe.
+Check completeness against product-local verification bindings with:
+
+```bash
+pml validate-probes definition.pml.yaml probes/ \
+  --bindings product/.pml/bindings.yaml \
+  --require-complete
+```
 
 Ingest a runner or verifier report into the appropriate product-local state files:
 
@@ -92,9 +95,9 @@ Deterministic evidence additionally records the canonical approved-probe fingerp
 It does not execute probes; probe execution and environment profiles are the next
 runner-specific layer.
 
-Verification requirements are approved per obligation. State stores implementation
-facts and typed evidence by method; it never stores authored scores or freshness
-flags. See [`docs/specs/0003-product-state.md`](docs/specs/0003-product-state.md).
+Verification coverage is approved per obligation in product-local bindings. State
+stores implementation facts and typed evidence; confidence and freshness are derived.
+See [`docs/specs/0003-product-state.md`](docs/specs/0003-product-state.md).
 
 ## Documentation
 
@@ -104,7 +107,8 @@ flags. See [`docs/specs/0003-product-state.md`](docs/specs/0003-product-state.md
 - [Verification protocol](docs/verification.md) — verify an implementation against PML.
 - [Language design](docs/specs/0001-language-design.md) — normative rationale and semantics.
 - [Deterministic verification](docs/specs/0002-deterministic-verification.md) — probes, evidence kinds, and governance.
-- [Product state and evidence lanes](docs/specs/0003-product-state.md) — bindings, fingerprints, and derived signals.
+- [Product state](docs/specs/0003-product-state.md) — bindings, fingerprints, and derived confidence.
+- [Language normalization](docs/specs/0004-language-normalization.md) — approved canonical terms and removals.
 
 Examples:
 

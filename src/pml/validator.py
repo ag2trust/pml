@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+import copy
 import json
 from pathlib import Path
 import re
@@ -37,6 +38,22 @@ class UniqueKeyLoader(yaml.SafeLoader):
                 None, None, f"aliases are forbidden ({event.anchor})", event.start_mark
             )
         return super().compose_node(parent, index)
+
+
+# PML treats words such as "on" and "no" as strings. Only true/false are booleans.
+UniqueKeyLoader.yaml_implicit_resolvers = copy.deepcopy(
+    yaml.SafeLoader.yaml_implicit_resolvers
+)
+for first, resolvers in UniqueKeyLoader.yaml_implicit_resolvers.items():
+    UniqueKeyLoader.yaml_implicit_resolvers[first] = [
+        item for item in resolvers
+        if item[0] != "tag:yaml.org,2002:bool"
+    ]
+UniqueKeyLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool",
+    re.compile(r"^(?:true|false)$", re.IGNORECASE),
+    list("tTfF"),
+)
 
 
 def _construct_mapping(loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False) -> dict:
@@ -103,7 +120,7 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
         for synonym in definition.get("forbidden_synonyms", []):
             forbidden[synonym.casefold()] = canonical
 
-    normative_fields = {"statement", "must"}
+    normative_fields = {"statement"}
     for parts, value in _walk(document):
         if isinstance(value, (date, datetime)):
             diagnostics.append(
@@ -146,7 +163,8 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                     )
 
     actor_ids = set(document.get("actors", {}))
-    event_ids = set(document.get("events", {}))
+    signal_ids = set(document.get("signals", {}))
+    architecture_ids = set(document.get("architecture", {}))
     for domain_id, domain in document.get("domains", {}).items():
         for feature_id, feature in domain.get("features", {}).items():
             prefix = f"domains.{domain_id}.features.{feature_id}"
@@ -157,45 +175,23 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                 actor = use_case.get("actor")
                 if actor and actor not in actor_ids:
                     diagnostics.append(Diagnostic(f"{prefix}.use_cases.{use_case_id}.actor", "undefined-reference", f"unknown actor '{actor}'"))
-            for event in feature.get("produces", []) + feature.get("consumes", []):
-                if event not in event_ids:
-                    diagnostics.append(Diagnostic(prefix, "undefined-reference", f"unknown event '{event}'"))
     node_ids = {node_id for node_id, _ in iter_nodes(document)}
     for node_id, node in iter_nodes(document):
-        for dependency in node.get("depends_on", []):
-            if dependency not in node_ids:
-                diagnostics.append(Diagnostic(f"{node_id}.depends_on", "undefined-reference", f"unknown node '{dependency}'"))
+        for related in node.get("related_to", []):
+            if related not in node_ids:
+                diagnostics.append(Diagnostic(f"{node_id}.related_to", "undefined-reference", f"unknown node '{related}'"))
+            elif related == node_id:
+                diagnostics.append(Diagnostic(f"{node_id}.related_to", "self-reference", "a node cannot relate to itself"))
+        for signal in node.get("emits", []):
+            if signal not in signal_ids:
+                diagnostics.append(Diagnostic(f"{node_id}.emits", "undefined-reference", f"unknown signal '{signal}'"))
+        for decision in node.get("architecture", []):
+            if decision not in architecture_ids:
+                diagnostics.append(Diagnostic(f"{node_id}.architecture", "undefined-reference", f"unknown architecture decision '{decision}'"))
         for reaction_id, reaction in node.get("reactions", {}).items():
-            event = reaction.get("when")
-            if event not in event_ids:
-                diagnostics.append(Diagnostic(f"{node_id}.reactions.{reaction_id}.when", "undefined-reference", f"unknown event '{event}'"))
-        for rule_id, rule in node.get("rules", {}).items():
-            if rule.get("severity") == "critical":
-                required = set(rule.get("verification", {}).get("requires", []))
-                if not required.intersection({"deterministic_probe", "human_attestation"}):
-                    diagnostics.append(Diagnostic(
-                        f"{node_id}.rules.{rule_id}.verification.requires",
-                        "evidence-routing",
-                        "critical rules require deterministic_probe or human_attestation",
-                    ))
-    return diagnostics
-
-
-MAX_COMPONENT_DEPTH = 2
-
-
-def _component_depth_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
-    diagnostics: list[Diagnostic] = []
-    for parts, value in _walk(document):
-        depth = sum(1 for part in parts if part == "components")
-        if depth > MAX_COMPONENT_DEPTH and parts[-1] == "components" and isinstance(value, dict):
-            diagnostics.append(
-                Diagnostic(
-                    _path(parts),
-                    "component-depth",
-                    f"component nesting is limited to {MAX_COMPONENT_DEPTH} levels",
-                )
-            )
+            signal = reaction.get("on")
+            if signal not in signal_ids:
+                diagnostics.append(Diagnostic(f"{node_id}.reactions.{reaction_id}.on", "undefined-reference", f"unknown signal '{signal}'"))
     return diagnostics
 
 
@@ -269,5 +265,4 @@ def validate_file(path: Path) -> list[Diagnostic]:
     for error in sorted(validator.iter_errors(document), key=lambda item: list(item.absolute_path)):
         diagnostics.append(Diagnostic(_path(error.absolute_path), "schema", error.message))
     diagnostics.extend(_semantic_diagnostics(document))
-    diagnostics.extend(_component_depth_diagnostics(document))
     return diagnostics

@@ -1,116 +1,44 @@
 # PML authoring guide
 
-## Write product truth, not implementation
+## Write product truth
 
-Describe what actors observe and which constraints remain true.
-
-Good:
+Describe observable behavior:
 
 ```yaml
-statement: WHEN creation succeeds, THE SYSTEM MUST preserve the Assistant configuration across later sessions.
+statement: THE SYSTEM MUST preserve accepted Assistant configuration across sessions.
 ```
 
-Avoid:
+Do not name endpoints, tables, files, functions, frameworks, or tests.
 
-```yaml
-statement: The POST endpoint must insert a row and return HTTP 201.
-```
-
-Endpoints, tables, files, functions, frameworks, and test names belong in generated
-implementation mappings or evidence—not the authoritative definition.
-
-## Use one canonical term
-
-Define terms whose meaning matters and forbid confusing synonyms:
-
-```yaml
-vocabulary:
-  Member:
-    meaning: An authenticated person belonging to one Customer.
-    forbidden_synonyms:
-      - user
-      - customer user
-```
-
-Use the exact canonical term everywhere afterward.
-
-## Write one obligation per rule
-
-Use `MUST` or `MUST NOT`:
+## Use the hierarchy consistently
 
 ```text
-<Actor> MUST <observable behavior>.
-<Actor> MUST NOT <forbidden behavior>.
-WHEN <event>, THE SYSTEM MUST <observable outcome>.
-IF <condition>, THE SYSTEM MUST <observable outcome>.
-ON FAILURE, THE SYSTEM MUST <observable recovery or result>.
+Domain → Feature → Component
 ```
 
-Avoid `should`, `normally`, `properly`, `appropriately`, `seamlessly`, `relevant`, and
-`etc.` Replace them with behavior that a verifier can observe.
+A feature is a complete capability. A component is a direct, non-nested behavioral
+part. Component inputs and outputs describe product boundaries, not APIs.
 
-## Separate rules from use cases
+## Write atomic obligations
 
-A rule is always true within its scope:
+Every rule and reaction statement contains `MUST` or `MUST NOT` and expresses one
+independently verifiable constraint. Split multiple consequences into separate
+ID-keyed entries.
 
-```yaml
-statement: A Member MUST access only Assistants owned by the Member's Customer.
-```
+Rules are invariants. Use cases describe actor goals, preconditions, actions, and
+outcomes. Do not copy the same outcome into both.
 
-A use case connects preconditions, action, and outcome:
+## Connect behavior deliberately
 
-```yaml
-actor: member
-goal: Create an Assistant.
-given:
-  - The Member is authenticated.
-when:
-  - The Member submits valid configuration.
-then:
-  - A usable Assistant exists.
-otherwise:
-  - No partial Assistant remains.
-```
+Use `signals` for meaningful product facts, `emits` to establish those facts, and
+reactions with `on` for direct consequences. Signals never require code events.
 
-## Describe complete behavior
+Use untyped `related_to` paths when changes in either feature/component should affect
+the other's verification freshness.
 
-For each feature, consider:
+## Keep verification external
 
-- success and failure outcomes;
-- ownership and permissions;
-- persistence and lifecycle transitions;
-- visible empty, loading, success, and failure states;
-- effects on other components;
-- recovery behavior;
-- functional and non-functional requirements;
-- what evidence would demonstrate conformance.
-
-Do not add a section merely to fill a template. Add detail when omitting it would let
-two materially different behaviors both appear conforming.
-
-## Use recursive components sparingly
-
-Components allow arbitrary semantic depth:
-
-```yaml
-components:
-  configuration:
-    purpose: Capture the behavior assigned to an Assistant.
-    components:
-      instructions:
-        purpose: Define how the Assistant behaves.
-        rules:
-          persistence:
-            statement: THE SYSTEM MUST preserve accepted Instructions across later sessions.
-            severity: high
-```
-
-Stop decomposing when the parent rules and outcomes remove meaningful ambiguity. Never
-mirror source-code directories or UI framework component trees.
-
-## Keep generated facts outside PML
-
-Implementation mappings, tests, current state, evidence, PRs, commits, models, effort,
-and history reference PML IDs but live in separate structures. Code-to-PML analysis may
-propose changes or report inconsistencies; it cannot rewrite approved intent.
-
+The compiler resolves authored behavior into stable obligations. Product-local
+bindings assign probe, agent, and human coverage. Generated state stores evidence and
+derived confidence. Definitions never contain current scores or verification
+procedures.
