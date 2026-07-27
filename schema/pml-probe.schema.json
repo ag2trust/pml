@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pml.dev/schema/0.1/pml-probe.schema.json",
+  "title": "PML deterministic probe 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pml_probe", "probe", "verifies", "env", "steps"],
+  "properties": {
+    "pml_probe": {"const": "0.1"},
+    "probe": {"$ref": "#/$defs/id"},
+    "verifies": {"type": "string", "pattern": "^(?:project\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.components\\.[a-z][a-z0-9_]*)?\\.(?:rules|use_cases|reactions)\\.[a-z][a-z0-9_]*)$"},
+    "env": {"$ref": "#/$defs/id"},
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"oneOf": [{"$ref": "#/$defs/httpStep"}, {"$ref": "#/$defs/cliStep"}, {"$ref": "#/$defs/sessionStep"}]}
+    }
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "nonEmpty": {"type": "string", "minLength": 1},
+    "within": {"type": "string", "pattern": "^[1-9][0-9]*(?:ms|s)$"},
+    "safePath": {"type": "string", "pattern": "^(?!/)(?!\\.?$)(?!\\.pml(?:/|$))(?!\\.git(?:/|$))(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"},
+    "capture": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/id"},
+      "additionalProperties": {"type": "string", "pattern": "^(?:body|stdout)\\.[a-z][a-z0-9_]*$"}
+    },
+    "httpExpect": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "status": {"type": "integer", "minimum": 100, "maximum": 599},
+        "body_has": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+        "body_matches_fixture": {"$ref": "#/$defs/safePath"}
+      }
+    },
+    "httpStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["http", "expect"],
+      "properties": {
+        "http": {"type": "string", "pattern": "^(?:GET|POST|PUT|PATCH|DELETE|HEAD) /[^ ]*$"},
+        "as": {"$ref": "#/$defs/id"},
+        "body_from": {"$ref": "#/$defs/safePath"},
+        "within": {"$ref": "#/$defs/within"},
+        "expect": {"$ref": "#/$defs/httpExpect"},
+        "capture": {"$ref": "#/$defs/capture"}
+      }
+    },
+    "cliExpect": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "exit": {"type": "integer", "minimum": 0, "maximum": 255},
+        "stdout_has": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/nonEmpty"}}
+      }
+    },
+    "cliStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cli", "expect"],
+      "properties": {
+        "cli": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "pattern": "^(?![|<>;&]).*$"}},
+        "as": {"$ref": "#/$defs/id"},
+        "within": {"$ref": "#/$defs/within"},
+        "expect": {"$ref": "#/$defs/cliExpect"},
+        "capture": {"$ref": "#/$defs/capture"}
+      }
+    },
+    "sessionStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session"],
+      "properties": {"session": {"const": "reset"}}
+    }
+  }
+}

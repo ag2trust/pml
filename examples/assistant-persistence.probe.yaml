@@ -1,7 +1,8 @@
 # Example probe definition. Probes are owned by the contract: this file requires
 # Owner approval to change and is executed verbatim by the probe runner.
+pml_probe: "0.1"
 probe: assistant_config_persistence
-verifies: domains.assistants.features.creation.rules.persistent_configuration
+verifies: domains.assistants.features.creation.use_cases.create_from_scratch
 env: staging
 steps:
   - http: POST /assistants

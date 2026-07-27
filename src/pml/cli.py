@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Sequence
 
 from pml.obligations import enumerate_obligations, iter_nodes
-from pml.project_state import validate_product_state
+from pml.probes import load_probes, missing_probe_diagnostics
+from pml.project_state import validate_probe_evidence, validate_product_state
 from pml.status import product_status
-from pml.validator import load_document, validate_file
+from pml.validator import Diagnostic, _load, load_document, validate_file
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -25,9 +26,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     check_parser = subparsers.add_parser("check", help="validate product-local PML state")
     check_parser.add_argument("manifest", type=Path)
     check_parser.add_argument("product_root", type=Path)
+    check_parser.add_argument("--probes", type=Path, help="approved probe definitions to validate against state evidence")
     status_parser = subparsers.add_parser("status", help="show derived product state")
     status_parser.add_argument("manifest", type=Path)
     status_parser.add_argument("product_root", type=Path)
+    probes_parser = subparsers.add_parser("validate-probes", help="validate approved probe definitions")
+    probes_parser.add_argument("manifest", type=Path)
+    probes_parser.add_argument("probes", type=Path)
+    probes_parser.add_argument("--bindings", type=Path, help="product-local bindings used to validate probe coverage")
+    probes_parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args(argv)
 
     path = args.path if args.command == "validate" else args.manifest
@@ -46,11 +53,43 @@ def main(argv: Sequence[str] | None = None) -> int:
             for obligation in node.obligations:
                 print(f"  {obligation.obligation_id} {obligation.signal} {obligation.verification_percent:.0f}%")
         return 0
+    if args.command == "validate-probes":
+        document, _ = load_document(path)
+        assert document is not None
+        bindings = None
+        binding_diagnostics: list[Diagnostic] = []
+        if args.bindings is not None:
+            bindings, binding_diagnostics = _load(args.bindings)
+        probes, probe_diagnostics = load_probes(args.probes, document, bindings)
+        probe_diagnostics.extend(binding_diagnostics)
+        if args.require_complete:
+            if bindings is None:
+                probe_diagnostics.append(
+                    Diagnostic(str(args.probes), "missing-bindings", "--require-complete requires --bindings")
+                )
+            else:
+                probe_diagnostics.extend(missing_probe_diagnostics(probes, document, bindings))
+        for diagnostic in probe_diagnostics:
+            print(diagnostic.format())
+        if probe_diagnostics:
+            print(f"PML PROBES INVALID: {len(probe_diagnostics)} violation(s)")
+            return 1
+        print(f"PML PROBES VALID: {args.probes}")
+        return 0
     if args.command == "check":
         document, _ = load_document(path)
         if document is None:
             return 1
         state_diagnostics = validate_product_state(args.product_root, document)
+        if args.probes is not None:
+            bindings, binding_diagnostics = _load(args.product_root / ".pml" / "bindings.yaml")
+            state_diagnostics.extend(binding_diagnostics)
+            probes, probe_diagnostics = load_probes(args.probes, document, bindings)
+            state_diagnostics.extend(probe_diagnostics)
+            if bindings is not None:
+                state_diagnostics.extend(missing_probe_diagnostics(probes, document, bindings))
+            if not probe_diagnostics:
+                state_diagnostics.extend(validate_probe_evidence(args.product_root, document, probes))
         for diagnostic in state_diagnostics:
             print(diagnostic.format())
         if state_diagnostics:

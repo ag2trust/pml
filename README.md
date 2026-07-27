@@ -70,6 +70,22 @@ Inspect derived implementation progress and per-obligation verification signals 
 pml status path/to/approved-definition.pml.yaml path/to/product-repository
 ```
 
+Validate owner-approved probe definitions against their PML obligations with:
+
+```bash
+pml validate-probes path/to/approved-definition.pml.yaml path/to/probes/
+```
+
+Use product-local bindings to require a definition for every configured probe:
+
+```bash
+pml validate-probes definition.pml.yaml probes/ \
+  --bindings product/.pml/bindings.yaml --require-complete
+```
+
+Add `--probes probes/` to `pml check` to validate the approved definitions and their
+recorded evidence in product-local state.
+
 Verification coverage is approved per obligation in product-local bindings. State
 stores implementation facts and typed evidence; confidence and freshness are derived.
 See [`docs/specs/0003-product-state.md`](docs/specs/0003-product-state.md).
