@@ -2,4 +2,4 @@ pml_lock: "0.1"
 definition:
   source: ../minimal.pml.yaml
   revision: example-approved
-  digest: sha256:da18439940a31c30eec2ef21a6ee024d77170f99f9cd5541e734ab3f356cd5a9
+  digest: sha256:8455399d4fa5adba505242b8e4b5074e88d78b25f7479051d9fc5082a8fef58f

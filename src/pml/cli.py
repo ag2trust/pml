@@ -44,7 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for node in product_status(args.product_root, document):
             print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
             for obligation in node.obligations:
-                print(f"  {obligation.obligation_id} {obligation.signal} {obligation.satisfied_lanes}/{obligation.required_lanes}")
+                print(f"  {obligation.obligation_id} {obligation.signal} {obligation.verification_percent:.0f}%")
         return 0
     if args.command == "check":
         document, _ = load_document(path)

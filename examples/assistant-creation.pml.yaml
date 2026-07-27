@@ -20,25 +20,22 @@ vocabulary:
 
 actors:
   member:
-    term: Member
+    meaning: An authenticated person belonging to one Customer.
 
 concepts:
   assistant:
-    term: Assistant
-    owned_by: Customer
-    lifecycle:
+    meaning: A Customer-owned AI worker configured by a Member.
+    states:
       - draft
       - active
       - paused
       - retired
 
-events:
+signals:
   assistant_created:
     meaning: A usable Assistant has been created successfully.
-    subject: assistant
   assistant_paused:
     meaning: An Assistant has transitioned to paused.
-    subject: assistant
 
 domains:
   assistants:
@@ -50,30 +47,20 @@ domains:
         actors:
           - member
 
-        inputs:
-          - Assistant identity.
-          - Operating instructions.
-          - Requested capabilities.
-
-        outputs:
-          - A configured and usable Assistant.
-
-        produces:
+        emits:
           - assistant_created
 
         rules:
           ownership:
             statement: A Member MUST create an Assistant only for the Member's Customer.
-            severity: critical
-            verification: {requires: [deterministic_probe]}
           atomic_failure:
             statement: WHEN creation fails, THE SYSTEM MUST leave no partial Assistant.
-            severity: high
-            verification: {requires: [deterministic_probe]}
           entitlement:
             statement: A Member MUST enable only capabilities available to the Member's Customer.
-            severity: critical
-            verification: {requires: [deterministic_probe]}
+          customer_ownership:
+            statement: Customer ownership MUST be enforced for every affected resource.
+          credentials_not_exposed:
+            statement: Credentials MUST NOT be exposed to the browser.
 
         use_cases:
           create_from_scratch:
@@ -92,12 +79,9 @@ domains:
             otherwise:
               - No partial Assistant remains.
               - The Member receives an actionable explanation.
-            verification: {requires: [deterministic_probe, agent_judgment]}
-
         experience:
           surfaces:
             creation_flow:
-              purpose: Collect the information required to create an Assistant.
               contains:
                 - Assistant identity input.
                 - Operating instructions input.
@@ -111,22 +95,7 @@ domains:
                   - Entered information MUST be preserved.
                   - A retry action MUST be available.
 
-        security:
-          customer_ownership:
-            statement: Customer ownership MUST be enforced for every affected resource.
-            verification: {requires: [deterministic_probe]}
-          credentials_not_exposed:
-            statement: Credentials MUST NOT be exposed to the browser.
-            verification: {requires: [deterministic_probe]}
-
         reactions:
           created_assistant_appears:
-            when: assistant_created
-            target: assistants.list
-            must: The created Assistant MUST appear without a new login.
-            verification: {requires: [deterministic_probe]}
-
-        acceptance:
-          created_assistant_is_usable:
-            statement: The Member MUST be able to use the created Assistant.
-            verification: {requires: [deterministic_probe, agent_judgment]}
+            on: assistant_created
+            statement: The created Assistant MUST appear without a new login.

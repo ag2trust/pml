@@ -1,4 +1,6 @@
-domains.notes.features.creation: [schema] Additional properties are not allowed ('invented_section' was unexpected)
+domains.notes.features.creation: [schema] Additional properties are not allowed ('acceptance', 'inputs', 'invented_section', 'outputs' were unexpected)
+domains.notes.features.creation.rules.vague_behavior: [schema] Additional properties are not allowed ('severity', 'verification' were unexpected)
+domains.notes.features.creation.use_cases.create_note: [schema] Additional properties are not allowed ('verification' was unexpected)
 domains.notes.features.creation.rules.vague_behavior.statement: [non-normative] normative statements must contain MUST or MUST NOT
 domains.notes.features.creation.rules.vague_behavior.statement: [ambiguous-language] replace ambiguous term 'properly' with an observable obligation
 domains.notes.features.creation.rules.vague_behavior.statement: [ambiguous-language] replace ambiguous term 'should' with an observable obligation

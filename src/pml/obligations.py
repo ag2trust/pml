@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Iterator
 
 
-OBLIGATION_SECTIONS = ("rules", "use_cases", "security", "reactions", "acceptance")
+OBLIGATION_SECTIONS = ("rules", "use_cases", "reactions")
 
 
 @dataclass(frozen=True)
@@ -17,26 +17,46 @@ class Obligation:
     local_id: str
     definition: dict[str, Any]
 
-    @property
-    def required_methods(self) -> tuple[str, ...]:
-        verification = self.definition.get("verification", {})
-        return tuple(verification.get("requires", ()))
 
+def verification_coverage(plan: dict[str, Any]) -> dict[str, float]:
+    """Return approved coverage by evidence method."""
+
+    return {
+        "deterministic_probe": sum(plan.get("probes", {}).values()),
+        "agent_judgment": float(plan.get("agent_judgment", 0)),
+        "human_attestation": float(plan.get("human_attestation", 0)),
+    }
+
+
+def required_methods(plan: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(
+        method for method, coverage in verification_coverage(plan).items() if coverage
+    )
+
+
+def verification_plan(
+    bindings: dict[str, Any], obligation: Obligation
+) -> dict[str, Any]:
+    return (
+        bindings.get("bindings", {})
+        .get(obligation.node_id, {})
+        .get("verification", {})
+        .get(obligation.id, {})
+    )
 
 def iter_nodes(document: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
-    """Yield every feature and recursively nested component by semantic ID."""
+    """Yield every state-bearing rule scope, feature, and direct component."""
 
-    def components(parent_id: str, node: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
-        for component_id, component in node.get("components", {}).items():
-            semantic_id = f"{parent_id}.components.{component_id}"
-            yield semantic_id, component
-            yield from components(semantic_id, component)
-
+    if document.get("rules"):
+        yield "project", {"rules": document["rules"]}
     for domain_id, domain in document.get("domains", {}).items():
+        if domain.get("rules"):
+            yield f"domains.{domain_id}", {"rules": domain["rules"]}
         for feature_id, feature in domain.get("features", {}).items():
             semantic_id = f"domains.{domain_id}.features.{feature_id}"
             yield semantic_id, feature
-            yield from components(semantic_id, feature)
+            for component_id, component in feature.get("components", {}).items():
+                yield f"{semantic_id}.components.{component_id}", component
 
 
 def enumerate_obligations(
