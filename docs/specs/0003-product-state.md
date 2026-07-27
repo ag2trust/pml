@@ -54,9 +54,9 @@ Implementation progress remains a separate dimension.
 
 ## Sync and CI
 
-`pml sync` recalculates changed and related nodes, invalidates stale evidence, and
-runs approved probes. It carries historical agent or human evidence without
-refreshing it.
+The planned `pml sync` command recalculates changed and related nodes, invalidates
+stale evidence, and runs approved probes. It carries historical agent or human
+evidence without refreshing it.
 
 CI recomputes definition, input, related-node, and probe fingerprints. A mismatch
 proves committed state does not cover current inputs, so CI can enforce that sync

@@ -70,25 +70,6 @@ Inspect derived implementation progress and per-obligation verification signals 
 pml status path/to/approved-definition.pml.yaml path/to/product-repository
 ```
 
-Validate owner-approved probes and their semantic obligation bindings with:
-
-```bash
-pml validate-probes path/to/approved-definition.pml.yaml path/to/probes/
-```
-
-Completeness is checked against product-local verification bindings.
-
-Ingest a runner or verifier report into the appropriate product-local state files:
-
-```bash
-pml ingest-report definition.pml.yaml product/ probes/ verification-report.yaml
-```
-
-Ingestion validates every target and evidence method against the approved definition.
-Deterministic evidence additionally records the canonical approved-probe fingerprint.
-It does not execute probes; probe execution and environment profiles are the next
-runner-specific layer.
-
 Verification coverage is approved per obligation in product-local bindings. State
 stores implementation facts and typed evidence; confidence and freshness are derived.
 See [`docs/specs/0003-product-state.md`](docs/specs/0003-product-state.md).
