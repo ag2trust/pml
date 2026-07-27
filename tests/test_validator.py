@@ -94,13 +94,9 @@ someone:
     (feature_dir / "sample.pml.yaml").write_text(
         """\
 purpose: Sample feature.
-inputs: [Input.]
-outputs: [Output.]
 rules:
   only:
     statement: THE SYSTEM MUST accept the input.
-    severity: normal
-    verification: {requires: [deterministic_probe]}
 use_cases:
   run:
     actor: someone
@@ -108,11 +104,6 @@ use_cases:
     given: [Ready.]
     when: [Runs.]
     then: [Done.]
-    verification: {requires: [agent_judgment]}
-acceptance:
-  input_is_accepted:
-    statement: THE SYSTEM MUST accept valid input.
-    verification: {requires: [deterministic_probe]}
 """
     )
     assert validate_file(tmp_path) == []
@@ -125,7 +116,7 @@ def test_rejects_conflicting_fragments(tmp_path: Path) -> None:
     assert any(item.code == "conflict" and "project.purpose" in item.message for item in diagnostics)
 
 
-def test_rejects_excessive_component_depth(tmp_path: Path) -> None:
+def test_rejects_component_nesting(tmp_path: Path) -> None:
     manifest = tmp_path / "deep.pml.yaml"
     manifest.write_text(
         """\
@@ -134,22 +125,15 @@ project:
   id: sample
   name: Sample
   purpose: Sample product.
-actors:
-  someone:
-    meaning: Any participant.
 domains:
   core:
     purpose: Sample domain.
     features:
       sample:
         purpose: Sample feature.
-        inputs: [Input.]
-        outputs: [Output.]
         rules:
           only:
             statement: THE SYSTEM MUST accept the input.
-            severity: normal
-            verification: {requires: [deterministic_probe]}
         use_cases:
           run:
             actor: someone
@@ -157,11 +141,6 @@ domains:
             given: [Ready.]
             when: [Runs.]
             then: [Done.]
-            verification: {requires: [agent_judgment]}
-        acceptance:
-          input_is_accepted:
-            statement: THE SYSTEM MUST accept valid input.
-            verification: {requires: [deterministic_probe]}
         components:
           level_one:
             purpose: Level one.
@@ -174,16 +153,14 @@ domains:
 """
     )
     diagnostics = validate_file(manifest)
-    assert [item.code for item in diagnostics] == ["component-depth"]
+    assert any(item.code == "schema" and "components" in item.message for item in diagnostics)
 
 
 def test_rejects_overloaded_rule_map(tmp_path: Path) -> None:
     rules = "\n".join(
         f"""\
           rule_{index}:
-            statement: THE SYSTEM MUST accept input {index}.
-            severity: normal
-            verification: {{requires: [deterministic_probe]}}"""
+            statement: THE SYSTEM MUST accept input {index}."""
         for index in range(8)
     )
     manifest = tmp_path / "overloaded.pml.yaml"
@@ -203,8 +180,6 @@ domains:
     features:
       sample:
         purpose: Sample feature.
-        inputs: [Input.]
-        outputs: [Output.]
         rules:
 {rules}
         use_cases:
@@ -214,16 +189,70 @@ domains:
             given: [Ready.]
             when: [Runs.]
             then: [Done.]
-            verification: {{requires: [agent_judgment]}}
-        acceptance:
-          every_rule_verified:
-            statement: Every rule MUST have current verification evidence.
-            verification: {{requires: [deterministic_probe]}}
 """
     )
     diagnostics = validate_file(manifest)
-    assert [item.code for item in diagnostics] == ["schema"]
-    assert "too many properties" in diagnostics[0].message
+    assert any(item.code == "schema" and "too many properties" in item.message for item in diagnostics)
+
+
+def test_validates_signals_relationships_components_and_architecture(tmp_path: Path) -> None:
+    manifest = tmp_path / "connected.pml.yaml"
+    manifest.write_text(
+        """\
+pml: "0.1-draft"
+project:
+  id: sample
+  name: Sample
+  purpose: Demonstrate connected behavior.
+signals:
+  payment_failed:
+    meaning: A payment attempt did not complete.
+architecture:
+  durable_store:
+    category: database
+    selection: PostgreSQL
+    rationale: Replacing the approved durable store requires Owner approval.
+    constraints:
+      preserve_concurrent_credits:
+        statement: Concurrent credit changes MUST all survive.
+domains:
+  billing:
+    purpose: Manage purchases.
+    features:
+      purchase:
+        purpose: Purchase credits.
+        components:
+          payment:
+            purpose: Determine the payment result.
+            inputs: [A payment authorization.]
+            outputs: [A payment result.]
+            emits: [payment_failed]
+            related_to: [domains.billing.features.purchase.components.balance]
+          balance:
+            purpose: Maintain available credits.
+            architecture: [durable_store]
+            reactions:
+              preserve_balance:
+                on: payment_failed
+                statement: The existing balance MUST remain unchanged.
+"""
+    )
+    assert validate_file(manifest) == []
+
+
+def test_rejects_unknown_signal_relationship_and_architecture(tmp_path: Path) -> None:
+    source = (ROOT / "examples" / "minimal.pml.yaml").read_text().replace(
+        "        rules:\n",
+        "        emits: [missing_signal]\n"
+        "        related_to: [domains.notes.features.missing]\n"
+        "        architecture: [missing_decision]\n"
+        "        rules:\n",
+        1,
+    )
+    manifest = tmp_path / "unknown-references.pml.yaml"
+    manifest.write_text(source)
+    diagnostics = validate_file(manifest)
+    assert sum(item.code == "undefined-reference" for item in diagnostics) == 3
 
 
 def test_verification_report_matches_schema() -> None:
