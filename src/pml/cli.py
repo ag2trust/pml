@@ -8,9 +8,13 @@ from typing import Sequence
 
 from pml.obligations import enumerate_obligations, iter_nodes
 from pml.probes import load_probes, missing_probe_diagnostics
-from pml.project_state import validate_probe_evidence, validate_product_state
+from pml.project_state import (
+    load_bindings,
+    validate_probe_evidence,
+    validate_product_state,
+)
 from pml.status import product_status
-from pml.validator import Diagnostic, _load, load_document, validate_file
+from pml.validator import Diagnostic, load_document, validate_file
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -55,19 +59,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "validate-probes":
         document, _ = load_document(path)
-        assert document is not None
+        if document is None:
+            return 1
         bindings = None
         binding_diagnostics: list[Diagnostic] = []
         if args.bindings is not None:
-            bindings, binding_diagnostics = _load(args.bindings)
+            bindings, binding_diagnostics = load_bindings(args.bindings)
         probes, probe_diagnostics = load_probes(args.probes, document, bindings)
         probe_diagnostics.extend(binding_diagnostics)
         if args.require_complete:
-            if bindings is None:
+            if args.bindings is None:
                 probe_diagnostics.append(
                     Diagnostic(str(args.probes), "missing-bindings", "--require-complete requires --bindings")
                 )
-            else:
+            elif bindings is not None:
                 probe_diagnostics.extend(missing_probe_diagnostics(probes, document, bindings))
         for diagnostic in probe_diagnostics:
             print(diagnostic.format())
@@ -82,13 +87,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         state_diagnostics = validate_product_state(args.product_root, document)
         if args.probes is not None:
-            bindings, binding_diagnostics = _load(args.product_root / ".pml" / "bindings.yaml")
-            state_diagnostics.extend(binding_diagnostics)
+            bindings, _ = load_bindings(args.product_root / ".pml" / "bindings.yaml")
             probes, probe_diagnostics = load_probes(args.probes, document, bindings)
             state_diagnostics.extend(probe_diagnostics)
             if bindings is not None:
                 state_diagnostics.extend(missing_probe_diagnostics(probes, document, bindings))
-            if not probe_diagnostics:
+            if bindings is not None and not probe_diagnostics:
                 state_diagnostics.extend(validate_probe_evidence(args.product_root, document, probes))
         for diagnostic in state_diagnostics:
             print(diagnostic.format())

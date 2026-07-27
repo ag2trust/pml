@@ -35,6 +35,7 @@ def load_probes(
     diagnostics: list[Diagnostic] = []
     probes: dict[str, dict[str, Any]] = {}
     schema = json.loads(SCHEMA.read_text())
+    validator = Draft202012Validator(schema)
     obligations = {item.id: item for item in enumerate_obligations(definition)}
     actors = set(definition.get("actors", {}))
 
@@ -45,7 +46,7 @@ def load_probes(
         diagnostics.extend(errors)
         if probe is None:
             continue
-        schema_errors = list(Draft202012Validator(schema).iter_errors(probe))
+        schema_errors = list(validator.iter_errors(probe))
         for error in sorted(schema_errors, key=lambda item: list(item.absolute_path)):
             diagnostics.append(
                 Diagnostic(f"{source}:{_path(error.absolute_path)}", "schema", error.message)

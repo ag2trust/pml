@@ -101,6 +101,49 @@ def test_validate_probes_requires_bindings_for_completeness(tmp_path: Path) -> N
     ]) == 0
 
 
+def test_validate_probes_rejects_invalid_bindings_before_coverage_checks(
+    tmp_path: Path, capsys
+) -> None:
+    probe = tmp_path / "preserve.probe.yaml"
+    write_preserve_content_probe(probe)
+    bindings = tmp_path / "bindings.yaml"
+    bindings.write_text("bindings: []\n")
+
+    assert main([
+        "validate-probes",
+        str(ROOT / "examples" / "minimal.pml.yaml"),
+        str(probe),
+        "--bindings",
+        str(bindings),
+        "--require-complete",
+    ]) == 1
+
+    output = capsys.readouterr().out
+    assert "[schema]" in output
+    assert "unbound-probe" not in output
+    assert "missing-bindings" not in output
+
+
+def test_check_probes_does_not_duplicate_binding_load_diagnostics(
+    tmp_path: Path, capsys
+) -> None:
+    product = tmp_path / "product"
+    shutil.copytree(ROOT / "examples" / "product-repository", product)
+    (product / ".pml" / "bindings.yaml").write_text("[")
+    probe = tmp_path / "preserve.probe.yaml"
+    write_preserve_content_probe(probe)
+
+    assert main([
+        "check",
+        str(ROOT / "examples" / "minimal.pml.yaml"),
+        str(product),
+        "--probes",
+        str(probe),
+    ]) == 1
+
+    assert capsys.readouterr().out.count("[yaml]") == 1
+
+
 def test_check_probes_validates_recorded_evidence(tmp_path: Path) -> None:
     definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
     assert definition is not None
