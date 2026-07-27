@@ -66,6 +66,21 @@ def _schema_diagnostics(path: Path, document: dict[str, Any], schema_name: str) 
     return diagnostics
 
 
+def load_bindings(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
+    """Load product bindings only when they conform to the bindings schema."""
+
+    bindings, diagnostics = _load(path)
+    if bindings is None:
+        return None, diagnostics
+    schema_diagnostics = _schema_diagnostics(
+        path, bindings, "pml-bindings.schema.json"
+    )
+    diagnostics.extend(schema_diagnostics)
+    if schema_diagnostics:
+        return None, diagnostics
+    return bindings, diagnostics
+
+
 def validate_product_state(repo_root: Path, definition: dict[str, Any]) -> list[Diagnostic]:
     """Validate lock, bindings and state, including current-input fingerprints."""
 
@@ -86,13 +101,9 @@ def validate_product_state(repo_root: Path, definition: dict[str, Any]) -> list[
                 "lock digest does not match the loaded approved definition",
             ))
 
-    bindings, errors = _load(bindings_path)
+    bindings, errors = load_bindings(bindings_path)
     diagnostics.extend(errors)
     if bindings is None:
-        return diagnostics
-    binding_schema_errors = _schema_diagnostics(bindings_path, bindings, "pml-bindings.schema.json")
-    diagnostics.extend(binding_schema_errors)
-    if binding_schema_errors:
         return diagnostics
 
     nodes = dict(iter_nodes(definition))
