@@ -124,6 +124,28 @@ def test_rejects_probe_without_coverage_binding(tmp_path: Path) -> None:
     assert any(item.code == "unbound-probe" for item in diagnostics)
 
 
+def test_reports_missing_verification_plan_without_follow_on_errors(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    bindings_path = product / ".pml" / "bindings.yaml"
+    bindings = yaml.safe_load(bindings_path.read_text())
+    plans = bindings["bindings"]["domains.notes.features.creation"]["verification"]
+    del plans[OBLIGATION]
+    bindings_path.write_text(yaml.safe_dump(bindings, sort_keys=False))
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    probes, _ = load_probes(probe_path, definition)
+
+    diagnostics = ingest_report(report_path, product, definition, probes)
+
+    assert [item.code for item in diagnostics] == ["missing-verification-plan"]
+
+
 def test_invalid_existing_state_is_not_overwritten(tmp_path: Path) -> None:
     definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
     assert definition is not None
@@ -176,3 +198,45 @@ def test_agent_report_requires_nonempty_reproduction(tmp_path: Path) -> None:
     diagnostics = ingest_report(report_path, product, definition, {})
 
     assert any(item.code == "schema" for item in diagnostics)
+
+
+def test_report_rejects_empty_probe_and_artifact_identifiers(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    report_path = tmp_path / "report.yaml"
+    write_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    report["checks"][0]["probe"] = ""
+    report["checks"][0]["evidence"] = []
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+
+    diagnostics = ingest_report(report_path, product, definition, {})
+
+    assert {item.code for item in diagnostics} == {"schema"}
+
+
+def test_probe_artifacts_are_preserved(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    report["checks"][0]["evidence"] = ["evidence/preserve-content.json"]
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+    probes, _ = load_probes(probe_path, definition)
+
+    assert ingest_report(report_path, product, definition, probes) == []
+
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    state = yaml.safe_load(state_path.read_text())
+    record = state["obligations"][OBLIGATION]["evidence"][
+        "deterministic_probe"
+    ]["preserve_content"]
+    assert record["artifacts"] == ["evidence/preserve-content.json"]

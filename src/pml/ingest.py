@@ -54,9 +54,17 @@ def ingest_report(
         if target is None:
             diagnostics.append(Diagnostic(f"{location}.target", "undefined-reference", f"unknown obligation '{check['target']}'"))
             continue
-        if check["method"] not in required_methods(verification_plan(bindings, target)):
+        plan = verification_plan(bindings, target)
+        if not plan:
+            diagnostics.append(Diagnostic(
+                f"{location}.target",
+                "missing-verification-plan",
+                "obligation has no approved verification plan",
+            ))
+            continue
+        if check["method"] not in required_methods(plan):
             diagnostics.append(Diagnostic(f"{location}.method", "unexpected-evidence", f"'{check['method']}' is not required by the approved obligation"))
-        if check["method"] != "deterministic_probe" and check.get("evidence"):
+        if check["method"] != "deterministic_probe" and "evidence" in check:
             diagnostics.append(Diagnostic(
                 f"{location}.evidence",
                 "unexpected-evidence",
@@ -64,7 +72,7 @@ def ingest_report(
             ))
         if check["method"] == "deterministic_probe":
             probe = probes.get(check["probe"])
-            configured = verification_plan(bindings, target).get("probes", {})
+            configured = plan.get("probes", {})
             if probe is None:
                 diagnostics.append(Diagnostic(f"{location}.probe", "undefined-reference", f"unknown approved probe '{check['probe']}'"))
             elif probe["verifies"] != check["target"]:
@@ -125,19 +133,17 @@ def ingest_report(
             "recorded": report["recorded"],
             "observation": check["observation"],
         }
-        if check.get("evidence"):
-            record["artifacts"] = check["evidence"]
         if check["method"] == "deterministic_probe":
             probe_id = check["probe"]
             record["probe_fingerprint"] = canonical_hash(probes[probe_id])
+            if "evidence" in check:
+                record["artifacts"] = check["evidence"]
             evidence.setdefault("deterministic_probe", {})[probe_id] = record
         elif check["method"] == "agent_judgment":
             record["reproduction"] = check.get("reproduction", [])
-            record.pop("artifacts", None)
             evidence["agent_judgment"] = record
         else:
             record["attester"] = check["attester"]
-            record.pop("artifacts", None)
             evidence["human_attestation"] = record
 
     for state_path, state, _ in states.values():
