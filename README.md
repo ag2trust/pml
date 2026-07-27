@@ -76,7 +76,13 @@ Validate owner-approved probes and their semantic obligation bindings with:
 pml validate-probes path/to/approved-definition.pml.yaml path/to/probes/
 ```
 
-Completeness is checked against product-local verification bindings.
+Check completeness against product-local verification bindings with:
+
+```bash
+pml validate-probes definition.pml.yaml probes/ \
+  --bindings product/.pml/bindings.yaml \
+  --require-complete
+```
 
 Ingest a runner or verifier report into the appropriate product-local state files:
 

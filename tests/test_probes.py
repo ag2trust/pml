@@ -4,6 +4,7 @@ import shutil
 import yaml
 
 from pml.ingest import ingest_report
+from pml.cli import main
 from pml.probes import load_probes, missing_probe_diagnostics, probe_fingerprint
 from pml.project_state import validate_probe_evidence, validate_product_state
 from pml.validator import load_document
@@ -62,6 +63,30 @@ def test_reports_deterministic_obligations_without_probes() -> None:
     assert len(diagnostics) == 1
 
 
+def test_validate_probes_require_complete_uses_bindings(tmp_path: Path) -> None:
+    probe = tmp_path / "preserve.probe.yaml"
+    probe.write_text(
+        """\
+pml_probe: "0.1"
+probe: preserve_content
+verifies: domains.notes.features.creation.rules.preserve_content
+env: staging
+steps:
+  - cli: [notes, verify-content]
+    as: member
+    expect: {exit: 0}
+"""
+    )
+    assert main([
+        "validate-probes",
+        str(ROOT / "examples" / "minimal.pml.yaml"),
+        str(probe),
+        "--bindings",
+        str(ROOT / "examples" / "product-repository" / ".pml" / "bindings.yaml"),
+        "--require-complete",
+    ]) == 0
+
+
 def test_ingests_current_probe_evidence(tmp_path: Path) -> None:
     definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
     assert definition is not None
@@ -104,3 +129,58 @@ steps:
     assert ingest_report(report_path, product, definition, probes) == []
     assert validate_product_state(product, definition) == []
     assert validate_probe_evidence(product, definition, probes) == []
+
+
+def test_ingest_rejects_probe_without_coverage_binding(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = tmp_path / "product"
+    shutil.copytree(ROOT / "examples" / "product-repository", product)
+    bindings_path = product / ".pml" / "bindings.yaml"
+    bindings = yaml.safe_load(bindings_path.read_text())
+    plans = bindings["bindings"]["domains.notes.features.creation"]["verification"]
+    plans["domains.notes.features.creation.rules.preserve_content"] = {
+        "agent_judgment": 1.0
+    }
+    bindings_path.write_text(yaml.safe_dump(bindings, sort_keys=False))
+
+    probe_path = tmp_path / "preserve.probe.yaml"
+    probe_path.write_text(
+        """\
+pml_probe: "0.1"
+probe: preserve_content
+verifies: domains.notes.features.creation.rules.preserve_content
+env: staging
+steps:
+  - cli: [notes, verify-content]
+    as: member
+    expect: {exit: 0}
+"""
+    )
+    probes, _ = load_probes(probe_path, definition)
+    report_path = tmp_path / "report.yaml"
+    report_path.write_text(
+        """\
+verification: run_1
+version: working_tree
+recorded: "2026-07-22T10:00:00Z"
+environment: local_integrated
+verifier:
+  agent: runner
+  provider: pml
+  model: probe_runner
+  effort: low
+targets:
+  - domains.notes.features.creation.rules.preserve_content
+verdict: verified
+checks:
+  - target: domains.notes.features.creation.rules.preserve_content
+    result: passed
+    method: deterministic_probe
+    probe: preserve_content
+    observation: Probe exited successfully.
+limitations: []
+"""
+    )
+    diagnostics = ingest_report(report_path, product, definition, probes)
+    assert any(item.code == "unbound-probe" for item in diagnostics)

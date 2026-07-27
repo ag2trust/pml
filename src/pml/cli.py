@@ -34,6 +34,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     probes_parser = subparsers.add_parser("validate-probes", help="validate approved probe definitions")
     probes_parser.add_argument("manifest", type=Path)
     probes_parser.add_argument("probes", type=Path)
+    probes_parser.add_argument(
+        "--bindings",
+        type=Path,
+        help="product-local bindings used to validate probe coverage",
+    )
     probes_parser.add_argument("--require-complete", action="store_true")
     ingest_parser = subparsers.add_parser("ingest-report", help="ingest verification evidence into product state")
     ingest_parser.add_argument("manifest", type=Path)
@@ -61,13 +66,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         document, _ = load_document(path)
         assert document is not None
         bindings = None
+        binding_diagnostics: list[Diagnostic] = []
+        if args.bindings is not None:
+            bindings, binding_diagnostics = _load(args.bindings)
         probes, probe_diagnostics = load_probes(args.probes, document, bindings)
+        probe_diagnostics.extend(binding_diagnostics)
         if args.require_complete:
-            probe_diagnostics.append(Diagnostic(
-                str(args.probes),
-                "missing-bindings",
-                "--require-complete is available through 'pml check', which loads product bindings",
-            ))
+            if bindings is None:
+                probe_diagnostics.append(Diagnostic(
+                    str(args.probes),
+                    "missing-bindings",
+                    "--require-complete requires --bindings",
+                ))
+            else:
+                probe_diagnostics.extend(
+                    missing_probe_diagnostics(probes, document, bindings)
+                )
         for diagnostic in probe_diagnostics:
             print(diagnostic.format())
         if probe_diagnostics:

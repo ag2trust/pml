@@ -53,10 +53,13 @@ def ingest_report(
             diagnostics.append(Diagnostic(f"{location}.method", "unexpected-evidence", f"'{check['method']}' is not required by the approved obligation"))
         if check["method"] == "deterministic_probe":
             probe = probes.get(check["probe"])
+            configured = verification_plan(bindings, target).get("probes", {})
             if probe is None:
                 diagnostics.append(Diagnostic(f"{location}.probe", "undefined-reference", f"unknown approved probe '{check['probe']}'"))
             elif probe["verifies"] != check["target"]:
                 diagnostics.append(Diagnostic(f"{location}.probe", "probe-target", "approved probe verifies a different obligation"))
+            elif check["probe"] not in configured:
+                diagnostics.append(Diagnostic(f"{location}.probe", "unbound-probe", "probe has no approved coverage binding for this obligation"))
     if diagnostics:
         return diagnostics
 
