@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://pml.dev/schema/0.1/pml-bindings.schema.json",
-  "title": "PML implementation bindings 0.1",
+  "title": "PML implementation and verification bindings 0.1",
   "type": "object",
   "additionalProperties": false,
   "required": ["pml_bindings", "bindings"],
@@ -11,23 +11,54 @@
       "type": "object",
       "minProperties": 1,
       "propertyNames": {
-        "pattern": "^domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.components\\.[a-z][a-z0-9_]*)*$"
+        "pattern": "^(?:project|domains\\.[a-z][a-z0-9_]*(?:\\.features\\.[a-z][a-z0-9_]*(?:\\.components\\.[a-z][a-z0-9_]*)?)?)$"
       },
-      "additionalProperties": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["paths"],
-        "properties": {
-          "paths": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "pattern": "^(?!/)(?!\\.?$)(?!\\.pml(?:/|$))(?!\\.git(?:/|$))(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
-            }
-          }
+      "additionalProperties": {"$ref": "#/$defs/nodeBinding"}
+    }
+  },
+  "$defs": {
+    "coverage": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1
+    },
+    "safePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!\\.?$)(?!\\.pml(?:/|$))(?!\\.git(?:/|$))(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "verificationPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "probes": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
+          "additionalProperties": {"$ref": "#/$defs/coverage"}
+        },
+        "agent_judgment": {"$ref": "#/$defs/coverage"},
+        "human_attestation": {"$ref": "#/$defs/coverage"}
+      }
+    },
+    "nodeBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paths", "verification"],
+      "properties": {
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/safePath"}
+        },
+        "verification": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^(?:project\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.components\\.[a-z][a-z0-9_]*)?\\.(?:rules|use_cases|reactions)\\.[a-z][a-z0-9_]*)$"
+          },
+          "additionalProperties": {"$ref": "#/$defs/verificationPlan"}
         }
       }
     }

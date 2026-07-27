@@ -9,7 +9,13 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from pml.obligations import enumerate_obligations, iter_nodes
+from pml.obligations import (
+    enumerate_obligations,
+    iter_nodes,
+    required_methods,
+    verification_coverage,
+    verification_plan,
+)
 from pml.validator import Diagnostic, _load, _path
 
 
@@ -95,6 +101,30 @@ def validate_product_state(repo_root: Path, definition: dict[str, Any]) -> list[
     for node_id in binding_map:
         if node_id not in nodes:
             diagnostics.append(Diagnostic(f"{bindings_path}:bindings.{node_id}", "undefined-reference", f"unknown node '{node_id}'"))
+            continue
+        expected = {item.id for item in enumerate_obligations(definition, node_id)}
+        configured = set(binding_map[node_id].get("verification", {}))
+        for obligation_id in sorted(expected.difference(configured)):
+            diagnostics.append(Diagnostic(
+                f"{bindings_path}:bindings.{node_id}.verification",
+                "missing-verification-plan",
+                f"obligation '{obligation_id}' has no verification plan",
+            ))
+        for obligation_id in sorted(configured.difference(expected)):
+            diagnostics.append(Diagnostic(
+                f"{bindings_path}:bindings.{node_id}.verification.{obligation_id}",
+                "undefined-reference",
+                f"unknown obligation '{obligation_id}'",
+            ))
+        for obligation_id in sorted(expected.intersection(configured)):
+            plan = binding_map[node_id]["verification"][obligation_id]
+            total = sum(verification_coverage(plan).values())
+            if abs(total - 1.0) > 1e-9:
+                diagnostics.append(Diagnostic(
+                    f"{bindings_path}:bindings.{node_id}.verification.{obligation_id}",
+                    "coverage-total",
+                    f"verification coverage must total 1.0, got {total:g}",
+                ))
 
     state_root = metadata / "state"
     for node_id in nodes:
@@ -137,25 +167,30 @@ def validate_product_state(repo_root: Path, definition: dict[str, Any]) -> list[
             current = input_fingerprint(repo_root, node_binding["paths"])
             if state["input_fingerprint"] != current:
                 diagnostics.append(Diagnostic(f"{state_path}:input_fingerprint", "sync-required", "state does not cover current bound inputs"))
-        declared_dependencies = set(nodes[node_id].get("depends_on", []))
-        recorded_dependencies = state.get("dependency_fingerprints", {})
-        for dependency in sorted(declared_dependencies.difference(recorded_dependencies)):
-            diagnostics.append(Diagnostic(f"{state_path}:dependency_fingerprints", "missing-dependency", f"state is missing dependency fingerprint '{dependency}'"))
-        for dependency in sorted(set(recorded_dependencies).difference(declared_dependencies)):
-            diagnostics.append(Diagnostic(f"{state_path}:dependency_fingerprints.{dependency}", "unknown-dependency", f"'{dependency}' is not declared by the node"))
-        for dependency in sorted(declared_dependencies.intersection(recorded_dependencies)):
-            dependency_binding = binding_map.get(dependency)
-            if dependency_binding is not None:
-                current_dependency = input_fingerprint(repo_root, dependency_binding["paths"])
-                if recorded_dependencies[dependency] != current_dependency:
-                    diagnostics.append(Diagnostic(f"{state_path}:dependency_fingerprints.{dependency}", "sync-required", f"dependency '{dependency}' has changed"))
+        declared_related = set(nodes[node_id].get("related_to", []))
+        declared_related.update(
+            other_id
+            for other_id, other in nodes.items()
+            if node_id in other.get("related_to", [])
+        )
+        recorded_related = state.get("related_fingerprints", {})
+        for related in sorted(declared_related.difference(recorded_related)):
+            diagnostics.append(Diagnostic(f"{state_path}:related_fingerprints", "missing-related", f"state is missing related-node fingerprint '{related}'"))
+        for related in sorted(set(recorded_related).difference(declared_related)):
+            diagnostics.append(Diagnostic(f"{state_path}:related_fingerprints.{related}", "unknown-related", f"'{related}' is not related to the node"))
+        for related in sorted(declared_related.intersection(recorded_related)):
+            related_binding = binding_map.get(related)
+            if related_binding is not None:
+                current_related = input_fingerprint(repo_root, related_binding["paths"])
+                if recorded_related[related] != current_related:
+                    diagnostics.append(Diagnostic(f"{state_path}:related_fingerprints.{related}", "sync-required", f"related node '{related}' has changed"))
         prefix = node_id + "."
         for obligation_id, obligation_state in state["obligations"].items():
             obligation = obligations.get(obligation_id)
             if obligation is None or not obligation_id.startswith(prefix):
                 diagnostics.append(Diagnostic(f"{state_path}:obligations.{obligation_id}", "undefined-reference", f"unknown obligation '{obligation_id}' for node '{node_id}'"))
                 continue
-            allowed = set(obligation.required_methods)
+            allowed = set(required_methods(verification_plan(bindings, obligation)))
             for method in obligation_state["evidence"]:
                 if method not in allowed:
                     diagnostics.append(Diagnostic(f"{state_path}:obligations.{obligation_id}.evidence.{method}", "unexpected-evidence", f"'{method}' is not required by the approved obligation"))
@@ -194,11 +229,26 @@ def validate_probe_evidence(
         )
         for obligation in enumerate_obligations(definition, node_id):
             approved = probe_by_obligation.get(obligation.id, {})
-            if "deterministic_probe" not in obligation.required_methods:
+            plan = verification_plan(bindings, obligation)
+            if "deterministic_probe" not in required_methods(plan):
                 continue
             obligation_state = state.get("obligations", {}).get(obligation.id, {})
             evidence = obligation_state.get("evidence", {}).get("deterministic_probe", {})
+            configured_probes = set(plan.get("probes", {}))
+            for probe_id in sorted(configured_probes.difference(approved)):
+                diagnostics.append(Diagnostic(
+                    f"{state_path}:obligations.{obligation.id}.evidence.deterministic_probe.{probe_id}",
+                    "missing-probe-definition",
+                    "verification binding names a probe with no approved definition",
+                ))
             for probe_id, probe in approved.items():
+                if probe_id not in configured_probes:
+                    diagnostics.append(Diagnostic(
+                        f"{state_path}:obligations.{obligation.id}.evidence.deterministic_probe.{probe_id}",
+                        "unbound-probe",
+                        "approved probe has no coverage binding",
+                    ))
+                    continue
                 record = evidence.get(probe_id)
                 location = f"{state_path}:obligations.{obligation.id}.evidence.deterministic_probe.{probe_id}"
                 if record is None:

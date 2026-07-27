@@ -9,7 +9,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 import yaml
 
-from pml.obligations import enumerate_obligations, iter_nodes
+from pml.obligations import enumerate_obligations, iter_nodes, required_methods, verification_plan
 from pml.project_state import canonical_hash, input_fingerprint
 from pml.validator import Diagnostic, _load, _path
 
@@ -49,7 +49,7 @@ def ingest_report(
         if target is None:
             diagnostics.append(Diagnostic(f"{location}.target", "undefined-reference", f"unknown obligation '{check['target']}'"))
             continue
-        if check["method"] not in target.required_methods:
+        if check["method"] not in required_methods(verification_plan(bindings, target)):
             diagnostics.append(Diagnostic(f"{location}.method", "unexpected-evidence", f"'{check['method']}' is not required by the approved obligation"))
         if check["method"] == "deterministic_probe":
             probe = probes.get(check["probe"])
@@ -80,14 +80,19 @@ def ingest_report(
             }
         state["definition_hash"] = canonical_hash(node)
         state["input_fingerprint"] = current_input
-        dependencies = {}
-        for dependency in node.get("depends_on", []):
-            dependency_paths = binding_map.get(dependency, {}).get("paths", [])
-            dependencies[dependency] = input_fingerprint(repo_root, dependency_paths)
-        if dependencies:
-            state["dependency_fingerprints"] = dependencies
+        related_nodes = set(node.get("related_to", []))
+        related_nodes.update(
+            other_id for other_id, other in nodes.items()
+            if node_id in other.get("related_to", [])
+        )
+        related = {}
+        for related_id in related_nodes:
+            related_paths = binding_map.get(related_id, {}).get("paths", [])
+            related[related_id] = input_fingerprint(repo_root, related_paths)
+        if related:
+            state["related_fingerprints"] = related
         else:
-            state.pop("dependency_fingerprints", None)
+            state.pop("related_fingerprints", None)
         states[node_id] = (state_path, state, current_input)
 
     for check in report["checks"]:

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pml.obligations import Obligation, enumerate_obligations, iter_nodes
+from pml.obligations import Obligation, enumerate_obligations, iter_nodes, verification_plan
 from pml.project_state import input_fingerprint
 from pml.validator import _load
 
@@ -15,12 +15,11 @@ from pml.validator import _load
 class ObligationStatus:
     obligation_id: str
     signal: str
-    satisfied_lanes: int
-    required_lanes: int
+    verified_coverage: float
 
     @property
     def verification_percent(self) -> float:
-        return 100.0 * self.satisfied_lanes / self.required_lanes
+        return 100.0 * self.verified_coverage
 
 
 @dataclass(frozen=True)
@@ -48,37 +47,62 @@ def derive_obligation_status(
     obligation: Obligation,
     state: dict[str, Any],
     current_input: str,
-    dependencies_current: bool,
+    related_current: bool,
+    plan: dict[str, Any] | None = None,
 ) -> ObligationStatus:
-    required = obligation.required_methods
+    plan = plan or {}
     evidence = state.get("evidence", {})
-    satisfied = 0
+    verified_coverage = 0.0
     has_prior = False
     current_results: list[str] = []
-    for method in required:
-        records = _lane_records(method, evidence)
+    methods = {
+        "deterministic_probe": plan.get("probes", {}),
+        "agent_judgment": plan.get("agent_judgment", 0),
+        "human_attestation": plan.get("human_attestation", 0),
+    }
+    for method, configured in methods.items():
+        if not configured:
+            continue
+        if method == "deterministic_probe":
+            probe_evidence = evidence.get(method, {})
+            records = [
+                probe_evidence[probe_id]
+                for probe_id in configured
+                if probe_id in probe_evidence
+            ]
+        else:
+            records = _lane_records(method, evidence)
         has_prior = has_prior or bool(records)
         current = [
             record for record in records
-            if _current_evidence(record, current_input, dependencies_current)
+            if _current_evidence(record, current_input, related_current)
         ]
         current_results.extend(record["result"] for record in current)
-        if current and all(record["result"] == "passed" for record in current):
-            satisfied += 1
+        if method == "deterministic_probe":
+            for probe_id, coverage in configured.items():
+                record = probe_evidence.get(probe_id)
+                if (
+                    record
+                    and _current_evidence(record, current_input, related_current)
+                    and record["result"] == "passed"
+                ):
+                    verified_coverage += coverage
+        elif configured and current and all(record["result"] == "passed" for record in current):
+            verified_coverage += configured
 
     if "failed" in current_results:
         signal = "FAILED"
     elif "blocked" in current_results:
         signal = "BLOCKED"
-    elif satisfied == len(required):
+    elif verified_coverage >= 1.0 - 1e-9:
         signal = "VERIFIED"
-    elif satisfied:
+    elif verified_coverage:
         signal = "PARTIAL"
     elif has_prior and not current_results:
         signal = "STALE"
     else:
         signal = "UNVERIFIED"
-    return ObligationStatus(obligation.id, signal, satisfied, len(required))
+    return ObligationStatus(obligation.id, signal, min(verified_coverage, 1.0))
 
 
 def product_status(repo_root: Path, definition: dict[str, Any]) -> list[NodeStatus]:
@@ -93,36 +117,43 @@ def product_status(repo_root: Path, definition: dict[str, Any]) -> list[NodeStat
         state_path = metadata / "state" / Path(*node_id.split("."))
         state_path = state_path.with_suffix(".state.yaml")
         state, _ = _load(state_path)
-        state = state or {"obligations": {}, "dependency_fingerprints": {}}
+        state = state or {"obligations": {}, "related_fingerprints": {}}
         paths = binding_map.get(node_id, {}).get("paths", [])
         current_input = input_fingerprint(repo_root, paths)
-        dependencies_current = True
-        for dependency in node.get("depends_on", []):
-            dependency_paths = binding_map.get(dependency, {}).get("paths", [])
-            current_dependency = input_fingerprint(repo_root, dependency_paths)
-            if state.get("dependency_fingerprints", {}).get(dependency) != current_dependency:
-                dependencies_current = False
+        related_current = True
+        related_nodes = set(node.get("related_to", []))
+        related_nodes.update(
+            other_id for other_id, other in nodes.items()
+            if node_id in other.get("related_to", [])
+        )
+        for related in related_nodes:
+            related_paths = binding_map.get(related, {}).get("paths", [])
+            current_related = input_fingerprint(repo_root, related_paths)
+            if state.get("related_fingerprints", {}).get(related) != current_related:
+                related_current = False
 
         obligations = list(enumerate_obligations(definition, node_id))
         statuses: list[ObligationStatus] = []
         implemented_total = 0.0
-        lane_total = 0
-        lane_satisfied = 0
+        coverage_total = 0.0
         for obligation in obligations:
             obligation_state = state["obligations"].get(
                 obligation.id, {"implemented": "unknown", "evidence": {}}
             )
             implemented_total += implementation_weight[obligation_state["implemented"]]
             status = derive_obligation_status(
-                obligation, obligation_state, current_input, dependencies_current
+                obligation,
+                obligation_state,
+                current_input,
+                related_current,
+                verification_plan(bindings or {}, obligation),
             )
             statuses.append(status)
-            lane_total += status.required_lanes
-            lane_satisfied += status.satisfied_lanes
+            coverage_total += status.verified_coverage
         result.append(NodeStatus(
             node_id=node_id,
             implementation_percent=(100.0 * implemented_total / len(obligations)) if obligations else 100.0,
-            verification_percent=(100.0 * lane_satisfied / lane_total) if lane_total else 100.0,
+            verification_percent=(100.0 * coverage_total / len(obligations)) if obligations else 100.0,
             obligations=tuple(statuses),
         ))
     return result

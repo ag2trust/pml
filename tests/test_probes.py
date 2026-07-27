@@ -47,9 +47,19 @@ steps:
 def test_reports_deterministic_obligations_without_probes() -> None:
     definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
     assert definition is not None
-    diagnostics = missing_probe_diagnostics({}, definition)
+    obligation_id = "domains.notes.features.creation.rules.preserve_content"
+    bindings = {
+        "bindings": {
+            "domains.notes.features.creation": {
+                "verification": {
+                    obligation_id: {"probes": {"preserve_content": 1.0}}
+                }
+            }
+        }
+    }
+    diagnostics = missing_probe_diagnostics({}, definition, bindings)
     assert {item.code for item in diagnostics} == {"missing-probe"}
-    assert len(diagnostics) == 3
+    assert len(diagnostics) == 1
 
 
 def test_ingests_current_probe_evidence(tmp_path: Path) -> None:

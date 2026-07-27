@@ -10,7 +10,7 @@
     "node": {"type": "string", "minLength": 1},
     "definition_hash": {"$ref": "#/$defs/hash"},
     "input_fingerprint": {"$ref": "#/$defs/hash"},
-    "dependency_fingerprints": {
+    "related_fingerprints": {
       "type": "object",
       "additionalProperties": {"$ref": "#/$defs/hash"}
     },

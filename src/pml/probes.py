@@ -9,7 +9,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from pml.obligations import enumerate_obligations
+from pml.obligations import enumerate_obligations, verification_plan
 from pml.project_state import canonical_hash
 from pml.validator import Diagnostic, _load, _path
 
@@ -22,7 +22,11 @@ def probe_fingerprint(probe: dict[str, Any]) -> str:
     return canonical_hash(probe)
 
 
-def load_probes(path: Path, definition: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], list[Diagnostic]]:
+def load_probes(
+    path: Path,
+    definition: dict[str, Any],
+    bindings: dict[str, Any] | None = None,
+) -> tuple[dict[str, dict[str, Any]], list[Diagnostic]]:
     sources = sorted(path.rglob("*.probe.yaml")) if path.is_dir() else [path]
     diagnostics: list[Diagnostic] = []
     probes: dict[str, dict[str, Any]] = {}
@@ -50,8 +54,10 @@ def load_probes(path: Path, definition: dict[str, Any]) -> tuple[dict[str, dict[
         obligation = obligations.get(probe["verifies"])
         if obligation is None:
             diagnostics.append(Diagnostic(f"{source}:verifies", "undefined-reference", f"unknown obligation '{probe['verifies']}'"))
-        elif "deterministic_probe" not in obligation.required_methods:
-            diagnostics.append(Diagnostic(f"{source}:verifies", "unexpected-probe", "obligation does not require deterministic_probe evidence"))
+        elif bindings is not None:
+            configured = verification_plan(bindings, obligation).get("probes", {})
+            if probe_id not in configured:
+                diagnostics.append(Diagnostic(f"{source}:probe", "unbound-probe", "probe has no approved coverage binding"))
 
         captured: set[str] = set()
         for index, step in enumerate(probe["steps"]):
@@ -69,10 +75,19 @@ def load_probes(path: Path, definition: dict[str, Any]) -> tuple[dict[str, dict[
     return probes, diagnostics
 
 
-def missing_probe_diagnostics(probes: dict[str, dict[str, Any]], definition: dict[str, Any]) -> list[Diagnostic]:
-    covered = {probe["verifies"] for probe in probes.values()}
-    return [
-        Diagnostic(obligation.id, "missing-probe", "obligation requires an approved deterministic probe")
-        for obligation in enumerate_obligations(definition)
-        if "deterministic_probe" in obligation.required_methods and obligation.id not in covered
-    ]
+def missing_probe_diagnostics(
+    probes: dict[str, dict[str, Any]],
+    definition: dict[str, Any],
+    bindings: dict[str, Any],
+) -> list[Diagnostic]:
+    available = set(probes)
+    diagnostics: list[Diagnostic] = []
+    for obligation in enumerate_obligations(definition):
+        for probe_id in verification_plan(bindings, obligation).get("probes", {}):
+            if probe_id not in available:
+                diagnostics.append(Diagnostic(
+                    obligation.id,
+                    "missing-probe",
+                    f"approved probe '{probe_id}' has no definition",
+                ))
+    return diagnostics
