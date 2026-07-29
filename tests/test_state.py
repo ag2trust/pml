@@ -496,3 +496,27 @@ domains:
     assert validate_architecture_state(tmp_path, document) == []
     status = architecture_status(tmp_path, document)
     assert [(item.node_id, item.verification_percent) for item in status] == [("architecture.approved_runtime", 0)]
+
+
+def test_architecture_binding_rejects_symlink_outside_product_repository(tmp_path: Path) -> None:
+    document, diagnostics = load_document(ROOT / "examples" / "architecture-decisions.pml.yaml")
+    assert diagnostics == []
+    assert document is not None
+    product = tmp_path / "product"
+    metadata = product / ".pml"
+    metadata.mkdir(parents=True)
+    external = tmp_path / "external"
+    external.mkdir()
+    (product / "runtime").symlink_to(external, target_is_directory=True)
+    (metadata / "bindings.yaml").write_text("\n".join([
+        "pml_bindings: '0.1'",
+        "bindings: {}",
+        "architecture:",
+        "  durable_store:",
+        "    paths: [runtime]",
+        "    verification:",
+        "      architecture.durable_store.constraints.preserve_committed_records:",
+        "        agent_judgment: 1.0",
+        "",
+    ]))
+    assert any(item.code == "outside-repository" for item in validate_architecture_state(product, document))

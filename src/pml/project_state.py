@@ -405,6 +405,7 @@ def validate_architecture_state(
     obligations = {
         item.id: item for item in enumerate_architecture_obligations(definition)
     }
+    resolved_root = repo_root.resolve()
     for decision_id in binding_map:
         node_id = f"architecture.{decision_id}"
         if node_id not in decisions:
@@ -422,6 +423,11 @@ def validate_architecture_state(
             total = sum(verification_coverage(binding_map[decision_id]["verification"][obligation_id]).values())
             if abs(total - 1.0) > 1e-9:
                 diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.verification.{obligation_id}", "coverage-total", f"verification coverage must total 1.0, got {total:g}"))
+        for bound_path in binding_map[decision_id]["paths"]:
+            try:
+                (repo_root / bound_path.rstrip("/")).resolve().relative_to(resolved_root)
+            except ValueError:
+                diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.paths", "outside-repository", f"binding '{bound_path}' resolves outside the product repository"))
     for node_id, decision in decisions.items():
         decision_id = node_id.removeprefix("architecture.")
         if decision_id not in binding_map:
