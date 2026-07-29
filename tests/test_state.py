@@ -5,17 +5,18 @@ import json
 from jsonschema import Draft202012Validator
 import yaml
 
-from pml.obligations import Obligation, enumerate_obligations
+from pml.obligations import Obligation, enumerate_architecture_obligations, enumerate_obligations
 from pml.cli import main
 from pml.project_state import (
     bindings_digest,
     canonical_hash,
     input_fingerprint,
     load_bindings,
+    validate_architecture_state,
     validate_probe_evidence,
     validate_product_state,
 )
-from pml.status import derive_obligation_status, product_status
+from pml.status import architecture_status, derive_obligation_status, product_status
 from pml.validator import load_document
 
 
@@ -443,3 +444,55 @@ def test_project_and_domain_rules_are_obligations() -> None:
     ids = {item.id for item in enumerate_obligations(document)}
     assert "project.rules.global" in ids
     assert "domains.notes.rules.domain" in ids
+
+
+def test_architecture_constraints_have_separate_state_and_derivation(tmp_path: Path) -> None:
+    source = (ROOT / "examples" / "minimal.pml.yaml").read_text().replace(
+        "domains:\n",
+        """architecture:
+  approved_runtime:
+    category: runtime
+    selection: Approved runtime.
+    rationale: Owner approval is required to replace this runtime.
+    constraints:
+      portable_execution:
+        statement: The runtime MUST preserve portable execution.
+domains:
+""",
+        1,
+    ).replace("        actors:\n", "        architecture: [approved_runtime]\n        actors:\n", 1)
+    manifest = tmp_path / "architecture.pml.yaml"
+    manifest.write_text(source)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    decision = document["architecture"]["approved_runtime"]
+    obligation = next(enumerate_architecture_obligations(document))
+    metadata = tmp_path / ".pml"
+    architecture_dir = metadata / "architecture"
+    architecture_dir.mkdir(parents=True)
+    source_path = tmp_path / "runtime" / "selection"
+    source_path.parent.mkdir()
+    source_path.write_text("approved\n")
+    (metadata / "bindings.yaml").write_text("\n".join([
+        "pml_bindings: '0.1'",
+        "bindings: {}",
+        "architecture:",
+        "  approved_runtime:",
+        "    paths: [runtime]",
+        "    verification:",
+        "      architecture.approved_runtime.constraints.portable_execution:",
+        "        agent_judgment: 1.0",
+        "",
+    ]))
+    state = {
+        "pml_state": "0.1",
+        "node": "architecture.approved_runtime",
+        "definition_hash": canonical_hash(decision),
+        "input_fingerprint": input_fingerprint(tmp_path, ["runtime"]),
+        "obligations": {obligation.id: {"implemented": "implemented", "evidence": {}}},
+    }
+    (architecture_dir / "approved_runtime.state.yaml").write_text(yaml.safe_dump(state, sort_keys=False))
+    assert validate_architecture_state(tmp_path, document) == []
+    status = architecture_status(tmp_path, document)
+    assert [(item.node_id, item.verification_percent) for item in status] == [("architecture.approved_runtime", 0)]

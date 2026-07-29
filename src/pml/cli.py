@@ -14,8 +14,9 @@ from pml.project_state import (
     load_locked_bindings,
     validate_probe_evidence,
     validate_product_state,
+    validate_architecture_state,
 )
-from pml.status import product_status
+from pml.status import architecture_status, product_status
 from pml.validator import Diagnostic, load_document, validate_file
 
 
@@ -36,6 +37,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     status_parser = subparsers.add_parser("status", help="show derived product state")
     status_parser.add_argument("manifest", type=Path)
     status_parser.add_argument("product_root", type=Path)
+    architecture_status_parser = subparsers.add_parser("architecture-status", help="show derived architecture conformance")
+    architecture_status_parser.add_argument("manifest", type=Path)
+    architecture_status_parser.add_argument("product_root", type=Path)
     probes_parser = subparsers.add_parser("validate-probes", help="validate approved probe definitions")
     probes_parser.add_argument("manifest", type=Path)
     probes_parser.add_argument("probes", type=Path)
@@ -76,6 +80,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             locked_bindings=locked_bindings,
         )
         for node in nodes:
+            print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
+            for obligation in node.obligations:
+                print(f"  {obligation.obligation_id} {obligation.signal} {obligation.verification_percent:.0f}%")
+        return 0
+    if args.command == "architecture-status":
+        document, _ = load_document(path)
+        if document is None:
+            return 1
+        for node in architecture_status(args.product_root, document):
             print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
             for obligation in node.obligations:
                 print(f"  {obligation.obligation_id} {obligation.signal} {obligation.verification_percent:.0f}%")
@@ -146,6 +159,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if locked_bindings is not None:
             state_diagnostics.extend(validate_product_state(
+                args.product_root,
+                document,
+                definition_source=path,
+                locked_bindings=locked_bindings,
+            ))
+            state_diagnostics.extend(validate_architecture_state(
                 args.product_root,
                 document,
                 definition_source=path,

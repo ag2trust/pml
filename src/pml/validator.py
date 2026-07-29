@@ -26,6 +26,12 @@ AMBIGUOUS_WORDS = (
     "should",
 )
 NORMATIVE_MARKER = re.compile(r"\b(MUST|MUST NOT)\b")
+ARCHITECTURE_IMPLEMENTATION_DETAIL = re.compile(
+    r"(?:\b(?:file|filename|function|class|table|endpoint|topology|cluster|node|service)\b|"
+    r"\b(?:get|post|put|patch|delete)\s+/|[A-Za-z0-9_.-]+\.(?:py|js|ts|java|go|rb|sql|ya?ml|json)\b|"
+    r"\w+\s*\([^)]*\)|\b[a-z][a-z0-9_]*\s*:\s*\S+)",
+    re.IGNORECASE,
+)
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
@@ -165,6 +171,7 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
     actor_ids = set(document.get("actors", {}))
     signal_ids = set(document.get("signals", {}))
     architecture_ids = set(document.get("architecture", {}))
+    referenced_architecture: set[str] = set()
     for domain_id, domain in document.get("domains", {}).items():
         for feature_id, feature in domain.get("features", {}).items():
             prefix = f"domains.{domain_id}.features.{feature_id}"
@@ -186,12 +193,23 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
             if signal not in signal_ids:
                 diagnostics.append(Diagnostic(f"{node_id}.emits", "undefined-reference", f"unknown signal '{signal}'"))
         for decision in node.get("architecture", []):
+            referenced_architecture.add(decision)
             if decision not in architecture_ids:
                 diagnostics.append(Diagnostic(f"{node_id}.architecture", "undefined-reference", f"unknown architecture decision '{decision}'"))
         for reaction_id, reaction in node.get("reactions", {}).items():
             signal = reaction.get("on")
             if signal not in signal_ids:
                 diagnostics.append(Diagnostic(f"{node_id}.reactions.{reaction_id}.on", "undefined-reference", f"unknown signal '{signal}'"))
+    for decision_id, decision in document.get("architecture", {}).items():
+        prefix = f"architecture.{decision_id}"
+        if decision_id not in referenced_architecture:
+            diagnostics.append(Diagnostic(prefix, "unreferenced-architecture", "architecture decision is not referenced by a feature or component"))
+        for field in ("selection", "rationale"):
+            if ARCHITECTURE_IMPLEMENTATION_DETAIL.search(decision.get(field, "")):
+                diagnostics.append(Diagnostic(f"{prefix}.{field}", "implementation-detail", "architecture must not name implementation files, functions, classes, tables, endpoints, configuration syntax, or topology"))
+        for constraint_id, constraint in decision.get("constraints", {}).items():
+            if ARCHITECTURE_IMPLEMENTATION_DETAIL.search(constraint.get("statement", "")):
+                diagnostics.append(Diagnostic(f"{prefix}.constraints.{constraint_id}.statement", "implementation-detail", "architecture must not name implementation files, functions, classes, tables, endpoints, configuration syntax, or topology"))
     return diagnostics
 
 

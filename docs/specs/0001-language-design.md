@@ -61,14 +61,20 @@ are external bindings; current evidence and scores are generated state.
 
 ## Architecture
 
-Architecture decisions are flat and optional. They may name a category, approved
-selection, rationale, and normative constraints. A feature or component references
-decisions bottom-up.
+Architecture decisions are flat and optional. Each has a closed `category`, one
+canonical `selection`, one canonical `rationale`, and ID-keyed normative
+`constraints`. A feature or component references decisions bottom-up. Constraints
+use the same external verification requirements as other normative obligations, but
+their conformance is derived separately from product conformance.
 
 A technical choice belongs in architecture only when replacement requires explicit
 owner approval even if product behavior remains correct. Architecture must not name
 files, functions, classes, tables, endpoints, configuration syntax, or topology.
 Technology existence never proves conformance.
+
+An architecture decision must be referenced by at least one feature or component.
+References contain only decision IDs; inline architecture definitions are invalid.
+Architecture decisions never reference one another.
 
 ## Validation
 

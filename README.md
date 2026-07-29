@@ -106,6 +106,13 @@ Verification coverage is approved per obligation in owner-controlled bindings. S
 stores implementation facts and typed evidence; confidence and freshness are derived.
 See [`docs/specs/0005-bindings-boundary.md`](docs/specs/0005-bindings-boundary.md).
 
+Architecture constraints have independent bindings and state. Inspect their derived
+conformance without mixing it into product status with:
+
+```bash
+pml architecture-status definition.pml.yaml product/
+```
+
 ## Documentation
 
 - [Quickstart](docs/quickstart.md) — write and validate a small manifest.
@@ -117,10 +124,12 @@ See [`docs/specs/0005-bindings-boundary.md`](docs/specs/0005-bindings-boundary.m
 - [Product state](docs/specs/0003-product-state.md) — bindings, fingerprints, and derived confidence.
 - [Language normalization](docs/specs/0004-language-normalization.md) — approved canonical terms and removals.
 - [Bindings boundary](docs/specs/0005-bindings-boundary.md) — owner policy, lock pins, and product-local state.
+- [Architecture decisions](docs/specs/0005-architecture-decisions.md) — approved registry and separate conformance semantics.
 
 Examples:
 
 - [Minimal valid manifest](examples/minimal.pml.yaml)
+- [Architecture decisions](examples/architecture-decisions.pml.yaml) and [invalid architecture](examples/architecture-invalid.pml.yaml)
 - [Richer Assistant creation manifest](examples/assistant-creation.pml.yaml)
 - [Invalid manifest](examples/invalid.pml.yaml) with expected diagnostics
 - [Verification report](examples/verification-report.yaml)

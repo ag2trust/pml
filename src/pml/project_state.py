@@ -11,7 +11,9 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from pml.obligations import (
+    enumerate_architecture_obligations,
     enumerate_obligations,
+    iter_architecture,
     iter_nodes,
     required_methods,
     verification_coverage,
@@ -21,6 +23,14 @@ from pml.validator import Diagnostic, _load, _path, load_document
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def state_path_for(repo_root: Path, node_id: str) -> Path:
+    """Return the isolated generated-state location for a conformance scope."""
+
+    if node_id.startswith("architecture."):
+        return repo_root / ".pml" / "architecture" / f"{node_id.removeprefix('architecture.')}.state.yaml"
+    return (repo_root / ".pml" / "state" / Path(*node_id.split("."))).with_suffix(".state.yaml")
 
 
 def _schema(name: str) -> dict[str, Any]:
@@ -371,6 +381,94 @@ def validate_product_state(
     return diagnostics
 
 
+def validate_architecture_state(
+    repo_root: Path,
+    definition: dict[str, Any],
+    locked_bindings: LockedBindings | None = None,
+    *,
+    definition_source: Path | None = None,
+) -> list[Diagnostic]:
+    """Validate independent evidence for owner-approved architecture constraints."""
+
+    diagnostics: list[Diagnostic] = []
+    metadata = repo_root / ".pml"
+    if locked_bindings is None:
+        locked_bindings, errors = load_locked_bindings(
+            repo_root, definition, definition_source
+        )
+        diagnostics.extend(errors)
+    if locked_bindings is None:
+        return diagnostics
+    bindings = locked_bindings.document
+    decisions = dict(iter_architecture(definition))
+    binding_map = bindings.get("architecture", {})
+    obligations = {
+        item.id: item for item in enumerate_architecture_obligations(definition)
+    }
+    for decision_id in binding_map:
+        node_id = f"architecture.{decision_id}"
+        if node_id not in decisions:
+            diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}", "undefined-reference", f"unknown architecture decision '{decision_id}'"))
+            continue
+        expected = {
+            item.id for item in enumerate_architecture_obligations(definition, node_id)
+        }
+        configured = set(binding_map[decision_id].get("verification", {}))
+        for obligation_id in sorted(expected.difference(configured)):
+            diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.verification", "missing-verification-plan", f"constraint '{obligation_id}' has no verification plan"))
+        for obligation_id in sorted(configured.difference(expected)):
+            diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.verification.{obligation_id}", "undefined-reference", f"unknown architecture constraint '{obligation_id}'"))
+        for obligation_id in sorted(expected.intersection(configured)):
+            total = sum(verification_coverage(binding_map[decision_id]["verification"][obligation_id]).values())
+            if abs(total - 1.0) > 1e-9:
+                diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.verification.{obligation_id}", "coverage-total", f"verification coverage must total 1.0, got {total:g}"))
+    for node_id, decision in decisions.items():
+        decision_id = node_id.removeprefix("architecture.")
+        if decision_id not in binding_map:
+            diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture", "missing-binding", f"architecture decision '{decision_id}' has no binding"))
+            continue
+        state_path = state_path_for(repo_root, node_id)
+        if not state_path.is_file():
+            diagnostics.append(Diagnostic(str(state_path), "missing-state", f"architecture decision '{node_id}' has no state file"))
+            continue
+        state, errors = _load(state_path)
+        diagnostics.extend(errors)
+        if state is None:
+            continue
+        schema_errors = _schema_diagnostics(state_path, state, "pml-state.schema.json")
+        diagnostics.extend(schema_errors)
+        if schema_errors:
+            continue
+        if state["node"] != node_id:
+            diagnostics.append(Diagnostic(f"{state_path}:node", "undefined-reference", f"state must identify architecture decision '{node_id}'"))
+            continue
+        if state["definition_hash"] != canonical_hash(decision):
+            diagnostics.append(Diagnostic(f"{state_path}:definition_hash", "definition-mismatch", "state does not match the approved architecture decision"))
+        current = input_fingerprint(repo_root, binding_map[decision_id]["paths"])
+        if state["input_fingerprint"] != current:
+            diagnostics.append(Diagnostic(f"{state_path}:input_fingerprint", "sync-required", "state does not cover current bound inputs"))
+        expected = {item.id for item in enumerate_architecture_obligations(definition, node_id)}
+        for obligation_id in sorted(expected.difference(state["obligations"])):
+            diagnostics.append(Diagnostic(f"{state_path}:obligations", "missing-obligation", f"state is missing '{obligation_id}'"))
+        for obligation_id, obligation_state in state["obligations"].items():
+            obligation = obligations.get(obligation_id)
+            if obligation is None or obligation.node_id != node_id:
+                diagnostics.append(Diagnostic(f"{state_path}:obligations.{obligation_id}", "undefined-reference", f"unknown architecture constraint '{obligation_id}'"))
+                continue
+            allowed = set(required_methods(verification_plan(bindings, obligation)))
+            for method in obligation_state["evidence"]:
+                if method not in allowed:
+                    diagnostics.append(Diagnostic(f"{state_path}:obligations.{obligation_id}.evidence.{method}", "unexpected-evidence", f"'{method}' is not required by the approved constraint"))
+    architecture_root = metadata / "architecture"
+    for state_path in sorted(architecture_root.glob("*.state.yaml")) if architecture_root.exists() else []:
+        state, errors = _load(state_path)
+        if errors or state is None or "node" not in state:
+            continue
+        if state["node"] not in decisions:
+            diagnostics.append(Diagnostic(f"{state_path}:node", "undefined-reference", f"unknown architecture decision '{state['node']}'"))
+    return diagnostics
+
+
 def validate_probe_evidence(
     repo_root: Path,
     definition: dict[str, Any],
@@ -395,9 +493,8 @@ def validate_probe_evidence(
     for probe_id, probe in probes.items():
         probe_by_obligation.setdefault(probe["verifies"], {})[probe_id] = probe
 
-    for node_id, _ in iter_nodes(definition):
-        state_path = metadata / "state" / Path(*node_id.split("."))
-        state_path = state_path.with_suffix(".state.yaml")
+    for node_id, _ in list(iter_nodes(definition)) + list(iter_architecture(definition)):
+        state_path = state_path_for(repo_root, node_id)
         state, _ = _load(state_path)
         if state is None:
             continue
@@ -408,10 +505,13 @@ def validate_probe_evidence(
                 "probe evidence does not match the approved bindings",
             ))
             continue
-        current_input = input_fingerprint(
-            repo_root, bindings.get("bindings", {}).get(node_id, {}).get("paths", [])
-        )
-        for obligation in enumerate_obligations(definition, node_id):
+        if node_id.startswith("architecture."):
+            paths = bindings.get("architecture", {}).get(node_id.removeprefix("architecture."), {}).get("paths", [])
+        else:
+            paths = bindings.get("bindings", {}).get(node_id, {}).get("paths", [])
+        current_input = input_fingerprint(repo_root, paths)
+        enumerator = enumerate_architecture_obligations if node_id.startswith("architecture.") else enumerate_obligations
+        for obligation in enumerator(definition, node_id):
             approved = probe_by_obligation.get(obligation.id, {})
             plan = verification_plan(bindings, obligation)
             if "deterministic_probe" not in required_methods(plan):

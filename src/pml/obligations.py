@@ -37,6 +37,14 @@ def required_methods(plan: dict[str, Any]) -> tuple[str, ...]:
 def verification_plan(
     bindings: dict[str, Any], obligation: Obligation
 ) -> dict[str, Any]:
+    if obligation.node_id.startswith("architecture."):
+        decision_id = obligation.node_id.removeprefix("architecture.")
+        return (
+            bindings.get("architecture", {})
+            .get(decision_id, {})
+            .get("verification", {})
+            .get(obligation.id, {})
+        )
     return (
         bindings.get("bindings", {})
         .get(obligation.node_id, {})
@@ -74,3 +82,28 @@ def enumerate_obligations(
                     local_id=local_id,
                     definition=definition,
                 )
+
+
+def iter_architecture(document: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Yield independent, flat architecture decision scopes."""
+
+    for decision_id, decision in document.get("architecture", {}).items():
+        yield f"architecture.{decision_id}", decision
+
+
+def enumerate_architecture_obligations(
+    document: dict[str, Any], node_id: str | None = None
+) -> Iterator[Obligation]:
+    """Resolve architecture constraints without mixing them into product obligations."""
+
+    for semantic_id, decision in iter_architecture(document):
+        if node_id is not None and semantic_id != node_id:
+            continue
+        for local_id, definition in decision.get("constraints", {}).items():
+            yield Obligation(
+                id=f"{semantic_id}.constraints.{local_id}",
+                node_id=semantic_id,
+                section="constraints",
+                local_id=local_id,
+                definition=definition,
+            )

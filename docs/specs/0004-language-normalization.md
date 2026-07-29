@@ -62,3 +62,10 @@ Architecture is an optional flat registry of independently owner-mandated techni
 decisions. Features and components reference those decisions bottom-up. Architecture
 does not duplicate behavioral outcomes and technology existence is never conformance
 evidence.
+
+Architecture decisions have the canonical fields `category`, `selection`,
+`rationale`, and optional ID-keyed `constraints`. Categories are closed. Constraints
+resolve into architecture-only obligations and use external verification bindings and
+generated evidence independently of product obligations. Unreferenced decisions are
+invalid; `applies_to`, `supports`, inline decisions, and recursive decisions do not
+exist in the language.
