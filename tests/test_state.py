@@ -520,3 +520,24 @@ def test_architecture_binding_rejects_symlink_outside_product_repository(tmp_pat
         "",
     ]))
     assert any(item.code == "outside-repository" for item in validate_architecture_state(product, document))
+
+
+def test_architecture_decision_without_constraints_requires_no_state_or_binding(tmp_path: Path) -> None:
+    source = (ROOT / "examples" / "minimal.pml.yaml").read_text().replace(
+        "domains:\n",
+        """architecture:
+  approved_runtime:
+    category: runtime
+    selection: Approved runtime.
+    rationale: Owner approval is required to replace this runtime.
+domains:
+""",
+        1,
+    ).replace("        actors:\n", "        architecture: [approved_runtime]\n        actors:\n", 1)
+    manifest = tmp_path / "unconstrained-architecture.pml.yaml"
+    manifest.write_text(source)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    assert validate_architecture_state(tmp_path, document) == []
+    assert architecture_status(tmp_path, document) == []

@@ -181,6 +181,9 @@ def architecture_status(repo_root: Path, definition: dict[str, Any]) -> list[Nod
     result: list[NodeStatus] = []
     implementation_weight = {"implemented": 1.0, "partial": 0.5, "missing": 0.0, "unknown": 0.0}
     for node_id, decision in iter_architecture(definition):
+        obligations = list(enumerate_architecture_obligations(definition, node_id))
+        if not obligations:
+            continue
         decision_id = node_id.removeprefix("architecture.")
         state, _ = _load(state_path_for(repo_root, node_id))
         state = state or {"obligations": {}}
@@ -188,7 +191,6 @@ def architecture_status(repo_root: Path, definition: dict[str, Any]) -> list[Nod
         statuses: list[ObligationStatus] = []
         implemented_total = 0.0
         coverage_total = 0.0
-        obligations = list(enumerate_architecture_obligations(definition, node_id))
         for obligation in obligations:
             obligation_state = state["obligations"].get(obligation.id, {"implemented": "unknown", "evidence": {}})
             implemented_total += implementation_weight[obligation_state["implemented"]]

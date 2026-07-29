@@ -392,6 +392,10 @@ def validate_architecture_state(
 
     diagnostics: list[Diagnostic] = []
     metadata = repo_root / ".pml"
+    decisions = dict(iter_architecture(definition))
+    constrained_decisions = {
+        node_id for node_id, decision in decisions.items() if decision.get("constraints")
+    }
     if locked_bindings is None:
         locked_bindings, errors = load_locked_bindings(
             repo_root, definition, definition_source
@@ -400,7 +404,6 @@ def validate_architecture_state(
     if locked_bindings is None:
         return diagnostics
     bindings = locked_bindings.document
-    decisions = dict(iter_architecture(definition))
     binding_map = bindings.get("architecture", {})
     obligations = {
         item.id: item for item in enumerate_architecture_obligations(definition)
@@ -410,6 +413,8 @@ def validate_architecture_state(
         node_id = f"architecture.{decision_id}"
         if node_id not in decisions:
             diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}", "undefined-reference", f"unknown architecture decision '{decision_id}'"))
+            continue
+        if node_id not in constrained_decisions:
             continue
         expected = {
             item.id for item in enumerate_architecture_obligations(definition, node_id)
@@ -429,6 +434,8 @@ def validate_architecture_state(
             except ValueError:
                 diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.paths", "outside-repository", f"binding '{bound_path}' resolves outside the product repository"))
     for node_id, decision in decisions.items():
+        if node_id not in constrained_decisions:
+            continue
         decision_id = node_id.removeprefix("architecture.")
         if decision_id not in binding_map:
             diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture", "missing-binding", f"architecture decision '{decision_id}' has no binding"))
