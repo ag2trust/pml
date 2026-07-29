@@ -522,6 +522,34 @@ def test_architecture_binding_rejects_symlink_outside_product_repository(tmp_pat
     assert any(item.code == "outside-repository" for item in validate_architecture_state(product, document))
 
 
+def test_architecture_binding_rejects_child_symlink_outside_product_repository(tmp_path: Path) -> None:
+    document, diagnostics = load_document(ROOT / "examples" / "architecture-decisions.pml.yaml")
+    assert diagnostics == []
+    assert document is not None
+    product = tmp_path / "product"
+    metadata = product / ".pml"
+    metadata.mkdir(parents=True)
+    runtime = product / "runtime"
+    runtime.mkdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "selection").write_text("outside\n")
+    (runtime / "selection").symlink_to(external / "selection")
+    (metadata / "bindings.yaml").write_text("\n".join([
+        "pml_bindings: '0.1'",
+        "bindings: {}",
+        "architecture:",
+        "  durable_store:",
+        "    paths: [runtime]",
+        "    verification:",
+        "      architecture.durable_store.constraints.preserve_committed_records:",
+        "        agent_judgment: 1.0",
+        "",
+    ]))
+    diagnostics = validate_architecture_state(product, document)
+    assert any(item.code == "outside-repository" and "runtime/selection" in item.message for item in diagnostics)
+
+
 def test_architecture_decision_without_constraints_requires_no_state_or_binding(tmp_path: Path) -> None:
     source = (ROOT / "examples" / "minimal.pml.yaml").read_text().replace(
         "domains:\n",
@@ -539,5 +567,50 @@ domains:
     document, diagnostics = load_document(manifest)
     assert diagnostics == []
     assert document is not None
+    metadata = tmp_path / ".pml"
+    metadata.mkdir()
+    (metadata / "bindings.yaml").write_text("pml_bindings: '0.1'\nbindings: {}\n")
     assert validate_architecture_state(tmp_path, document) == []
     assert architecture_status(tmp_path, document) == []
+
+
+def test_unconstrained_architecture_rejects_unresolved_binding_and_state(tmp_path: Path) -> None:
+    source = (ROOT / "examples" / "minimal.pml.yaml").read_text().replace(
+        "domains:\n",
+        """architecture:
+  approved_runtime:
+    category: runtime
+    selection: Approved runtime.
+    rationale: Owner approval is required to replace this runtime.
+domains:
+""",
+        1,
+    ).replace("        actors:\n", "        architecture: [approved_runtime]\n        actors:\n", 1)
+    manifest = tmp_path / "unconstrained-architecture.pml.yaml"
+    manifest.write_text(source)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    metadata = tmp_path / ".pml"
+    architecture = metadata / "architecture"
+    architecture.mkdir(parents=True)
+    (tmp_path / "runtime").mkdir()
+    (metadata / "bindings.yaml").write_text("\n".join([
+        "pml_bindings: '0.1'",
+        "bindings: {}",
+        "architecture:",
+        "  invented:",
+        "    paths: [runtime]",
+        "    verification: {}",
+        "",
+    ]))
+    (architecture / "invented.state.yaml").write_text("\n".join([
+        "pml_state: '0.1'",
+        "node: architecture.invented",
+        f"definition_hash: sha256:{'a' * 64}",
+        f"input_fingerprint: sha256:{'b' * 64}",
+        "obligations: {}",
+        "",
+    ]))
+    diagnostics = validate_architecture_state(tmp_path, document)
+    assert sum(item.code == "undefined-reference" for item in diagnostics) == 2

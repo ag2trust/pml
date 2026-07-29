@@ -68,13 +68,38 @@ def input_fingerprint(repo_root: Path, paths: list[str]) -> str:
             records.append((target.relative_to(repo_root).as_posix(), hashlib.sha256(target.read_bytes()).hexdigest()))
         elif target.is_dir():
             for child in sorted(item for item in target.rglob("*") if item.is_file()):
-                relative = child.relative_to(repo_root)
+                try:
+                    relative = child.resolve().relative_to(resolved_root)
+                except ValueError:
+                    records.append((child.relative_to(repo_root).as_posix(), "outside-repository"))
+                    continue
                 if relative.parts[:2] == (".pml", "state"):
                     continue
                 records.append((relative.as_posix(), hashlib.sha256(child.read_bytes()).hexdigest()))
         else:
             records.append((binding, "missing"))
     return canonical_hash(records)
+
+
+def outside_repository_paths(repo_root: Path, paths: list[str]) -> list[str]:
+    """Return bound paths or descendants that resolve outside the product repository."""
+
+    resolved_root = repo_root.resolve()
+    escaped: list[str] = []
+    for binding in paths:
+        target = repo_root / binding.rstrip("/")
+        try:
+            target.resolve().relative_to(resolved_root)
+        except ValueError:
+            escaped.append(binding)
+            continue
+        if target.is_dir():
+            for child in sorted(target.rglob("*")):
+                try:
+                    child.resolve().relative_to(resolved_root)
+                except ValueError:
+                    escaped.append(child.relative_to(repo_root).as_posix())
+    return escaped
 
 
 def _schema_diagnostics(path: Path, document: dict[str, Any], schema_name: str) -> list[Diagnostic]:
@@ -313,7 +338,6 @@ def validate_product_state(
         expected_path = state_root.joinpath(*node_id.split(".")).with_suffix(".state.yaml")
         if not expected_path.is_file():
             diagnostics.append(Diagnostic(str(expected_path), "missing-state", f"node '{node_id}' has no state file"))
-
     for state_path in sorted(state_root.rglob("*.state.yaml")) if state_root.exists() else []:
         state, errors = _load(state_path)
         diagnostics.extend(errors)
@@ -408,13 +432,10 @@ def validate_architecture_state(
     obligations = {
         item.id: item for item in enumerate_architecture_obligations(definition)
     }
-    resolved_root = repo_root.resolve()
     for decision_id in binding_map:
         node_id = f"architecture.{decision_id}"
         if node_id not in decisions:
             diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}", "undefined-reference", f"unknown architecture decision '{decision_id}'"))
-            continue
-        if node_id not in constrained_decisions:
             continue
         expected = {
             item.id for item in enumerate_architecture_obligations(definition, node_id)
@@ -428,11 +449,8 @@ def validate_architecture_state(
             total = sum(verification_coverage(binding_map[decision_id]["verification"][obligation_id]).values())
             if abs(total - 1.0) > 1e-9:
                 diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.verification.{obligation_id}", "coverage-total", f"verification coverage must total 1.0, got {total:g}"))
-        for bound_path in binding_map[decision_id]["paths"]:
-            try:
-                (repo_root / bound_path.rstrip("/")).resolve().relative_to(resolved_root)
-            except ValueError:
-                diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.paths", "outside-repository", f"binding '{bound_path}' resolves outside the product repository"))
+        for escaped_path in outside_repository_paths(repo_root, binding_map[decision_id]["paths"]):
+            diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.paths", "outside-repository", f"binding '{escaped_path}' resolves outside the product repository"))
     for node_id, decision in decisions.items():
         if node_id not in constrained_decisions:
             continue
@@ -475,7 +493,12 @@ def validate_architecture_state(
     architecture_root = metadata / "architecture"
     for state_path in sorted(architecture_root.glob("*.state.yaml")) if architecture_root.exists() else []:
         state, errors = _load(state_path)
-        if errors or state is None or "node" not in state:
+        diagnostics.extend(errors)
+        if state is None:
+            continue
+        schema_errors = _schema_diagnostics(state_path, state, "pml-state.schema.json")
+        diagnostics.extend(schema_errors)
+        if schema_errors:
             continue
         if state["node"] not in decisions:
             diagnostics.append(Diagnostic(f"{state_path}:node", "undefined-reference", f"unknown architecture decision '{state['node']}'"))
