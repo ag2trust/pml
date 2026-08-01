@@ -17,6 +17,10 @@ owner changes bindings and updates the lock, evidence in state carrying the prio
 digest is stale until that state is reconciled. This prevents old evidence from
 being reweighted under a new coverage policy.
 
+When report ingestion reconciles a touched node to a new definition or bindings
+digest, it clears that node's prior evidence before recording the report. A partial
+report therefore cannot make untouched evidence current under the new policy.
+
 Bindings paths retain their product meaning after this separation: `src/notes`
 means `<implementing-product>/src/notes`, not a path under the owner source. Unsafe
 paths and paths that resolve outside the product repository remain invalid.

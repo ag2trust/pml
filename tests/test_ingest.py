@@ -11,6 +11,7 @@ from pml.project_state import (
     validate_probe_evidence,
     validate_product_state,
 )
+from pml.status import product_status
 from pml.validator import load_document
 
 
@@ -155,6 +156,67 @@ def test_ingestion_rejects_mismatched_bindings_digest_without_writing(
 
     assert {item.code for item in diagnostics} == {"bindings-digest"}
     assert state_path.read_text() == original
+
+
+def test_partial_ingestion_clears_evidence_from_prior_bindings(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    bindings_path = owner_bindings_path(product)
+    bindings = yaml.safe_load(bindings_path.read_text())
+    plan = bindings["bindings"]["domains.notes.features.creation"][
+        "verification"
+    ][OBLIGATION]
+    plan["probes"]["preserve_content"] = 0.5
+    plan["agent_judgment"] = 0.5
+    approve_bindings(product, bindings)
+
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    state = yaml.safe_load(state_path.read_text())
+    state["bindings_digest"] = bindings_digest(bindings)
+    state["obligations"][OBLIGATION]["evidence"]["agent_judgment"] = {
+        "result": "passed",
+        "input_fingerprint": state["input_fingerprint"],
+        "recorded": "2026-07-31T10:00:00Z",
+        "observation": "Passed under the prior coverage policy.",
+        "reproduction": ["Evaluate the obligation."],
+    }
+    state_path.write_text(yaml.safe_dump(state, sort_keys=False))
+
+    plan["probes"]["preserve_content"] = 0.75
+    plan["agent_judgment"] = 0.25
+    approve_bindings(product, bindings)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    probes, probe_diagnostics = load_probes(
+        probe_path, definition, bindings
+    )
+    assert probe_diagnostics == []
+
+    assert ingest_report(report_path, product, definition, probes) == []
+
+    reconciled = yaml.safe_load(state_path.read_text())
+    evidence = reconciled["obligations"][OBLIGATION]["evidence"]
+    assert set(evidence) == {"deterministic_probe"}
+    assert reconciled["bindings_digest"] == bindings_digest(bindings)
+    statuses = product_status(product, definition)
+    preserve_status = next(
+        item
+        for node in statuses
+        for item in node.obligations
+        if item.obligation_id == OBLIGATION
+    )
+    assert (preserve_status.signal, preserve_status.verified_coverage) == (
+        "PARTIAL",
+        0.75,
+    )
 
 
 def test_rejects_probe_without_coverage_binding(tmp_path: Path) -> None:

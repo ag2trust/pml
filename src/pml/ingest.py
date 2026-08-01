@@ -92,6 +92,7 @@ def ingest_report(
     states: dict[str, tuple[Path, dict[str, Any], str]] = {}
     for node_id in touched_nodes:
         node = nodes[node_id]
+        current_definition_hash = canonical_hash(node)
         paths = binding_map.get(node_id, {}).get("paths", [])
         current_input = input_fingerprint(repo_root, paths)
         state_path = repo_root / ".pml" / "state" / Path(*node_id.split("."))
@@ -109,7 +110,13 @@ def ingest_report(
                     for obligation in enumerate_obligations(definition, node_id)
                 },
             }
-        state["definition_hash"] = canonical_hash(node)
+        elif (
+            state["definition_hash"] != current_definition_hash
+            or state["bindings_digest"] != locked_bindings.digest
+        ):
+            for obligation_state in state["obligations"].values():
+                obligation_state["evidence"] = {}
+        state["definition_hash"] = current_definition_hash
         state["bindings_digest"] = locked_bindings.digest
         state["input_fingerprint"] = current_input
         related_nodes = set(node.get("related_to", []))
