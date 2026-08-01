@@ -33,6 +33,33 @@ def state_path_for(repo_root: Path, node_id: str) -> Path:
     return (repo_root / ".pml" / "state" / Path(*node_id.split("."))).with_suffix(".state.yaml")
 
 
+def architecture_state_root_diagnostics(repo_root: Path) -> list[Diagnostic]:
+    """Reject a generated architecture-state root that escapes its repository."""
+
+    root = repo_root / ".pml" / "architecture"
+    if root.is_symlink():
+        return [Diagnostic(
+            str(root),
+            "state-path",
+            "architecture state root must not be a symbolic link",
+        )]
+    if root.exists() and not root.is_dir():
+        return [Diagnostic(
+            str(root),
+            "state-path",
+            "architecture state root must be a directory",
+        )]
+    try:
+        root.resolve().relative_to(repo_root.resolve())
+    except ValueError:
+        return [Diagnostic(
+            str(root),
+            "outside-repository",
+            "architecture state root resolves outside the product repository",
+        )]
+    return []
+
+
 def _schema(name: str) -> dict[str, Any]:
     return json.loads((ROOT / "schema" / name).read_text())
 
@@ -472,12 +499,37 @@ def validate_architecture_state(
     }
     architecture_root = metadata / "architecture"
     canonical_states: dict[str, tuple[Path, dict[str, Any]]] = {}
-    state_paths = (
-        sorted(architecture_root.rglob("*.state.yaml"))
-        if architecture_root.exists()
-        else []
-    )
-    for state_path in state_paths:
+    root_errors = architecture_state_root_diagnostics(repo_root)
+    diagnostics.extend(root_errors)
+    if root_errors:
+        return diagnostics
+    state_paths: list[Path] = []
+    if architecture_root.exists():
+        max_state_files = max(1, len(decisions)) + 1
+        for entry in architecture_root.iterdir():
+            if entry.is_symlink() or entry.is_dir() or not entry.is_file():
+                diagnostics.append(Diagnostic(
+                    str(entry),
+                    "state-path",
+                    f"architecture state must be a direct file at {architecture_root}",
+                ))
+                continue
+            if not entry.name.endswith(".state.yaml"):
+                diagnostics.append(Diagnostic(
+                    str(entry),
+                    "state-path",
+                    f"architecture state must be a direct file at {architecture_root}",
+                ))
+                continue
+            if len(state_paths) == max_state_files:
+                diagnostics.append(Diagnostic(
+                    str(architecture_root),
+                    "state-limit",
+                    "architecture state contains more files than approved decisions",
+                ))
+                break
+            state_paths.append(entry)
+    for state_path in sorted(state_paths):
         state, errors = _load(state_path)
         diagnostics.extend(errors)
         if state is None:

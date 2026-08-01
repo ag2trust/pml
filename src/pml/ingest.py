@@ -12,6 +12,7 @@ import yaml
 from pml.obligations import enumerate_architecture_obligations, enumerate_obligations, iter_architecture, iter_nodes, required_methods, verification_plan
 from pml.project_state import (
     LockedBindings,
+    architecture_state_root_diagnostics,
     canonical_hash,
     input_fingerprint,
     load_locked_bindings,
@@ -96,6 +97,10 @@ def ingest_report(
         return diagnostics
 
     touched_nodes = {obligations[check["target"]].node_id for check in report["checks"]}
+    if any(node_id.startswith("architecture.") for node_id in touched_nodes):
+        diagnostics.extend(architecture_state_root_diagnostics(repo_root))
+        if diagnostics:
+            return diagnostics
     states: dict[str, tuple[Path, dict[str, Any], str]] = {}
     for node_id in touched_nodes:
         node = nodes[node_id]
@@ -112,6 +117,13 @@ def ingest_report(
             node_obligations = list(enumerate_obligations(definition, node_id))
         current_input = input_fingerprint(repo_root, paths)
         state_path = state_path_for(repo_root, node_id)
+        if node_id.startswith("architecture.") and state_path.is_symlink():
+            diagnostics.append(Diagnostic(
+                str(state_path),
+                "state-path",
+                "architecture state file must not be a symbolic link",
+            ))
+            continue
         state, state_errors = load_state(state_path)
         if state_errors:
             diagnostics.extend(state_errors)

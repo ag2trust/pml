@@ -9,6 +9,7 @@ from typing import Any
 from pml.obligations import Obligation, enumerate_architecture_obligations, enumerate_obligations, iter_architecture, iter_nodes, verification_plan
 from pml.project_state import (
     LockedBindings,
+    architecture_state_root_diagnostics,
     canonical_hash,
     input_fingerprint,
     load_locked_bindings,
@@ -193,6 +194,8 @@ def architecture_status(
         )
     if locked_bindings is None:
         return []
+    if architecture_state_root_diagnostics(repo_root):
+        return []
     bindings = locked_bindings.document
     binding_map = bindings.get("architecture", {})
     result: list[NodeStatus] = []
@@ -202,7 +205,8 @@ def architecture_status(
         if not obligations:
             continue
         decision_id = node_id.removeprefix("architecture.")
-        state, _ = _load(state_path_for(repo_root, node_id))
+        state_path = state_path_for(repo_root, node_id)
+        state, _ = (None, []) if state_path.is_symlink() else _load(state_path)
         state = state or {"obligations": {}}
         policy_current = (
             state.get("definition_hash") == canonical_hash(decision)

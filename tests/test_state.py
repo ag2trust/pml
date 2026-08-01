@@ -610,12 +610,77 @@ def test_architecture_state_rejects_duplicate_and_nested_state_paths(
     ]
     assert {Path(item.path).name for item in state_path_errors} == {
         "duplicate.state.yaml",
-        "stray.state.yaml",
+        "nested",
     }
     assert main(["check", str(manifest), str(product)]) == 1
     check_output = capsys.readouterr().out
     assert "duplicate.state.yaml: [state-path]" in check_output
-    assert "stray.state.yaml: [state-path]" in check_output
+    assert "nested: [state-path]" in check_output
+
+
+def test_architecture_state_limits_candidate_files(tmp_path: Path) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, digest = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    (product / "runtime").mkdir()
+    architecture = product / ".pml" / "architecture"
+    architecture.mkdir()
+    state = {
+        "pml_state": "0.1",
+        "node": "architecture.durable_store",
+        "definition_hash": canonical_hash(document["architecture"]["durable_store"]),
+        "bindings_digest": digest,
+        "input_fingerprint": input_fingerprint(product, ["runtime"]),
+        "obligations": {obligation.id: {"implemented": "unknown", "evidence": {}}},
+    }
+    for index in range(3):
+        (architecture / f"candidate_{index}.state.yaml").write_text(
+            yaml.safe_dump(state, sort_keys=False)
+        )
+
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
+
+    assert any(item.code == "state-limit" for item in diagnostics)
+
+
+def test_architecture_state_root_rejects_symlink_outside_product_repository(
+    tmp_path: Path,
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    external = tmp_path / "external"
+    external.mkdir()
+    (product / ".pml" / "architecture").symlink_to(
+        external, target_is_directory=True
+    )
+
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert list(external.iterdir()) == []
 
 
 def test_architecture_state_and_status_ignore_product_local_bindings(

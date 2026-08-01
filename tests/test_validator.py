@@ -300,6 +300,13 @@ domains:
         "        actors:\n",
         "        architecture: [approved_runtime]\n        actors:\n",
         1,
+    ).replace("Approved runtime.", "Node.js"))
+    assert validate_file(manifest) == []
+
+    manifest.write_text(source.replace(
+        "        actors:\n",
+        "        architecture: [approved_runtime]\n        actors:\n",
+        1,
     ).replace("Approved runtime.", "DATABASE_URL=approved"))
     diagnostics = validate_file(manifest)
     assert any(item.code == "implementation-detail" for item in diagnostics)
