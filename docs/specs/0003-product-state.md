@@ -1,6 +1,7 @@
 # PML 0.1 product state
 
-Status: Approved, normalized by [0004](0004-language-normalization.md)
+Status: Approved, normalized by [0004](0004-language-normalization.md); repository
+boundary superseded by [0005](0005-bindings-boundary.md)
 
 ## Repository boundary
 
