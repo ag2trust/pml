@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from pml.obligations import Obligation, enumerate_architecture_obligations, enumerate_obligations, iter_architecture, iter_nodes, verification_plan
-from pml.project_state import LockedBindings, input_fingerprint, load_locked_bindings, state_path_for
+from pml.project_state import (
+    LockedBindings,
+    canonical_hash,
+    input_fingerprint,
+    load_locked_bindings,
+    state_path_for,
+)
 from pml.validator import _load
 
 
@@ -198,7 +204,10 @@ def architecture_status(
         decision_id = node_id.removeprefix("architecture.")
         state, _ = _load(state_path_for(repo_root, node_id))
         state = state or {"obligations": {}}
-        policy_current = state.get("bindings_digest") == locked_bindings.digest
+        policy_current = (
+            state.get("definition_hash") == canonical_hash(decision)
+            and state.get("bindings_digest") == locked_bindings.digest
+        )
         current_input = input_fingerprint(repo_root, binding_map.get(decision_id, {}).get("paths", []))
         statuses: list[ObligationStatus] = []
         implemented_total = 0.0

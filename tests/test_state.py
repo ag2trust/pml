@@ -8,6 +8,7 @@ import yaml
 from pml.obligations import Obligation, enumerate_architecture_obligations, enumerate_obligations
 from pml.cli import main
 from pml.project_state import (
+    LockedBindings,
     bindings_digest,
     canonical_hash,
     input_fingerprint,
@@ -663,6 +664,91 @@ def test_architecture_state_and_status_ignore_product_local_bindings(
     ]) == 0
     output = capsys.readouterr().out
     assert "architecture.durable_store implementation=0%" in output
+
+
+def test_architecture_binding_rejects_noncanonical_current_directory_path(
+    tmp_path: Path,
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = "architecture.durable_store.constraints.preserve_committed_records"
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["./"],
+            "verification": {obligation: {"agent_judgment": 1.0}},
+        }
+    })
+
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
+
+    assert any(item.code == "schema" and "'./' does not match" in item.message for item in diagnostics)
+
+
+def test_architecture_status_makes_evidence_stale_after_decision_change(
+    tmp_path: Path,
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    decision = document["architecture"]["durable_store"]
+    obligation = next(enumerate_architecture_obligations(document))
+    bindings = {
+        "pml_bindings": "0.1",
+        "bindings": {},
+        "architecture": {
+            "durable_store": {
+                "paths": ["runtime"],
+                "verification": {obligation.id: {"agent_judgment": 1.0}},
+            }
+        },
+    }
+    product = tmp_path / "product"
+    runtime = product / "runtime"
+    runtime.mkdir(parents=True)
+    metadata = product / ".pml" / "architecture"
+    metadata.mkdir(parents=True)
+    current_input = input_fingerprint(product, ["runtime"])
+    state = {
+        "pml_state": "0.1",
+        "node": "architecture.durable_store",
+        "definition_hash": canonical_hash(decision),
+        "bindings_digest": bindings_digest(bindings),
+        "input_fingerprint": current_input,
+        "obligations": {
+            obligation.id: {
+                "implemented": "implemented",
+                "evidence": {
+                    "agent_judgment": {
+                        "result": "passed",
+                        "input_fingerprint": current_input,
+                        "recorded": "2026-08-01T00:00:00Z",
+                        "observation": "The approved constraint holds.",
+                        "reproduction": ["Run the approved check."],
+                    }
+                },
+            }
+        },
+    }
+    (metadata / "durable_store.state.yaml").write_text(
+        yaml.safe_dump(state, sort_keys=False)
+    )
+    changed = yaml.safe_load(yaml.safe_dump(document))
+    changed["architecture"]["durable_store"]["selection"] = "A changed store."
+    locked_bindings = LockedBindings(
+        bindings, tmp_path / "owner" / "bindings.yaml", bindings_digest(bindings)
+    )
+
+    status = architecture_status(product, changed, locked_bindings=locked_bindings)
+
+    assert status[0].obligations[0].signal == "STALE"
+    assert status[0].verification_percent == 0
 
 
 def test_architecture_binding_rejects_symlink_outside_product_repository(tmp_path: Path) -> None:
