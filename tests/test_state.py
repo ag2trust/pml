@@ -98,9 +98,17 @@ def test_product_state_detects_changed_bound_input(tmp_path: Path) -> None:
     state_path = state_dir / "creation.state.yaml"
     state_path.write_text(yaml.safe_dump(state, sort_keys=False))
 
-    assert validate_product_state(product, document) == []
+    assert validate_product_state(
+        product,
+        document,
+        definition_source=owner / "minimal.pml.yaml",
+    ) == []
     source.write_text("VERSION = 2\n")
-    changed = validate_product_state(product, document)
+    changed = validate_product_state(
+        product,
+        document,
+        definition_source=owner / "minimal.pml.yaml",
+    )
     assert any(item.code == "sync-required" for item in changed)
 
 
@@ -168,7 +176,9 @@ def test_wrong_and_missing_lock_digests_stop_state_validation(tmp_path: Path) ->
 
     lock["definition"]["digest"] = f"sha256:{'0' * 64}"
     lock_path.write_text(yaml.safe_dump(lock, sort_keys=False))
-    diagnostics = validate_product_state(product, definition)
+    diagnostics = validate_product_state(
+        product, definition, definition_source=manifest
+    )
     assert {item.code for item in diagnostics} == {
         "bindings-digest",
         "definition-digest",
@@ -178,7 +188,9 @@ def test_wrong_and_missing_lock_digests_stop_state_validation(tmp_path: Path) ->
         manifest.parent / "invalid-lock-missing-bindings-digest.yaml",
         lock_path,
     )
-    missing = validate_product_state(product, definition)
+    missing = validate_product_state(
+        product, definition, definition_source=manifest
+    )
     assert {item.code for item in missing} == {"schema"}
 
 
@@ -193,7 +205,9 @@ def test_bound_paths_remain_relative_to_product_repository(tmp_path: Path) -> No
     assert input_fingerprint(product, ["src/notes.txt"]) != input_fingerprint(
         manifest.parent, ["src/notes.txt"]
     )
-    assert validate_product_state(product, definition) == []
+    assert validate_product_state(
+        product, definition, definition_source=manifest
+    ) == []
 
 
 def test_probe_validation_rejects_invalid_lock_resolved_bindings(
@@ -207,7 +221,9 @@ def test_probe_validation_rejects_invalid_lock_resolved_bindings(
     bindings["invented_policy"] = True
     bindings_path.write_text(yaml.safe_dump(bindings, sort_keys=False))
 
-    diagnostics = validate_probe_evidence(product, definition, {})
+    diagnostics = validate_probe_evidence(
+        product, definition, {}, definition_source=manifest
+    )
     assert {item.code for item in diagnostics} == {"schema"}
 
 
@@ -217,7 +233,43 @@ def test_product_local_bindings_do_not_override_owner_policy(tmp_path: Path) -> 
     assert definition is not None
     (product / ".pml" / "bindings.yaml").write_text("[")
 
-    assert validate_product_state(product, definition) == []
+    assert validate_product_state(
+        product, definition, definition_source=manifest
+    ) == []
+
+
+def test_product_cannot_redirect_bindings_away_from_passed_definition(
+    tmp_path: Path, capsys
+) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    definition, _ = load_document(manifest)
+    assert definition is not None
+    missing_source = validate_product_state(product, definition)
+    assert {item.code for item in missing_source} == {"definition-source"}
+
+    redirected_source = product / "policy"
+    redirected_source.mkdir()
+    shutil.copy(manifest, redirected_source / "minimal.pml.yaml")
+    bindings = yaml.safe_load((manifest.parent / "bindings.yaml").read_text())
+    rule_plan = bindings["bindings"]["domains.notes.features.creation"][
+        "verification"
+    ]["domains.notes.features.creation.rules.preserve_content"]
+    rule_plan.clear()
+    rule_plan["agent_judgment"] = 1.0
+    (redirected_source / "bindings.yaml").write_text(
+        yaml.safe_dump(bindings, sort_keys=False)
+    )
+    lock_path = product / ".pml" / "pml.lock"
+    lock = yaml.safe_load(lock_path.read_text())
+    lock["definition"]["source"] = "policy/minimal.pml.yaml"
+    lock["bindings"]["digest"] = bindings_digest(bindings)
+    lock_path.write_text(yaml.safe_dump(lock, sort_keys=False))
+
+    assert main(["check", str(manifest), str(product)]) == 1
+    output = capsys.readouterr().out
+    assert "[definition-source]" in output
+    assert "does not identify the loaded approved definition" in output
+    assert "PML STATE VALID" not in output
 
 
 def test_status_rejects_a_mismatched_bindings_digest(
@@ -271,9 +323,13 @@ def test_approved_bindings_change_makes_existing_evidence_stale(
     lock["bindings"]["digest"] = bindings_digest(bindings)
     lock_path.write_text(yaml.safe_dump(lock, sort_keys=False))
 
-    diagnostics = validate_product_state(product, definition)
+    diagnostics = validate_product_state(
+        product, definition, definition_source=manifest
+    )
     assert {item.code for item in diagnostics} == {"bindings-mismatch"}
-    statuses = product_status(product, definition)
+    statuses = product_status(
+        product, definition, definition_source=manifest
+    )
     preserve_status = next(
         item
         for node in statuses
@@ -367,7 +423,11 @@ def test_binding_coverage_must_total_one(tmp_path: Path) -> None:
         },
         "bindings": {"digest": bindings_digest(bindings)},
     }, sort_keys=False))
-    diagnostics = validate_product_state(product, document)
+    diagnostics = validate_product_state(
+        product,
+        document,
+        definition_source=owner / "minimal.pml.yaml",
+    )
     assert any(item.code == "coverage-total" for item in diagnostics)
 
 

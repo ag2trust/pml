@@ -62,7 +62,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if document is None:
             return 1
         locked_bindings, state_diagnostics = load_locked_bindings(
-            args.product_root, document
+            args.product_root, document, path
         )
         if locked_bindings is None:
             for diagnostic in state_diagnostics:
@@ -70,7 +70,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"PML STATUS UNAVAILABLE: {len(state_diagnostics)} violation(s)")
             return 1
         nodes = product_status(
-            args.product_root, document, locked_bindings
+            args.product_root,
+            document,
+            definition_source=path,
+            locked_bindings=locked_bindings,
         )
         for node in nodes:
             print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
@@ -106,7 +109,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if document is None:
             return 1
         locked_bindings, binding_diagnostics = load_locked_bindings(
-            args.product_root, document
+            args.product_root, document, path
         )
         ingest_diagnostics = list(binding_diagnostics)
         bindings = (
@@ -122,7 +125,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.product_root,
                 document,
                 probes,
-                locked_bindings,
+                definition_source=path,
+                locked_bindings=locked_bindings,
             )
         for diagnostic in ingest_diagnostics:
             print(diagnostic.format())
@@ -138,11 +142,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         if document is None:
             return 1
         locked_bindings, state_diagnostics = load_locked_bindings(
-            args.product_root, document
+            args.product_root, document, path
         )
         if locked_bindings is not None:
             state_diagnostics.extend(validate_product_state(
-                args.product_root, document, locked_bindings
+                args.product_root,
+                document,
+                definition_source=path,
+                locked_bindings=locked_bindings,
             ))
         if (
             args.probes is not None
@@ -155,7 +162,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             state_diagnostics.extend(missing_probe_diagnostics(probes, document, bindings))
             if not probe_diagnostics:
                 state_diagnostics.extend(validate_probe_evidence(
-                    args.product_root, document, probes, locked_bindings
+                    args.product_root,
+                    document,
+                    probes,
+                    definition_source=path,
+                    locked_bindings=locked_bindings,
                 ))
         for diagnostic in state_diagnostics:
             print(diagnostic.format())

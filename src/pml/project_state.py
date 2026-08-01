@@ -17,7 +17,7 @@ from pml.obligations import (
     verification_coverage,
     verification_plan,
 )
-from pml.validator import Diagnostic, _load, _path
+from pml.validator import Diagnostic, _load, _path, load_document
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -177,7 +177,9 @@ class LockedBindings:
 
 
 def load_locked_bindings(
-    repo_root: Path, definition: dict[str, Any]
+    repo_root: Path,
+    definition: dict[str, Any],
+    definition_source: Path | None = None,
 ) -> tuple[LockedBindings | None, list[Diagnostic]]:
     """Resolve and validate the exact definition and bindings pinned by the lock."""
 
@@ -207,6 +209,32 @@ def load_locked_bindings(
             f"{lock_path}:definition.source",
             "definition-source",
             "locked definition source does not exist",
+        ))
+        return None, diagnostics
+    if definition_source is None:
+        diagnostics.append(Diagnostic(
+            f"{lock_path}:definition.source",
+            "definition-source",
+            "product-state operations require the approved definition source path",
+        ))
+        return None, diagnostics
+    approved_source_path = definition_source.resolve()
+    if source_path != approved_source_path:
+        diagnostics.append(Diagnostic(
+            f"{lock_path}:definition.source",
+            "definition-source",
+            "locked definition source does not identify the loaded approved definition",
+        ))
+        return None, diagnostics
+    source_definition, source_errors = load_document(approved_source_path)
+    diagnostics.extend(source_errors)
+    if source_definition is None:
+        return None, diagnostics
+    if canonical_hash(source_definition) != canonical_hash(definition):
+        diagnostics.append(Diagnostic(
+            f"{lock_path}:definition.source",
+            "definition-source",
+            "locked definition source content does not match the loaded approved definition",
         ))
         return None, diagnostics
     bindings_path = (
@@ -251,13 +279,17 @@ def validate_product_state(
     repo_root: Path,
     definition: dict[str, Any],
     locked_bindings: LockedBindings | None = None,
+    *,
+    definition_source: Path | None = None,
 ) -> list[Diagnostic]:
     """Validate lock, bindings and state, including current-input fingerprints."""
 
     diagnostics: list[Diagnostic] = []
     metadata = repo_root / ".pml"
     if locked_bindings is None:
-        locked_bindings, errors = load_locked_bindings(repo_root, definition)
+        locked_bindings, errors = load_locked_bindings(
+            repo_root, definition, definition_source
+        )
         diagnostics.extend(errors)
     if locked_bindings is None:
         return diagnostics
@@ -344,13 +376,17 @@ def validate_probe_evidence(
     definition: dict[str, Any],
     probes: dict[str, dict[str, Any]],
     locked_bindings: LockedBindings | None = None,
+    *,
+    definition_source: Path | None = None,
 ) -> list[Diagnostic]:
     """Enforce complete, current, passing evidence for every approved probe."""
 
     diagnostics: list[Diagnostic] = []
     metadata = repo_root / ".pml"
     if locked_bindings is None:
-        locked_bindings, errors = load_locked_bindings(repo_root, definition)
+        locked_bindings, errors = load_locked_bindings(
+            repo_root, definition, definition_source
+        )
         diagnostics.extend(errors)
     if locked_bindings is None:
         return diagnostics

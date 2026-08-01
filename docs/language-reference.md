@@ -173,7 +173,9 @@ the owner source through `definition.source` and separately pins
 `definition.digest` and `bindings.digest`. For a single-file source,
 `bindings.yaml` is beside that file; for a modular directory source, it is in that
 directory. Bound implementation paths always resolve from the implementing product
-repository.
+repository. Product-state commands require the resolved source to be the exact
+definition file or modular directory supplied to the command; equivalent content at
+a different path cannot redirect bindings selection.
 
 The canonical bindings digest is `sha256:` followed by the lowercase SHA-256 hex
 digest of the validated document's UTF-8 JSON encoding. Object keys are sorted,

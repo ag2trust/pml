@@ -12,6 +12,10 @@ independent digest before validation, status, probe evidence checks, or report
 ingestion. A missing or mismatched definition or bindings digest makes current
 status unavailable.
 
+The resolved `definition.source` must also be the exact definition file or modular
+directory passed to the product-state command. A product-controlled copy with the
+same definition content cannot redirect bindings lookup to a different policy.
+
 Each generated node state also records the approved `bindings_digest`. When an
 owner changes bindings and updates the lock, evidence in state carrying the prior
 digest is stale until that state is reconciled. This prevents old evidence from

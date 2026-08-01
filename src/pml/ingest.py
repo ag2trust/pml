@@ -29,10 +29,12 @@ def ingest_report(
     definition: dict[str, Any],
     probes: dict[str, dict[str, Any]],
     locked_bindings: LockedBindings | None = None,
+    *,
+    definition_source: Path | None = None,
 ) -> list[Diagnostic]:
     if locked_bindings is None:
         locked_bindings, lock_diagnostics = load_locked_bindings(
-            repo_root, definition
+            repo_root, definition, definition_source
         )
         if locked_bindings is None:
             return lock_diagnostics

@@ -109,10 +109,14 @@ def product_status(
     repo_root: Path,
     definition: dict[str, Any],
     locked_bindings: LockedBindings | None = None,
+    *,
+    definition_source: Path | None = None,
 ) -> list[NodeStatus]:
     metadata = repo_root / ".pml"
     if locked_bindings is None:
-        locked_bindings, _ = load_locked_bindings(repo_root, definition)
+        locked_bindings, _ = load_locked_bindings(
+            repo_root, definition, definition_source
+        )
     if locked_bindings is None:
         return []
     bindings = locked_bindings.document

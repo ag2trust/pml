@@ -25,6 +25,10 @@ def product_copy(tmp_path: Path) -> Path:
     return product
 
 
+def owner_definition_path(product: Path) -> Path:
+    return product.parent / "product-pml" / "minimal.pml.yaml"
+
+
 def write_preserve_content_probe(path: Path) -> None:
     path.write_text(
         """\
@@ -148,7 +152,7 @@ def test_check_probes_does_not_duplicate_binding_load_diagnostics(
 
     assert main([
         "check",
-        str(ROOT / "examples" / "minimal.pml.yaml"),
+        str(owner_definition_path(product)),
         str(product),
         "--probes",
         str(probe),
@@ -164,7 +168,7 @@ def test_check_probes_validates_recorded_evidence(tmp_path: Path) -> None:
     probe_path = tmp_path / "preserve.probe.yaml"
     write_preserve_content_probe(probe_path)
 
-    assert main(["check", str(ROOT / "examples" / "minimal.pml.yaml"), str(product), "--probes", str(probe_path)]) == 1
+    assert main(["check", str(owner_definition_path(product)), str(product), "--probes", str(probe_path)]) == 1
 
     probes, diagnostics = load_probes(probe_path, definition)
     assert diagnostics == []
@@ -181,4 +185,4 @@ def test_check_probes_validates_recorded_evidence(tmp_path: Path) -> None:
     }
     state_path.write_text(yaml.safe_dump(state, sort_keys=False))
 
-    assert main(["check", str(ROOT / "examples" / "minimal.pml.yaml"), str(product), "--probes", str(probe_path)]) == 0
+    assert main(["check", str(owner_definition_path(product)), str(product), "--probes", str(probe_path)]) == 0
