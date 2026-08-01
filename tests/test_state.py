@@ -29,6 +29,48 @@ def copy_example_layout(tmp_path: Path) -> tuple[Path, Path]:
     return examples / "minimal.pml.yaml", examples / "product-repository"
 
 
+def write_architecture_layout(
+    tmp_path: Path,
+    document: dict,
+    architecture_bindings: dict,
+) -> tuple[Path, Path, str]:
+    product = tmp_path / "product"
+    owner = tmp_path / "product-pml"
+    owner.mkdir()
+    manifest = owner / "definition.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+    product_bindings: dict = {}
+    for obligation in enumerate_obligations(document):
+        binding = product_bindings.setdefault(
+            obligation.node_id,
+            {"paths": ["src"], "verification": {}},
+        )
+        binding["verification"][obligation.id] = {"agent_judgment": 1.0}
+    bindings = {
+        "pml_bindings": "0.1",
+        "bindings": product_bindings,
+    }
+    if architecture_bindings:
+        bindings["architecture"] = architecture_bindings
+    (owner / "bindings.yaml").write_text(
+        yaml.safe_dump(bindings, sort_keys=False)
+    )
+    metadata = product / ".pml"
+    metadata.mkdir(parents=True)
+    (product / "src").mkdir()
+    digest = bindings_digest(bindings)
+    (metadata / "pml.lock").write_text(yaml.safe_dump({
+        "pml_lock": "0.1",
+        "definition": {
+            "source": str(manifest),
+            "revision": "approved",
+            "digest": canonical_hash(document),
+        },
+        "bindings": {"digest": digest},
+    }, sort_keys=False))
+    return product, manifest, digest
+
+
 def test_obligations_have_stable_ids() -> None:
     document, diagnostics = load_document(ROOT / "examples" / "minimal.pml.yaml")
     assert diagnostics == []
@@ -38,6 +80,25 @@ def test_obligations_have_stable_ids() -> None:
         "domains.notes.features.creation.rules.preserve_content",
         "domains.notes.features.creation.use_cases.create_note",
     ]
+
+
+def test_cli_lists_independently_addressable_architecture_obligations(
+    capsys,
+) -> None:
+    manifest = ROOT / "examples" / "architecture-decisions.pml.yaml"
+    obligation_id = (
+        "architecture.durable_store.constraints.preserve_committed_records"
+    )
+
+    assert main(["obligations", str(manifest)]) == 0
+    assert obligation_id in capsys.readouterr().out.splitlines()
+
+    assert main([
+        "obligations",
+        str(manifest),
+        "architecture.durable_store",
+    ]) == 0
+    assert capsys.readouterr().out.splitlines() == [obligation_id]
 
 
 def test_product_state_detects_changed_bound_input(tmp_path: Path) -> None:
@@ -468,85 +529,184 @@ domains:
     assert document is not None
     decision = document["architecture"]["approved_runtime"]
     obligation = next(enumerate_architecture_obligations(document))
-    metadata = tmp_path / ".pml"
+    architecture_bindings = {
+        "approved_runtime": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    }
+    product, approved_manifest, digest = write_architecture_layout(
+        tmp_path, document, architecture_bindings
+    )
+    metadata = product / ".pml"
     architecture_dir = metadata / "architecture"
-    architecture_dir.mkdir(parents=True)
-    source_path = tmp_path / "runtime" / "selection"
+    architecture_dir.mkdir()
+    source_path = product / "runtime" / "selection"
     source_path.parent.mkdir()
     source_path.write_text("approved\n")
-    (metadata / "bindings.yaml").write_text("\n".join([
-        "pml_bindings: '0.1'",
-        "bindings: {}",
-        "architecture:",
-        "  approved_runtime:",
-        "    paths: [runtime]",
-        "    verification:",
-        "      architecture.approved_runtime.constraints.portable_execution:",
-        "        agent_judgment: 1.0",
-        "",
-    ]))
     state = {
         "pml_state": "0.1",
         "node": "architecture.approved_runtime",
         "definition_hash": canonical_hash(decision),
-        "input_fingerprint": input_fingerprint(tmp_path, ["runtime"]),
+        "bindings_digest": digest,
+        "input_fingerprint": input_fingerprint(product, ["runtime"]),
         "obligations": {obligation.id: {"implemented": "implemented", "evidence": {}}},
     }
     (architecture_dir / "approved_runtime.state.yaml").write_text(yaml.safe_dump(state, sort_keys=False))
-    assert validate_architecture_state(tmp_path, document) == []
-    status = architecture_status(tmp_path, document)
+    assert validate_architecture_state(
+        product, document, definition_source=approved_manifest
+    ) == []
+    status = architecture_status(
+        product, document, definition_source=approved_manifest
+    )
     assert [(item.node_id, item.verification_percent) for item in status] == [("architecture.approved_runtime", 0)]
+
+
+def test_architecture_state_rejects_duplicate_and_nested_state_paths(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, digest = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    (product / "runtime").mkdir()
+    architecture = product / ".pml" / "architecture"
+    architecture.mkdir()
+    state = {
+        "pml_state": "0.1",
+        "node": "architecture.durable_store",
+        "definition_hash": canonical_hash(
+            document["architecture"]["durable_store"]
+        ),
+        "bindings_digest": digest,
+        "input_fingerprint": input_fingerprint(product, ["runtime"]),
+        "obligations": {
+            obligation.id: {"implemented": "unknown", "evidence": {}}
+        },
+    }
+    state_text = yaml.safe_dump(state, sort_keys=False)
+    (architecture / "durable_store.state.yaml").write_text(state_text)
+    (architecture / "duplicate.state.yaml").write_text(state_text)
+    nested = architecture / "nested"
+    nested.mkdir()
+    (nested / "stray.state.yaml").write_text(state_text)
+
+    state_path_errors = [
+        item
+        for item in validate_architecture_state(
+            product, document, definition_source=manifest
+        )
+        if item.code == "state-path"
+    ]
+    assert {Path(item.path).name for item in state_path_errors} == {
+        "duplicate.state.yaml",
+        "stray.state.yaml",
+    }
+    assert main(["check", str(manifest), str(product)]) == 1
+    check_output = capsys.readouterr().out
+    assert "duplicate.state.yaml: [state-path]" in check_output
+    assert "stray.state.yaml: [state-path]" in check_output
+
+
+def test_architecture_state_and_status_ignore_product_local_bindings(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, digest = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    (product / "runtime").mkdir()
+    architecture = product / ".pml" / "architecture"
+    architecture.mkdir()
+    state = {
+        "pml_state": "0.1",
+        "node": "architecture.durable_store",
+        "definition_hash": canonical_hash(
+            document["architecture"]["durable_store"]
+        ),
+        "bindings_digest": digest,
+        "input_fingerprint": input_fingerprint(product, ["runtime"]),
+        "obligations": {
+            obligation.id: {"implemented": "unknown", "evidence": {}}
+        },
+    }
+    (architecture / "durable_store.state.yaml").write_text(
+        yaml.safe_dump(state, sort_keys=False)
+    )
+    (product / ".pml" / "bindings.yaml").write_text("[")
+
+    assert validate_architecture_state(
+        product, document, definition_source=manifest
+    ) == []
+    assert main([
+        "architecture-status",
+        str(manifest),
+        str(product),
+    ]) == 0
+    output = capsys.readouterr().out
+    assert "architecture.durable_store implementation=0%" in output
 
 
 def test_architecture_binding_rejects_symlink_outside_product_repository(tmp_path: Path) -> None:
     document, diagnostics = load_document(ROOT / "examples" / "architecture-decisions.pml.yaml")
     assert diagnostics == []
     assert document is not None
-    product = tmp_path / "product"
-    metadata = product / ".pml"
-    metadata.mkdir(parents=True)
+    obligation = "architecture.durable_store.constraints.preserve_committed_records"
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation: {"agent_judgment": 1.0}},
+        }
+    })
     external = tmp_path / "external"
     external.mkdir()
     (product / "runtime").symlink_to(external, target_is_directory=True)
-    (metadata / "bindings.yaml").write_text("\n".join([
-        "pml_bindings: '0.1'",
-        "bindings: {}",
-        "architecture:",
-        "  durable_store:",
-        "    paths: [runtime]",
-        "    verification:",
-        "      architecture.durable_store.constraints.preserve_committed_records:",
-        "        agent_judgment: 1.0",
-        "",
-    ]))
-    assert any(item.code == "outside-repository" for item in validate_architecture_state(product, document))
+    assert any(
+        item.code == "outside-repository"
+        for item in validate_architecture_state(
+            product, document, definition_source=manifest
+        )
+    )
 
 
 def test_architecture_binding_rejects_child_symlink_outside_product_repository(tmp_path: Path) -> None:
     document, diagnostics = load_document(ROOT / "examples" / "architecture-decisions.pml.yaml")
     assert diagnostics == []
     assert document is not None
-    product = tmp_path / "product"
-    metadata = product / ".pml"
-    metadata.mkdir(parents=True)
+    obligation = "architecture.durable_store.constraints.preserve_committed_records"
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation: {"agent_judgment": 1.0}},
+        }
+    })
     runtime = product / "runtime"
     runtime.mkdir()
     external = tmp_path / "external"
     external.mkdir()
     (external / "selection").write_text("outside\n")
     (runtime / "selection").symlink_to(external / "selection")
-    (metadata / "bindings.yaml").write_text("\n".join([
-        "pml_bindings: '0.1'",
-        "bindings: {}",
-        "architecture:",
-        "  durable_store:",
-        "    paths: [runtime]",
-        "    verification:",
-        "      architecture.durable_store.constraints.preserve_committed_records:",
-        "        agent_judgment: 1.0",
-        "",
-    ]))
-    diagnostics = validate_architecture_state(product, document)
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
     assert any(item.code == "outside-repository" and "runtime/selection" in item.message for item in diagnostics)
 
 
@@ -567,11 +727,15 @@ domains:
     document, diagnostics = load_document(manifest)
     assert diagnostics == []
     assert document is not None
-    metadata = tmp_path / ".pml"
-    metadata.mkdir()
-    (metadata / "bindings.yaml").write_text("pml_bindings: '0.1'\nbindings: {}\n")
-    assert validate_architecture_state(tmp_path, document) == []
-    assert architecture_status(tmp_path, document) == []
+    product, approved_manifest, _ = write_architecture_layout(
+        tmp_path, document, {}
+    )
+    assert validate_architecture_state(
+        product, document, definition_source=approved_manifest
+    ) == []
+    assert architecture_status(
+        product, document, definition_source=approved_manifest
+    ) == []
 
 
 def test_unconstrained_architecture_rejects_unresolved_binding_and_state(tmp_path: Path) -> None:
@@ -591,26 +755,30 @@ domains:
     document, diagnostics = load_document(manifest)
     assert diagnostics == []
     assert document is not None
-    metadata = tmp_path / ".pml"
+    product, approved_manifest, digest = write_architecture_layout(
+        tmp_path,
+        document,
+        {
+            "invented": {
+                "paths": ["runtime"],
+                "verification": {},
+            }
+        },
+    )
+    metadata = product / ".pml"
     architecture = metadata / "architecture"
-    architecture.mkdir(parents=True)
-    (tmp_path / "runtime").mkdir()
-    (metadata / "bindings.yaml").write_text("\n".join([
-        "pml_bindings: '0.1'",
-        "bindings: {}",
-        "architecture:",
-        "  invented:",
-        "    paths: [runtime]",
-        "    verification: {}",
-        "",
-    ]))
+    architecture.mkdir()
+    (product / "runtime").mkdir()
     (architecture / "invented.state.yaml").write_text("\n".join([
         "pml_state: '0.1'",
         "node: architecture.invented",
         f"definition_hash: sha256:{'a' * 64}",
+        f"bindings_digest: {digest}",
         f"input_fingerprint: sha256:{'b' * 64}",
         "obligations: {}",
         "",
     ]))
-    diagnostics = validate_architecture_state(tmp_path, document)
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=approved_manifest
+    )
     assert sum(item.code == "undefined-reference" for item in diagnostics) == 2

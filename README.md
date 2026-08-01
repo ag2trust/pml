@@ -124,7 +124,7 @@ pml architecture-status definition.pml.yaml product/
 - [Product state](docs/specs/0003-product-state.md) — bindings, fingerprints, and derived confidence.
 - [Language normalization](docs/specs/0004-language-normalization.md) — approved canonical terms and removals.
 - [Bindings boundary](docs/specs/0005-bindings-boundary.md) — owner policy, lock pins, and product-local state.
-- [Architecture decisions](docs/specs/0005-architecture-decisions.md) — approved registry and separate conformance semantics.
+- [Architecture decisions](docs/specs/0006-architecture-decisions.md) — approved registry and separate conformance semantics.
 
 Examples:
 

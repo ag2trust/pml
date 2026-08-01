@@ -119,6 +119,8 @@ def _bindings_semantic_diagnostics(
     diagnostics: list[Diagnostic] = []
     nodes = dict(iter_nodes(definition))
     binding_map = bindings["bindings"]
+    decisions = dict(iter_architecture(definition))
+    architecture_map = bindings.get("architecture", {})
 
     for node_id, binding in binding_map.items():
         if node_id not in nodes:
@@ -162,19 +164,67 @@ def _bindings_semantic_diagnostics(
                 f"node '{node_id}' has no binding",
             ))
 
+    for decision_id, binding in architecture_map.items():
+        node_id = f"architecture.{decision_id}"
+        if node_id not in decisions:
+            diagnostics.append(Diagnostic(
+                f"{path}:architecture.{decision_id}",
+                "undefined-reference",
+                f"unknown architecture decision '{decision_id}'",
+            ))
+            continue
+        expected = {
+            item.id
+            for item in enumerate_architecture_obligations(definition, node_id)
+        }
+        configured = set(binding.get("verification", {}))
+        for obligation_id in sorted(expected.difference(configured)):
+            diagnostics.append(Diagnostic(
+                f"{path}:architecture.{decision_id}.verification",
+                "missing-verification-plan",
+                f"constraint '{obligation_id}' has no verification plan",
+            ))
+        for obligation_id in sorted(configured.difference(expected)):
+            diagnostics.append(Diagnostic(
+                f"{path}:architecture.{decision_id}.verification.{obligation_id}",
+                "undefined-reference",
+                f"unknown architecture constraint '{obligation_id}'",
+            ))
+        for obligation_id in sorted(expected.intersection(configured)):
+            plan = binding["verification"][obligation_id]
+            total = sum(verification_coverage(plan).values())
+            if abs(total - 1.0) > 1e-9:
+                diagnostics.append(Diagnostic(
+                    f"{path}:architecture.{decision_id}.verification.{obligation_id}",
+                    "coverage-total",
+                    f"verification coverage must total 1.0, got {total:g}",
+                ))
+
+    for node_id, decision in decisions.items():
+        if not decision.get("constraints"):
+            continue
+        decision_id = node_id.removeprefix("architecture.")
+        if decision_id not in architecture_map:
+            diagnostics.append(Diagnostic(
+                f"{path}:architecture",
+                "missing-binding",
+                f"architecture decision '{decision_id}' has no binding",
+            ))
+
     if repo_root is not None:
-        resolved_root = repo_root.resolve()
-        for node_id, binding in binding_map.items():
-            for bound_path in binding["paths"]:
-                try:
-                    (repo_root / bound_path.rstrip("/")).resolve().relative_to(
-                        resolved_root
-                    )
-                except ValueError:
+        binding_sections = (
+            ("bindings", binding_map),
+            ("architecture", architecture_map),
+        )
+        for section, section_bindings in binding_sections:
+            for node_id, binding in section_bindings.items():
+                for escaped_path in outside_repository_paths(
+                    repo_root, binding["paths"]
+                ):
                     diagnostics.append(Diagnostic(
-                        f"{path}:bindings.{node_id}.paths",
+                        f"{path}:{section}.{node_id}.paths",
                         "outside-repository",
-                        f"binding '{bound_path}' resolves outside the product repository",
+                        f"binding '{escaped_path}' resolves outside the product repository",
                     ))
     return diagnostics
 
@@ -420,6 +470,49 @@ def validate_architecture_state(
     constrained_decisions = {
         node_id for node_id, decision in decisions.items() if decision.get("constraints")
     }
+    architecture_root = metadata / "architecture"
+    canonical_states: dict[str, tuple[Path, dict[str, Any]]] = {}
+    state_paths = (
+        sorted(architecture_root.rglob("*.state.yaml"))
+        if architecture_root.exists()
+        else []
+    )
+    for state_path in state_paths:
+        state, errors = _load(state_path)
+        diagnostics.extend(errors)
+        if state is None:
+            continue
+        schema_errors = _schema_diagnostics(state_path, state, "pml-state.schema.json")
+        diagnostics.extend(schema_errors)
+        if schema_errors:
+            continue
+        node_id = state["node"]
+        if node_id not in decisions:
+            diagnostics.append(Diagnostic(
+                f"{state_path}:node",
+                "undefined-reference",
+                f"unknown architecture decision '{node_id}'",
+            ))
+            continue
+        expected_path = state_path_for(repo_root, node_id)
+        if state_path != expected_path:
+            diagnostics.append(Diagnostic(
+                str(state_path),
+                "state-path",
+                f"state for '{node_id}' must be at {expected_path}",
+            ))
+            continue
+        canonical_states[node_id] = (state_path, state)
+
+    for node_id in constrained_decisions:
+        state_path = state_path_for(repo_root, node_id)
+        if not state_path.is_file():
+            diagnostics.append(Diagnostic(
+                str(state_path),
+                "missing-state",
+                f"architecture decision '{node_id}' has no state file",
+            ))
+
     if locked_bindings is None:
         locked_bindings, errors = load_locked_bindings(
             repo_root, definition, definition_source
@@ -432,76 +525,59 @@ def validate_architecture_state(
     obligations = {
         item.id: item for item in enumerate_architecture_obligations(definition)
     }
-    for decision_id in binding_map:
-        node_id = f"architecture.{decision_id}"
-        if node_id not in decisions:
-            diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}", "undefined-reference", f"unknown architecture decision '{decision_id}'"))
-            continue
-        expected = {
-            item.id for item in enumerate_architecture_obligations(definition, node_id)
-        }
-        configured = set(binding_map[decision_id].get("verification", {}))
-        for obligation_id in sorted(expected.difference(configured)):
-            diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.verification", "missing-verification-plan", f"constraint '{obligation_id}' has no verification plan"))
-        for obligation_id in sorted(configured.difference(expected)):
-            diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.verification.{obligation_id}", "undefined-reference", f"unknown architecture constraint '{obligation_id}'"))
-        for obligation_id in sorted(expected.intersection(configured)):
-            total = sum(verification_coverage(binding_map[decision_id]["verification"][obligation_id]).values())
-            if abs(total - 1.0) > 1e-9:
-                diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.verification.{obligation_id}", "coverage-total", f"verification coverage must total 1.0, got {total:g}"))
-        for escaped_path in outside_repository_paths(repo_root, binding_map[decision_id]["paths"]):
-            diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture.{decision_id}.paths", "outside-repository", f"binding '{escaped_path}' resolves outside the product repository"))
-    for node_id, decision in decisions.items():
+    for node_id, (state_path, state) in canonical_states.items():
         if node_id not in constrained_decisions:
             continue
         decision_id = node_id.removeprefix("architecture.")
-        if decision_id not in binding_map:
-            diagnostics.append(Diagnostic(f"{metadata / 'bindings.yaml'}:architecture", "missing-binding", f"architecture decision '{decision_id}' has no binding"))
-            continue
-        state_path = state_path_for(repo_root, node_id)
-        if not state_path.is_file():
-            diagnostics.append(Diagnostic(str(state_path), "missing-state", f"architecture decision '{node_id}' has no state file"))
-            continue
-        state, errors = _load(state_path)
-        diagnostics.extend(errors)
-        if state is None:
-            continue
-        schema_errors = _schema_diagnostics(state_path, state, "pml-state.schema.json")
-        diagnostics.extend(schema_errors)
-        if schema_errors:
-            continue
-        if state["node"] != node_id:
-            diagnostics.append(Diagnostic(f"{state_path}:node", "undefined-reference", f"state must identify architecture decision '{node_id}'"))
-            continue
+        decision = decisions[node_id]
         if state["definition_hash"] != canonical_hash(decision):
-            diagnostics.append(Diagnostic(f"{state_path}:definition_hash", "definition-mismatch", "state does not match the approved architecture decision"))
+            diagnostics.append(Diagnostic(
+                f"{state_path}:definition_hash",
+                "definition-mismatch",
+                "state does not match the approved architecture decision",
+            ))
+        if state["bindings_digest"] != locked_bindings.digest:
+            diagnostics.append(Diagnostic(
+                f"{state_path}:bindings_digest",
+                "bindings-mismatch",
+                "state does not match the approved bindings",
+            ))
         current = input_fingerprint(repo_root, binding_map[decision_id]["paths"])
         if state["input_fingerprint"] != current:
-            diagnostics.append(Diagnostic(f"{state_path}:input_fingerprint", "sync-required", "state does not cover current bound inputs"))
-        expected = {item.id for item in enumerate_architecture_obligations(definition, node_id)}
-        for obligation_id in sorted(expected.difference(state["obligations"])):
-            diagnostics.append(Diagnostic(f"{state_path}:obligations", "missing-obligation", f"state is missing '{obligation_id}'"))
+            diagnostics.append(Diagnostic(
+                f"{state_path}:input_fingerprint",
+                "sync-required",
+                "state does not cover current bound inputs",
+            ))
+        expected_obligations = {
+            item.id
+            for item in enumerate_architecture_obligations(definition, node_id)
+        }
+        for obligation_id in sorted(
+            expected_obligations.difference(state["obligations"])
+        ):
+            diagnostics.append(Diagnostic(
+                f"{state_path}:obligations",
+                "missing-obligation",
+                f"state is missing '{obligation_id}'",
+            ))
         for obligation_id, obligation_state in state["obligations"].items():
             obligation = obligations.get(obligation_id)
             if obligation is None or obligation.node_id != node_id:
-                diagnostics.append(Diagnostic(f"{state_path}:obligations.{obligation_id}", "undefined-reference", f"unknown architecture constraint '{obligation_id}'"))
+                diagnostics.append(Diagnostic(
+                    f"{state_path}:obligations.{obligation_id}",
+                    "undefined-reference",
+                    f"unknown architecture constraint '{obligation_id}'",
+                ))
                 continue
             allowed = set(required_methods(verification_plan(bindings, obligation)))
             for method in obligation_state["evidence"]:
                 if method not in allowed:
-                    diagnostics.append(Diagnostic(f"{state_path}:obligations.{obligation_id}.evidence.{method}", "unexpected-evidence", f"'{method}' is not required by the approved constraint"))
-    architecture_root = metadata / "architecture"
-    for state_path in sorted(architecture_root.glob("*.state.yaml")) if architecture_root.exists() else []:
-        state, errors = _load(state_path)
-        diagnostics.extend(errors)
-        if state is None:
-            continue
-        schema_errors = _schema_diagnostics(state_path, state, "pml-state.schema.json")
-        diagnostics.extend(schema_errors)
-        if schema_errors:
-            continue
-        if state["node"] not in decisions:
-            diagnostics.append(Diagnostic(f"{state_path}:node", "undefined-reference", f"unknown architecture decision '{state['node']}'"))
+                    diagnostics.append(Diagnostic(
+                        f"{state_path}:obligations.{obligation_id}.evidence.{method}",
+                        "unexpected-evidence",
+                        f"'{method}' is not required by the approved constraint",
+                    ))
     return diagnostics
 
 

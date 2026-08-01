@@ -172,12 +172,23 @@ def product_status(
     return result
 
 
-def architecture_status(repo_root: Path, definition: dict[str, Any]) -> list[NodeStatus]:
+def architecture_status(
+    repo_root: Path,
+    definition: dict[str, Any],
+    locked_bindings: LockedBindings | None = None,
+    *,
+    definition_source: Path | None = None,
+) -> list[NodeStatus]:
     """Derive architecture conformance separately from product conformance."""
 
-    metadata = repo_root / ".pml"
-    bindings, _ = _load(metadata / "bindings.yaml")
-    binding_map = bindings.get("architecture", {}) if bindings else {}
+    if locked_bindings is None:
+        locked_bindings, _ = load_locked_bindings(
+            repo_root, definition, definition_source
+        )
+    if locked_bindings is None:
+        return []
+    bindings = locked_bindings.document
+    binding_map = bindings.get("architecture", {})
     result: list[NodeStatus] = []
     implementation_weight = {"implemented": 1.0, "partial": 0.5, "missing": 0.0, "unknown": 0.0}
     for node_id, decision in iter_architecture(definition):
@@ -187,6 +198,7 @@ def architecture_status(repo_root: Path, definition: dict[str, Any]) -> list[Nod
         decision_id = node_id.removeprefix("architecture.")
         state, _ = _load(state_path_for(repo_root, node_id))
         state = state or {"obligations": {}}
+        policy_current = state.get("bindings_digest") == locked_bindings.digest
         current_input = input_fingerprint(repo_root, binding_map.get(decision_id, {}).get("paths", []))
         statuses: list[ObligationStatus] = []
         implemented_total = 0.0
@@ -194,7 +206,7 @@ def architecture_status(repo_root: Path, definition: dict[str, Any]) -> list[Nod
         for obligation in obligations:
             obligation_state = state["obligations"].get(obligation.id, {"implemented": "unknown", "evidence": {}})
             implemented_total += implementation_weight[obligation_state["implemented"]]
-            status = derive_obligation_status(obligation, obligation_state, current_input, True, verification_plan(bindings or {}, obligation))
+            status = derive_obligation_status(obligation, obligation_state, current_input, policy_current, verification_plan(bindings, obligation))
             statuses.append(status)
             coverage_total += status.verified_coverage
         result.append(NodeStatus(

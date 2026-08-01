@@ -158,10 +158,10 @@ Technology existence never proves behavioral conformance.
 
 `constraints` resolve separately as
 `architecture.<decision_id>.constraints.<constraint_id>`. Their bindings belong in
-the product-local `architecture` map and their generated state belongs under
-`.pml/architecture/`; they never contribute to product status. Each decision must be
-referenced by a feature or component. There are no `applies_to`, `supports`, inline,
-or recursive architecture constructs.
+the `architecture` map of the owner-controlled bindings resolved by `pml.lock`, and
+their generated state belongs under `.pml/architecture/`; they never contribute to
+product status. Each decision must be referenced by a feature or component. There
+are no `applies_to`, `supports`, inline, or recursive architecture constructs.
 
 ## Obligations and verification
 

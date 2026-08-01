@@ -32,7 +32,7 @@ or architecture constraints conform.
 
 Architecture constraints resolve into `architecture.<decision_id>.constraints.<id>`
 obligations. They use the established external verification plan and evidence model,
-but are bound under the separate `architecture` section in product-local bindings,
-stored under `.pml/architecture/`, and reported through separate architecture
-conformance derivation. Product state and product status do not include architecture
-constraints.
+but are bound under the separate `architecture` section of the owner-controlled
+bindings defined by [0005](0005-bindings-boundary.md), stored under
+`.pml/architecture/`, and reported through separate architecture conformance
+derivation. Product state and product status do not include architecture constraints.

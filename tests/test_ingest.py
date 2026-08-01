@@ -8,6 +8,7 @@ from pml.ingest import ingest_report
 from pml.probes import load_probes, probe_fingerprint
 from pml.project_state import (
     bindings_digest,
+    canonical_hash,
     input_fingerprint,
     validate_probe_evidence,
     validate_product_state,
@@ -437,6 +438,10 @@ def test_ingests_architecture_evidence_with_architecture_bound_paths(tmp_path: P
     definition, diagnostics = load_document(ROOT / "examples" / "architecture-decisions.pml.yaml")
     assert diagnostics == []
     assert definition is not None
+    owner = tmp_path / "product-pml"
+    owner.mkdir()
+    manifest = owner / "architecture-decisions.pml.yaml"
+    manifest.write_text(yaml.safe_dump(definition, sort_keys=False))
     product = tmp_path / "product"
     metadata = product / ".pml"
     metadata.mkdir(parents=True)
@@ -444,17 +449,36 @@ def test_ingests_architecture_evidence_with_architecture_bound_paths(tmp_path: P
     runtime.mkdir()
     (runtime / "selection").write_text("approved\n")
     obligation = "architecture.durable_store.constraints.preserve_committed_records"
-    (metadata / "bindings.yaml").write_text("\n".join([
-        "pml_bindings: '0.1'",
-        "bindings: {}",
-        "architecture:",
-        "  durable_store:",
-        "    paths: [runtime]",
-        "    verification:",
-        f"      {obligation}:",
-        "        agent_judgment: 1.0",
-        "",
-    ]))
+    product_obligation = (
+        "domains.records.features.preservation.rules.record_remains_available"
+    )
+    bindings = {
+        "pml_bindings": "0.1",
+        "bindings": {
+            "domains.records.features.preservation": {
+                "paths": ["runtime"],
+                "verification": {
+                    product_obligation: {"agent_judgment": 1.0}
+                },
+            }
+        },
+        "architecture": {
+            "durable_store": {
+                "paths": ["runtime"],
+                "verification": {obligation: {"agent_judgment": 1.0}},
+            }
+        },
+    }
+    (owner / "bindings.yaml").write_text(yaml.safe_dump(bindings, sort_keys=False))
+    (metadata / "pml.lock").write_text(yaml.safe_dump({
+        "pml_lock": "0.1",
+        "definition": {
+            "source": str(manifest),
+            "revision": "approved",
+            "digest": canonical_hash(definition),
+        },
+        "bindings": {"digest": bindings_digest(bindings)},
+    }, sort_keys=False))
     report = tmp_path / "architecture-report.yaml"
     report.write_text("\n".join([
         "verification: architecture_run",
@@ -477,7 +501,14 @@ def test_ingests_architecture_evidence_with_architecture_bound_paths(tmp_path: P
         "limitations: []",
         "",
     ]))
-    assert ingest_report(report, product, definition, {}) == []
+    assert ingest_report(
+        report,
+        product,
+        definition,
+        {},
+        definition_source=manifest,
+    ) == []
     state = yaml.safe_load((metadata / "architecture" / "durable_store.state.yaml").read_text())
+    assert state["bindings_digest"] == bindings_digest(bindings)
     assert state["input_fingerprint"] == input_fingerprint(product, ["runtime"])
     assert state["obligations"][obligation]["evidence"]["agent_judgment"]["input_fingerprint"] == state["input_fingerprint"]

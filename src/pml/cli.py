@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import Sequence
 
 from pml.ingest import ingest_report
-from pml.obligations import enumerate_obligations, iter_nodes
+from pml.obligations import (
+    enumerate_architecture_obligations,
+    enumerate_obligations,
+    iter_architecture,
+    iter_nodes,
+)
 from pml.probes import load_probes, missing_probe_diagnostics
 from pml.project_state import (
     load_bindings,
@@ -88,7 +93,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         document, _ = load_document(path)
         if document is None:
             return 1
-        for node in architecture_status(args.product_root, document):
+        locked_bindings, state_diagnostics = load_locked_bindings(
+            args.product_root, document, path
+        )
+        if locked_bindings is None:
+            for diagnostic in state_diagnostics:
+                print(diagnostic.format())
+            print(
+                f"PML ARCHITECTURE STATUS UNAVAILABLE: "
+                f"{len(state_diagnostics)} violation(s)"
+            )
+            return 1
+        nodes = architecture_status(
+            args.product_root,
+            document,
+            definition_source=path,
+            locked_bindings=locked_bindings,
+        )
+        for node in nodes:
             print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
             for obligation in node.obligations:
                 print(f"  {obligation.obligation_id} {obligation.signal} {obligation.verification_percent:.0f}%")
@@ -198,11 +220,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         document, _ = load_document(path)
         if document is None:
             return 1
-        node_ids = {node_id for node_id, _ in iter_nodes(document)}
+        node_ids = {
+            node_id
+            for node_id, _ in list(iter_nodes(document)) + list(iter_architecture(document))
+        }
         if args.node_id is not None and args.node_id not in node_ids:
             print(f"{args.node_id}: [unknown-node] node does not exist")
             return 1
         for obligation in enumerate_obligations(document, args.node_id):
+            print(obligation.id)
+        for obligation in enumerate_architecture_obligations(document, args.node_id):
             print(obligation.id)
         return 0
     print(f"PML VALID: {path}")
