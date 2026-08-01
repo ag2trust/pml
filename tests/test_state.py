@@ -8,6 +8,7 @@ import yaml
 from pml.obligations import Obligation, enumerate_architecture_obligations, enumerate_obligations
 from pml.cli import main
 from pml.project_state import (
+    MAX_ARCHITECTURE_STATE_ENTRIES,
     LockedBindings,
     bindings_digest,
     canonical_hash,
@@ -651,6 +652,37 @@ def test_architecture_state_limits_candidate_files(tmp_path: Path) -> None:
         product, document, definition_source=manifest
     )
 
+    assert any(item.code == "state-limit" for item in diagnostics)
+
+
+def test_architecture_state_limits_non_state_entries(tmp_path: Path) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {
+                "architecture.durable_store.constraints.preserve_committed_records": {
+                    "agent_judgment": 1.0
+                }
+            },
+        }
+    })
+    architecture = product / ".pml" / "architecture"
+    architecture.mkdir()
+    for index in range(MAX_ARCHITECTURE_STATE_ENTRIES + 1):
+        (architecture / f"unexpected_{index}").write_text("not state\n")
+
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
+
+    assert sum(item.code == "state-path" for item in diagnostics) == (
+        MAX_ARCHITECTURE_STATE_ENTRIES
+    )
     assert any(item.code == "state-limit" for item in diagnostics)
 
 

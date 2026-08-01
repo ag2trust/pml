@@ -23,6 +23,7 @@ from pml.validator import Diagnostic, _load, _path, load_document
 
 
 ROOT = Path(__file__).resolve().parents[2]
+MAX_ARCHITECTURE_STATE_ENTRIES = 64
 
 
 def state_path_for(repo_root: Path, node_id: str) -> Path:
@@ -506,7 +507,14 @@ def validate_architecture_state(
     state_paths: list[Path] = []
     if architecture_root.exists():
         max_state_files = max(1, len(decisions)) + 1
-        for entry in architecture_root.iterdir():
+        for index, entry in enumerate(architecture_root.iterdir()):
+            if index == MAX_ARCHITECTURE_STATE_ENTRIES:
+                diagnostics.append(Diagnostic(
+                    str(architecture_root),
+                    "state-limit",
+                    "architecture state contains too many entries",
+                ))
+                break
             if entry.is_symlink() or entry.is_dir() or not entry.is_file():
                 diagnostics.append(Diagnostic(
                     str(entry),

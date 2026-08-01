@@ -300,8 +300,16 @@ domains:
         "        actors:\n",
         "        architecture: [approved_runtime]\n        actors:\n",
         1,
-    ).replace("Approved runtime.", "Node.js"))
+    ).replace("Approved runtime.", "Node.js (LTS)"))
     assert validate_file(manifest) == []
+
+    manifest.write_text(source.replace(
+        "        actors:\n",
+        "        architecture: [approved_runtime]\n        actors:\n",
+        1,
+    ).replace("Approved runtime.", "initializeRuntime()"))
+    diagnostics = validate_file(manifest)
+    assert any(item.code == "implementation-detail" for item in diagnostics)
 
     manifest.write_text(source.replace(
         "        actors:\n",
