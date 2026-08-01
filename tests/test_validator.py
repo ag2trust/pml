@@ -296,6 +296,14 @@ domains:
     diagnostics = validate_file(manifest)
     assert any(item.code == "implementation-detail" for item in diagnostics)
 
+    manifest.write_text(source.replace(
+        "        actors:\n",
+        "        architecture: [approved_runtime]\n        actors:\n",
+        1,
+    ).replace("Approved runtime.", "DATABASE_URL=approved"))
+    diagnostics = validate_file(manifest)
+    assert any(item.code == "implementation-detail" for item in diagnostics)
+
 
 def test_architecture_rejects_inline_definitions_and_unknown_categories(tmp_path: Path) -> None:
     source = (ROOT / "examples" / "minimal.pml.yaml").read_text().replace(

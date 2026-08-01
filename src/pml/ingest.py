@@ -104,10 +104,12 @@ def ingest_report(
             paths = bindings.get("architecture", {}).get(
                 node_id.removeprefix("architecture."), {}
             ).get("paths", [])
-            node_obligations = enumerate_architecture_obligations(definition, node_id)
+            node_obligations = list(
+                enumerate_architecture_obligations(definition, node_id)
+            )
         else:
             paths = binding_map.get(node_id, {}).get("paths", [])
-            node_obligations = enumerate_obligations(definition, node_id)
+            node_obligations = list(enumerate_obligations(definition, node_id))
         current_input = input_fingerprint(repo_root, paths)
         state_path = state_path_for(repo_root, node_id)
         state, state_errors = load_state(state_path)
@@ -129,6 +131,12 @@ def ingest_report(
         ):
             for obligation_state in state["obligations"].values():
                 obligation_state["evidence"] = {}
+        state["obligations"] = {
+            obligation.id: state["obligations"].get(
+                obligation.id, {"implemented": "unknown", "evidence": {}}
+            )
+            for obligation in node_obligations
+        }
         state["definition_hash"] = current_definition_hash
         state["bindings_digest"] = locked_bindings.digest
         state["input_fingerprint"] = current_input

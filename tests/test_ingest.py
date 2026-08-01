@@ -512,3 +512,105 @@ def test_ingests_architecture_evidence_with_architecture_bound_paths(tmp_path: P
     assert state["bindings_digest"] == bindings_digest(bindings)
     assert state["input_fingerprint"] == input_fingerprint(product, ["runtime"])
     assert state["obligations"][obligation]["evidence"]["agent_judgment"]["input_fingerprint"] == state["input_fingerprint"]
+
+
+def test_ingestion_reconciles_added_architecture_constraint(tmp_path: Path) -> None:
+    definition, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert definition is not None
+    owner = tmp_path / "product-pml"
+    owner.mkdir()
+    manifest = owner / "architecture-decisions.pml.yaml"
+    product = tmp_path / "product"
+    metadata = product / ".pml"
+    metadata.mkdir(parents=True)
+    runtime = product / "runtime"
+    runtime.mkdir()
+    original_obligation = (
+        "architecture.durable_store.constraints.preserve_committed_records"
+    )
+    added_obligation = "architecture.durable_store.constraints.recoverable_records"
+    bindings = {
+        "pml_bindings": "0.1",
+        "bindings": {
+            "domains.records.features.preservation": {
+                "paths": ["runtime"],
+                "verification": {
+                    "domains.records.features.preservation.rules.record_remains_available": {
+                        "agent_judgment": 1.0
+                    }
+                },
+            }
+        },
+        "architecture": {
+            "durable_store": {
+                "paths": ["runtime"],
+                "verification": {original_obligation: {"agent_judgment": 1.0}},
+            }
+        },
+    }
+    manifest.write_text(yaml.safe_dump(definition, sort_keys=False))
+    (owner / "bindings.yaml").write_text(yaml.safe_dump(bindings, sort_keys=False))
+    lock_path = metadata / "pml.lock"
+    lock = {
+        "pml_lock": "0.1",
+        "definition": {
+            "source": str(manifest),
+            "revision": "approved",
+            "digest": canonical_hash(definition),
+        },
+        "bindings": {"digest": bindings_digest(bindings)},
+    }
+    lock_path.write_text(yaml.safe_dump(lock, sort_keys=False))
+    report = tmp_path / "architecture-report.yaml"
+    report.write_text("\n".join([
+        "verification: architecture_run",
+        "version: working_tree",
+        'recorded: "2026-08-01T10:00:00Z"',
+        "environment: local_integrated",
+        "verifier:",
+        "  agent: verifier",
+        "  provider: pml",
+        "  model: verifier",
+        "  effort: low",
+        "targets: [architecture.durable_store]",
+        "verdict: verified",
+        "checks:",
+        f"  - target: {original_obligation}",
+        "    result: passed",
+        "    method: agent_judgment",
+        "    observation: The approved store preserves committed records.",
+        "    reproduction: [Run the approved preservation check.]",
+        "limitations: []",
+        "",
+    ]))
+    assert ingest_report(
+        report, product, definition, {}, definition_source=manifest
+    ) == []
+
+    definition["architecture"]["durable_store"]["constraints"][
+        "recoverable_records"
+    ] = {"statement": "The durable store MUST recover committed records."}
+    bindings["architecture"]["durable_store"]["verification"][
+        added_obligation
+    ] = {"agent_judgment": 1.0}
+    manifest.write_text(yaml.safe_dump(definition, sort_keys=False))
+    (owner / "bindings.yaml").write_text(yaml.safe_dump(bindings, sort_keys=False))
+    lock["definition"]["digest"] = canonical_hash(definition)
+    lock["bindings"]["digest"] = bindings_digest(bindings)
+    lock_path.write_text(yaml.safe_dump(lock, sort_keys=False))
+    report_data = yaml.safe_load(report.read_text())
+    report_data["checks"][0]["target"] = added_obligation
+    report_data["checks"][0]["observation"] = "The approved store recovers committed records."
+    report.write_text(yaml.safe_dump(report_data, sort_keys=False))
+
+    assert ingest_report(
+        report, product, definition, {}, definition_source=manifest
+    ) == []
+    state = yaml.safe_load(
+        (metadata / "architecture" / "durable_store.state.yaml").read_text()
+    )
+    assert set(state["obligations"]) == {original_obligation, added_obligation}
+    assert state["obligations"][added_obligation]["evidence"]["agent_judgment"]["result"] == "passed"

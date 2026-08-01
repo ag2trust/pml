@@ -29,7 +29,8 @@ NORMATIVE_MARKER = re.compile(r"\b(MUST|MUST NOT)\b")
 ARCHITECTURE_IMPLEMENTATION_DETAIL = re.compile(
     r"(?:\b(?:file|filename|function|class|table|endpoint|topology|cluster|node|service)\b|"
     r"\b(?:get|post|put|patch|delete)\s+/|[A-Za-z0-9_.-]+\.(?:py|js|ts|java|go|rb|sql|ya?ml|json)\b|"
-    r"\w+\s*\([^)]*\)|\b[a-z][a-z0-9_]*\s*:\s*\S+)",
+    r"\w+\s*\([^)]*\)|\b[a-z][a-z0-9_]*\s*:\s*\S+|"
+    r"\b[A-Za-z_][A-Za-z0-9_.-]*\s*=\s*\S+)",
     re.IGNORECASE,
 )
 
