@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from pml.obligations import Obligation, enumerate_obligations, iter_nodes, verification_plan
-from pml.project_state import input_fingerprint
+from pml.project_state import LockedBindings, input_fingerprint, load_locked_bindings
 from pml.validator import _load
 
 
@@ -105,10 +105,22 @@ def derive_obligation_status(
     return ObligationStatus(obligation.id, signal, min(verified_coverage, 1.0))
 
 
-def product_status(repo_root: Path, definition: dict[str, Any]) -> list[NodeStatus]:
+def product_status(
+    repo_root: Path,
+    definition: dict[str, Any],
+    locked_bindings: LockedBindings | None = None,
+    *,
+    definition_source: Path | None = None,
+) -> list[NodeStatus]:
     metadata = repo_root / ".pml"
-    bindings, _ = _load(metadata / "bindings.yaml")
-    binding_map = bindings.get("bindings", {}) if bindings else {}
+    if locked_bindings is None:
+        locked_bindings, _ = load_locked_bindings(
+            repo_root, definition, definition_source
+        )
+    if locked_bindings is None:
+        return []
+    bindings = locked_bindings.document
+    binding_map = bindings["bindings"]
     nodes = dict(iter_nodes(definition))
     result: list[NodeStatus] = []
     implementation_weight = {"implemented": 1.0, "partial": 0.5, "missing": 0.0, "unknown": 0.0}
@@ -118,9 +130,10 @@ def product_status(repo_root: Path, definition: dict[str, Any]) -> list[NodeStat
         state_path = state_path.with_suffix(".state.yaml")
         state, _ = _load(state_path)
         state = state or {"obligations": {}, "related_fingerprints": {}}
+        policy_current = state.get("bindings_digest") == locked_bindings.digest
         paths = binding_map.get(node_id, {}).get("paths", [])
         current_input = input_fingerprint(repo_root, paths)
-        related_current = True
+        related_current = policy_current
         related_nodes = set(node.get("related_to", []))
         related_nodes.update(
             other_id for other_id, other in nodes.items()
@@ -146,7 +159,7 @@ def product_status(repo_root: Path, definition: dict[str, Any]) -> list[NodeStat
                 obligation_state,
                 current_input,
                 related_current,
-                verification_plan(bindings or {}, obligation),
+                verification_plan(bindings, obligation),
             )
             statuses.append(status)
             coverage_total += status.verified_coverage

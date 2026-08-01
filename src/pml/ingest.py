@@ -11,9 +11,10 @@ import yaml
 
 from pml.obligations import enumerate_obligations, iter_nodes, required_methods, verification_plan
 from pml.project_state import (
+    LockedBindings,
     canonical_hash,
     input_fingerprint,
-    load_bindings,
+    load_locked_bindings,
     load_state,
 )
 from pml.validator import Diagnostic, _load, _path
@@ -27,7 +28,17 @@ def ingest_report(
     repo_root: Path,
     definition: dict[str, Any],
     probes: dict[str, dict[str, Any]],
+    locked_bindings: LockedBindings | None = None,
+    *,
+    definition_source: Path | None = None,
 ) -> list[Diagnostic]:
+    if locked_bindings is None:
+        locked_bindings, lock_diagnostics = load_locked_bindings(
+            repo_root, definition, definition_source
+        )
+        if locked_bindings is None:
+            return lock_diagnostics
+
     report, diagnostics = _load(report_path)
     if report is None:
         return diagnostics
@@ -42,11 +53,8 @@ def ingest_report(
 
     obligations = {item.id: item for item in enumerate_obligations(definition)}
     nodes = dict(iter_nodes(definition))
-    bindings, binding_errors = load_bindings(repo_root / ".pml" / "bindings.yaml")
-    diagnostics.extend(binding_errors)
-    if bindings is None:
-        return diagnostics
-    binding_map = bindings.get("bindings", {})
+    bindings = locked_bindings.document
+    binding_map = bindings["bindings"]
 
     for index, check in enumerate(report["checks"]):
         target = obligations.get(check["target"])
@@ -86,6 +94,7 @@ def ingest_report(
     states: dict[str, tuple[Path, dict[str, Any], str]] = {}
     for node_id in touched_nodes:
         node = nodes[node_id]
+        current_definition_hash = canonical_hash(node)
         paths = binding_map.get(node_id, {}).get("paths", [])
         current_input = input_fingerprint(repo_root, paths)
         state_path = repo_root / ".pml" / "state" / Path(*node_id.split("."))
@@ -103,7 +112,14 @@ def ingest_report(
                     for obligation in enumerate_obligations(definition, node_id)
                 },
             }
-        state["definition_hash"] = canonical_hash(node)
+        elif (
+            state["definition_hash"] != current_definition_hash
+            or state["bindings_digest"] != locked_bindings.digest
+        ):
+            for obligation_state in state["obligations"].values():
+                obligation_state["evidence"] = {}
+        state["definition_hash"] = current_definition_hash
+        state["bindings_digest"] = locked_bindings.digest
         state["input_fingerprint"] = current_input
         related_nodes = set(node.get("related_to", []))
         related_nodes.update(

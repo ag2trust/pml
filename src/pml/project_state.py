@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
@@ -16,7 +17,7 @@ from pml.obligations import (
     verification_coverage,
     verification_plan,
 )
-from pml.validator import Diagnostic, _load, _path
+from pml.validator import Diagnostic, _load, _path, load_document
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,10 +28,18 @@ def _schema(name: str) -> dict[str, Any]:
 
 
 def canonical_hash(value: Any) -> str:
+    """Hash the canonical UTF-8 JSON representation of a validated artifact."""
+
     encoded = json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode()
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def bindings_digest(bindings: dict[str, Any]) -> str:
+    """Return the canonical digest of a validated bindings document."""
+
+    return canonical_hash(bindings)
 
 
 def input_fingerprint(repo_root: Path, paths: list[str]) -> str:
@@ -66,8 +75,81 @@ def _schema_diagnostics(path: Path, document: dict[str, Any], schema_name: str) 
     return diagnostics
 
 
-def load_bindings(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
-    """Load product bindings only when they conform to the bindings schema."""
+def _bindings_semantic_diagnostics(
+    path: Path,
+    bindings: dict[str, Any],
+    definition: dict[str, Any],
+    repo_root: Path | None,
+) -> list[Diagnostic]:
+    diagnostics: list[Diagnostic] = []
+    nodes = dict(iter_nodes(definition))
+    binding_map = bindings["bindings"]
+
+    for node_id, binding in binding_map.items():
+        if node_id not in nodes:
+            diagnostics.append(Diagnostic(
+                f"{path}:bindings.{node_id}",
+                "undefined-reference",
+                f"unknown node '{node_id}'",
+            ))
+            continue
+        expected = {
+            item.id for item in enumerate_obligations(definition, node_id)
+        }
+        configured = set(binding.get("verification", {}))
+        for obligation_id in sorted(expected.difference(configured)):
+            diagnostics.append(Diagnostic(
+                f"{path}:bindings.{node_id}.verification",
+                "missing-verification-plan",
+                f"obligation '{obligation_id}' has no verification plan",
+            ))
+        for obligation_id in sorted(configured.difference(expected)):
+            diagnostics.append(Diagnostic(
+                f"{path}:bindings.{node_id}.verification.{obligation_id}",
+                "undefined-reference",
+                f"unknown obligation '{obligation_id}'",
+            ))
+        for obligation_id in sorted(expected.intersection(configured)):
+            plan = binding["verification"][obligation_id]
+            total = sum(verification_coverage(plan).values())
+            if abs(total - 1.0) > 1e-9:
+                diagnostics.append(Diagnostic(
+                    f"{path}:bindings.{node_id}.verification.{obligation_id}",
+                    "coverage-total",
+                    f"verification coverage must total 1.0, got {total:g}",
+                ))
+
+    for node_id in nodes:
+        if node_id not in binding_map:
+            diagnostics.append(Diagnostic(
+                f"{path}:bindings",
+                "missing-binding",
+                f"node '{node_id}' has no binding",
+            ))
+
+    if repo_root is not None:
+        resolved_root = repo_root.resolve()
+        for node_id, binding in binding_map.items():
+            for bound_path in binding["paths"]:
+                try:
+                    (repo_root / bound_path.rstrip("/")).resolve().relative_to(
+                        resolved_root
+                    )
+                except ValueError:
+                    diagnostics.append(Diagnostic(
+                        f"{path}:bindings.{node_id}.paths",
+                        "outside-repository",
+                        f"binding '{bound_path}' resolves outside the product repository",
+                    ))
+    return diagnostics
+
+
+def load_bindings(
+    path: Path,
+    definition: dict[str, Any],
+    repo_root: Path | None = None,
+) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
+    """Load bindings only after structural and semantic validation."""
 
     bindings, diagnostics = _load(path)
     if bindings is None:
@@ -78,7 +160,104 @@ def load_bindings(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
     diagnostics.extend(schema_diagnostics)
     if schema_diagnostics:
         return None, diagnostics
+    semantic_diagnostics = _bindings_semantic_diagnostics(
+        path, bindings, definition, repo_root
+    )
+    diagnostics.extend(semantic_diagnostics)
+    if semantic_diagnostics:
+        return None, diagnostics
     return bindings, diagnostics
+
+
+@dataclass(frozen=True)
+class LockedBindings:
+    document: dict[str, Any]
+    path: Path
+    digest: str
+
+
+def load_locked_bindings(
+    repo_root: Path,
+    definition: dict[str, Any],
+    definition_source: Path | None = None,
+) -> tuple[LockedBindings | None, list[Diagnostic]]:
+    """Resolve and validate the exact definition and bindings pinned by the lock."""
+
+    lock_path = repo_root / ".pml" / "pml.lock"
+    lock, diagnostics = _load(lock_path)
+    if lock is None:
+        return None, diagnostics
+    lock_errors = _schema_diagnostics(lock_path, lock, "pml-lock.schema.json")
+    diagnostics.extend(lock_errors)
+    if lock_errors:
+        return None, diagnostics
+
+    digest_errors = False
+    if lock["definition"]["digest"] != canonical_hash(definition):
+        diagnostics.append(Diagnostic(
+            f"{lock_path}:definition.digest",
+            "definition-digest",
+            "lock digest does not match the loaded approved definition",
+        ))
+        digest_errors = True
+
+    source = Path(lock["definition"]["source"])
+    source_path = source if source.is_absolute() else repo_root / source
+    source_path = source_path.resolve()
+    if not source_path.exists():
+        diagnostics.append(Diagnostic(
+            f"{lock_path}:definition.source",
+            "definition-source",
+            "locked definition source does not exist",
+        ))
+        return None, diagnostics
+    if definition_source is None:
+        diagnostics.append(Diagnostic(
+            f"{lock_path}:definition.source",
+            "definition-source",
+            "product-state operations require the approved definition source path",
+        ))
+        return None, diagnostics
+    approved_source_path = definition_source.resolve()
+    if source_path != approved_source_path:
+        diagnostics.append(Diagnostic(
+            f"{lock_path}:definition.source",
+            "definition-source",
+            "locked definition source does not identify the loaded approved definition",
+        ))
+        return None, diagnostics
+    source_definition, source_errors = load_document(approved_source_path)
+    diagnostics.extend(source_errors)
+    if source_definition is None:
+        return None, diagnostics
+    if canonical_hash(source_definition) != canonical_hash(definition):
+        diagnostics.append(Diagnostic(
+            f"{lock_path}:definition.source",
+            "definition-source",
+            "locked definition source content does not match the loaded approved definition",
+        ))
+        return None, diagnostics
+    bindings_path = (
+        source_path / "bindings.yaml"
+        if source_path.is_dir()
+        else source_path.parent / "bindings.yaml"
+    )
+    bindings, binding_errors = load_bindings(bindings_path, definition, repo_root)
+    diagnostics.extend(binding_errors)
+    if bindings is None:
+        return None, diagnostics
+    if lock["bindings"]["digest"] != bindings_digest(bindings):
+        diagnostics.append(Diagnostic(
+            f"{lock_path}:bindings.digest",
+            "bindings-digest",
+            "lock digest does not match the validated approved bindings",
+        ))
+        digest_errors = True
+    if digest_errors:
+        return None, diagnostics
+    return LockedBindings(
+        bindings, bindings_path, bindings_digest(bindings)
+    ), diagnostics
 
 
 def load_state(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
@@ -96,76 +275,34 @@ def load_state(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
     return state, diagnostics
 
 
-def validate_product_state(repo_root: Path, definition: dict[str, Any]) -> list[Diagnostic]:
+def validate_product_state(
+    repo_root: Path,
+    definition: dict[str, Any],
+    locked_bindings: LockedBindings | None = None,
+    *,
+    definition_source: Path | None = None,
+) -> list[Diagnostic]:
     """Validate lock, bindings and state, including current-input fingerprints."""
 
     diagnostics: list[Diagnostic] = []
     metadata = repo_root / ".pml"
-    lock_path = metadata / "pml.lock"
-    bindings_path = metadata / "bindings.yaml"
-
-    lock, errors = _load(lock_path)
-    diagnostics.extend(errors)
-    if lock is not None:
-        lock_schema_errors = _schema_diagnostics(lock_path, lock, "pml-lock.schema.json")
-        diagnostics.extend(lock_schema_errors)
-        if not lock_schema_errors and lock["definition"]["digest"] != canonical_hash(definition):
-            diagnostics.append(Diagnostic(
-                f"{lock_path}:definition.digest",
-                "definition-digest",
-                "lock digest does not match the loaded approved definition",
-            ))
-
-    bindings, errors = load_bindings(bindings_path)
-    diagnostics.extend(errors)
-    if bindings is None:
+    if locked_bindings is None:
+        locked_bindings, errors = load_locked_bindings(
+            repo_root, definition, definition_source
+        )
+        diagnostics.extend(errors)
+    if locked_bindings is None:
         return diagnostics
-
+    bindings = locked_bindings.document
     nodes = dict(iter_nodes(definition))
     obligations = {item.id: item for item in enumerate_obligations(definition)}
     binding_map = bindings["bindings"]
-    for node_id in binding_map:
-        if node_id not in nodes:
-            diagnostics.append(Diagnostic(f"{bindings_path}:bindings.{node_id}", "undefined-reference", f"unknown node '{node_id}'"))
-            continue
-        expected = {item.id for item in enumerate_obligations(definition, node_id)}
-        configured = set(binding_map[node_id].get("verification", {}))
-        for obligation_id in sorted(expected.difference(configured)):
-            diagnostics.append(Diagnostic(
-                f"{bindings_path}:bindings.{node_id}.verification",
-                "missing-verification-plan",
-                f"obligation '{obligation_id}' has no verification plan",
-            ))
-        for obligation_id in sorted(configured.difference(expected)):
-            diagnostics.append(Diagnostic(
-                f"{bindings_path}:bindings.{node_id}.verification.{obligation_id}",
-                "undefined-reference",
-                f"unknown obligation '{obligation_id}'",
-            ))
-        for obligation_id in sorted(expected.intersection(configured)):
-            plan = binding_map[node_id]["verification"][obligation_id]
-            total = sum(verification_coverage(plan).values())
-            if abs(total - 1.0) > 1e-9:
-                diagnostics.append(Diagnostic(
-                    f"{bindings_path}:bindings.{node_id}.verification.{obligation_id}",
-                    "coverage-total",
-                    f"verification coverage must total 1.0, got {total:g}",
-                ))
 
     state_root = metadata / "state"
     for node_id in nodes:
-        if node_id not in binding_map:
-            diagnostics.append(Diagnostic(f"{bindings_path}:bindings", "missing-binding", f"node '{node_id}' has no binding"))
         expected_path = state_root.joinpath(*node_id.split(".")).with_suffix(".state.yaml")
         if not expected_path.is_file():
             diagnostics.append(Diagnostic(str(expected_path), "missing-state", f"node '{node_id}' has no state file"))
-    resolved_root = repo_root.resolve()
-    for node_id, binding in binding_map.items():
-        for bound_path in binding["paths"]:
-            try:
-                (repo_root / bound_path.rstrip("/")).resolve().relative_to(resolved_root)
-            except ValueError:
-                diagnostics.append(Diagnostic(f"{bindings_path}:bindings.{node_id}.paths", "outside-repository", f"binding '{bound_path}' resolves outside the product repository"))
 
     for state_path in sorted(state_root.rglob("*.state.yaml")) if state_root.exists() else []:
         state, errors = _load(state_path)
@@ -186,6 +323,12 @@ def validate_product_state(repo_root: Path, definition: dict[str, Any]) -> list[
         expected_definition_hash = canonical_hash(nodes[node_id])
         if state["definition_hash"] != expected_definition_hash:
             diagnostics.append(Diagnostic(f"{state_path}:definition_hash", "definition-mismatch", "state does not match the approved node definition"))
+        if state["bindings_digest"] != locked_bindings.digest:
+            diagnostics.append(Diagnostic(
+                f"{state_path}:bindings_digest",
+                "bindings-mismatch",
+                "state does not match the approved bindings",
+            ))
         node_binding = binding_map.get(node_id)
         if node_binding is None:
             diagnostics.append(Diagnostic(f"{state_path}:node", "missing-binding", f"node '{node_id}' has no binding"))
@@ -232,14 +375,22 @@ def validate_probe_evidence(
     repo_root: Path,
     definition: dict[str, Any],
     probes: dict[str, dict[str, Any]],
+    locked_bindings: LockedBindings | None = None,
+    *,
+    definition_source: Path | None = None,
 ) -> list[Diagnostic]:
     """Enforce complete, current, passing evidence for every approved probe."""
 
     diagnostics: list[Diagnostic] = []
     metadata = repo_root / ".pml"
-    bindings, _ = _load(metadata / "bindings.yaml")
-    if bindings is None:
+    if locked_bindings is None:
+        locked_bindings, errors = load_locked_bindings(
+            repo_root, definition, definition_source
+        )
+        diagnostics.extend(errors)
+    if locked_bindings is None:
         return diagnostics
+    bindings = locked_bindings.document
     probe_by_obligation: dict[str, dict[str, dict[str, Any]]] = {}
     for probe_id, probe in probes.items():
         probe_by_obligation.setdefault(probe["verifies"], {})[probe_id] = probe
@@ -249,6 +400,13 @@ def validate_probe_evidence(
         state_path = state_path.with_suffix(".state.yaml")
         state, _ = _load(state_path)
         if state is None:
+            continue
+        if state.get("bindings_digest") != locked_bindings.digest:
+            diagnostics.append(Diagnostic(
+                f"{state_path}:bindings_digest",
+                "bindings-mismatch",
+                "probe evidence does not match the approved bindings",
+            ))
             continue
         current_input = input_fingerprint(
             repo_root, bindings.get("bindings", {}).get(node_id, {}).get("paths", [])

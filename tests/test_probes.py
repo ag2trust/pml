@@ -11,6 +11,24 @@ from pml.validator import load_document
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def product_copy(tmp_path: Path) -> Path:
+    owner_source = tmp_path / "product-pml"
+    owner_source.mkdir()
+    shutil.copy(ROOT / "examples" / "minimal.pml.yaml", owner_source)
+    shutil.copy(ROOT / "examples" / "bindings.yaml", owner_source)
+    product = tmp_path / "product"
+    shutil.copytree(ROOT / "examples" / "product-repository", product)
+    lock_path = product / ".pml" / "pml.lock"
+    lock = yaml.safe_load(lock_path.read_text())
+    lock["definition"]["source"] = "../product-pml/minimal.pml.yaml"
+    lock_path.write_text(yaml.safe_dump(lock, sort_keys=False))
+    return product
+
+
+def owner_definition_path(product: Path) -> Path:
+    return product.parent / "product-pml" / "minimal.pml.yaml"
+
+
 def write_preserve_content_probe(path: Path) -> None:
     path.write_text(
         """\
@@ -96,7 +114,7 @@ def test_validate_probes_requires_bindings_for_completeness(tmp_path: Path) -> N
         str(ROOT / "examples" / "minimal.pml.yaml"),
         str(probe),
         "--bindings",
-        str(ROOT / "examples" / "product-repository" / ".pml" / "bindings.yaml"),
+        str(ROOT / "examples" / "bindings.yaml"),
         "--require-complete",
     ]) == 0
 
@@ -127,15 +145,14 @@ def test_validate_probes_rejects_invalid_bindings_before_coverage_checks(
 def test_check_probes_does_not_duplicate_binding_load_diagnostics(
     tmp_path: Path, capsys
 ) -> None:
-    product = tmp_path / "product"
-    shutil.copytree(ROOT / "examples" / "product-repository", product)
-    (product / ".pml" / "bindings.yaml").write_text("[")
+    product = product_copy(tmp_path)
+    (tmp_path / "product-pml" / "bindings.yaml").write_text("[")
     probe = tmp_path / "preserve.probe.yaml"
     write_preserve_content_probe(probe)
 
     assert main([
         "check",
-        str(ROOT / "examples" / "minimal.pml.yaml"),
+        str(owner_definition_path(product)),
         str(product),
         "--probes",
         str(probe),
@@ -147,12 +164,11 @@ def test_check_probes_does_not_duplicate_binding_load_diagnostics(
 def test_check_probes_validates_recorded_evidence(tmp_path: Path) -> None:
     definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
     assert definition is not None
-    product = tmp_path / "product"
-    shutil.copytree(ROOT / "examples" / "product-repository", product)
+    product = product_copy(tmp_path)
     probe_path = tmp_path / "preserve.probe.yaml"
     write_preserve_content_probe(probe_path)
 
-    assert main(["check", str(ROOT / "examples" / "minimal.pml.yaml"), str(product), "--probes", str(probe_path)]) == 1
+    assert main(["check", str(owner_definition_path(product)), str(product), "--probes", str(probe_path)]) == 1
 
     probes, diagnostics = load_probes(probe_path, definition)
     assert diagnostics == []
@@ -169,4 +185,4 @@ def test_check_probes_validates_recorded_evidence(tmp_path: Path) -> None:
     }
     state_path.write_text(yaml.safe_dump(state, sort_keys=False))
 
-    assert main(["check", str(ROOT / "examples" / "minimal.pml.yaml"), str(product), "--probes", str(probe_path)]) == 0
+    assert main(["check", str(owner_definition_path(product)), str(product), "--probes", str(probe_path)]) == 0

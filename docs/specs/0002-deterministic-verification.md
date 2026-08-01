@@ -1,6 +1,7 @@
 # PML 0.1 deterministic verification
 
-Status: Approved, normalized by [0004](0004-language-normalization.md)
+Status: Approved, normalized by [0004](0004-language-normalization.md); artifact
+boundary superseded by [0005](0005-bindings-boundary.md)
 
 ## Purpose
 
@@ -9,8 +10,9 @@ implementation evidence. Implementation existence is never proof of conformance.
 
 ## Verification bindings
 
-Product-local bindings map each semantic node to implementation paths and each
-obligation to approved verification coverage:
+Owner-controlled bindings stored beside the approved definition map each semantic
+node to implementation paths and each obligation to approved verification coverage.
+Bound paths remain relative to the implementing product repository:
 
 ```yaml
 verification:

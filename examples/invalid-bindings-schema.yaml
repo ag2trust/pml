@@ -1,0 +1,10 @@
+pml_bindings: "0.1"
+bindings:
+  domains.notes.features.creation:
+    paths: [src/notes.txt]
+    verification:
+      domains.notes.features.creation.rules.preserve_content:
+        probes: {preserve_content: 1.0}
+      domains.notes.features.creation.use_cases.create_note:
+        agent_judgment: 1.0
+    invented_policy: true
