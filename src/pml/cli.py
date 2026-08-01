@@ -11,6 +11,7 @@ from pml.obligations import enumerate_obligations, iter_nodes
 from pml.probes import load_probes, missing_probe_diagnostics
 from pml.project_state import (
     load_bindings,
+    load_locked_bindings,
     validate_probe_evidence,
     validate_product_state,
 )
@@ -38,7 +39,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     probes_parser = subparsers.add_parser("validate-probes", help="validate approved probe definitions")
     probes_parser.add_argument("manifest", type=Path)
     probes_parser.add_argument("probes", type=Path)
-    probes_parser.add_argument("--bindings", type=Path, help="product-local bindings used to validate probe coverage")
+    probes_parser.add_argument("--bindings", type=Path, help="explicit owner bindings used only to validate probe coverage")
     probes_parser.add_argument("--require-complete", action="store_true")
     ingest_parser = subparsers.add_parser(
         "ingest-report", help="ingest verification evidence into product state"
@@ -60,7 +61,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         document, _ = load_document(path)
         if document is None:
             return 1
-        for node in product_status(args.product_root, document):
+        locked_bindings, state_diagnostics = load_locked_bindings(
+            args.product_root, document
+        )
+        if locked_bindings is None:
+            for diagnostic in state_diagnostics:
+                print(diagnostic.format())
+            print(f"PML STATUS UNAVAILABLE: {len(state_diagnostics)} violation(s)")
+            return 1
+        nodes = product_status(
+            args.product_root, document, locked_bindings
+        )
+        for node in nodes:
             print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
             for obligation in node.obligations:
                 print(f"  {obligation.obligation_id} {obligation.signal} {obligation.verification_percent:.0f}%")
@@ -72,7 +84,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         bindings = None
         binding_diagnostics: list[Diagnostic] = []
         if args.bindings is not None:
-            bindings, binding_diagnostics = load_bindings(args.bindings)
+            bindings, binding_diagnostics = load_bindings(args.bindings, document)
         probes, probe_diagnostics = load_probes(args.probes, document, bindings)
         probe_diagnostics.extend(binding_diagnostics)
         if args.require_complete:
@@ -93,17 +105,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         document, _ = load_document(path)
         if document is None:
             return 1
-        bindings, binding_diagnostics = load_bindings(
-            args.product_root / ".pml" / "bindings.yaml"
+        locked_bindings, binding_diagnostics = load_locked_bindings(
+            args.product_root, document
         )
         ingest_diagnostics = list(binding_diagnostics)
+        bindings = (
+            locked_bindings.document if locked_bindings is not None else None
+        )
         probes, probe_diagnostics = load_probes(
             args.probes, document, bindings
         )
         ingest_diagnostics.extend(probe_diagnostics)
-        if bindings is not None and not ingest_diagnostics:
+        if locked_bindings is not None and not ingest_diagnostics:
             ingest_diagnostics = ingest_report(
-                args.report, args.product_root, document, probes
+                args.report,
+                args.product_root,
+                document,
+                probes,
+                locked_bindings,
             )
         for diagnostic in ingest_diagnostics:
             print(diagnostic.format())
@@ -118,15 +137,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         document, _ = load_document(path)
         if document is None:
             return 1
-        state_diagnostics = validate_product_state(args.product_root, document)
-        if args.probes is not None:
-            bindings, _ = load_bindings(args.product_root / ".pml" / "bindings.yaml")
+        locked_bindings, state_diagnostics = load_locked_bindings(
+            args.product_root, document
+        )
+        if locked_bindings is not None:
+            state_diagnostics.extend(validate_product_state(
+                args.product_root, document, locked_bindings
+            ))
+        if (
+            args.probes is not None
+            and locked_bindings is not None
+            and not state_diagnostics
+        ):
+            bindings = locked_bindings.document
             probes, probe_diagnostics = load_probes(args.probes, document, bindings)
             state_diagnostics.extend(probe_diagnostics)
-            if bindings is not None:
-                state_diagnostics.extend(missing_probe_diagnostics(probes, document, bindings))
-            if bindings is not None and not probe_diagnostics:
-                state_diagnostics.extend(validate_probe_evidence(args.product_root, document, probes))
+            state_diagnostics.extend(missing_probe_diagnostics(probes, document, bindings))
+            if not probe_diagnostics:
+                state_diagnostics.extend(validate_probe_evidence(
+                    args.product_root, document, probes, locked_bindings
+                ))
         for diagnostic in state_diagnostics:
             print(diagnostic.format())
         if state_diagnostics:

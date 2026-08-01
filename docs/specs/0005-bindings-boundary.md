@@ -65,6 +65,11 @@ digest covers the canonical validated bindings. A missing or mismatched digest i
 an error; tooling MUST NOT evaluate current confidence against unpinned behavior or
 coverage policy.
 
+The canonical bindings digest is `sha256:` plus the lowercase SHA-256 hexadecimal
+digest of the schema- and semantics-valid document encoded as UTF-8 JSON. Object
+keys are sorted lexicographically, array order is preserved, non-ASCII characters
+are encoded directly, and no insignificant whitespace is emitted.
+
 ## State authority
 
 State remains product-local because it records evidence about the current product

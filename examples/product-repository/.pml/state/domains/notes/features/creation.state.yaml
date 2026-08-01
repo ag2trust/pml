@@ -1,6 +1,7 @@
 pml_state: "0.1"
 node: domains.notes.features.creation
 definition_hash: sha256:f8e3f69356ffe79214f9a675f4d12fe2edfcaccc605611e1dbf06dec09014feb
+bindings_digest: sha256:88f04ed441f7ff4c498f9aec14b67c28cbc0c4cbb5f64d6b475bdf0ce39fe433
 input_fingerprint: sha256:ef137bfc1a0b5ac3ba684c458a0f830000cad06e28567759f4b42073b6cb5843
 obligations:
   domains.notes.features.creation.rules.preserve_content:
