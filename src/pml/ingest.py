@@ -53,6 +53,7 @@ def ingest_report(
     if diagnostics:
         return diagnostics
 
+    checks = report.get("checks", [])
     product_obligations = list(enumerate_obligations(definition))
     architecture_obligations = list(enumerate_architecture_obligations(definition))
     obligations = {
@@ -62,7 +63,7 @@ def ingest_report(
     bindings = locked_bindings.document
     binding_map = bindings["bindings"]
 
-    for index, check in enumerate(report["checks"]):
+    for index, check in enumerate(checks):
         target = obligations.get(check["target"])
         location = f"{report_path}:checks[{index}]"
         if target is None:
@@ -96,7 +97,7 @@ def ingest_report(
     if diagnostics:
         return diagnostics
 
-    touched_nodes = {obligations[check["target"]].node_id for check in report["checks"]}
+    touched_nodes = {obligations[check["target"]].node_id for check in checks}
     if any(node_id.startswith("architecture.") for node_id in touched_nodes):
         diagnostics.extend(architecture_state_root_diagnostics(repo_root))
         if diagnostics:
@@ -170,7 +171,7 @@ def ingest_report(
     if diagnostics:
         return diagnostics
 
-    for check in report["checks"]:
+    for check in checks:
         obligation = obligations[check["target"]]
         _, state, current_input = states[obligation.node_id]
         evidence = state["obligations"][obligation.id]["evidence"]

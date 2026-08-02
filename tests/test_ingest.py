@@ -63,6 +63,30 @@ limitations: []
     )
 
 
+def write_implementation_only_report(path: Path) -> None:
+    path.write_text(
+        f"""\
+verification: run_implementation_1
+version: working_tree
+recorded: "2026-07-22T10:00:00Z"
+environment: local_integrated
+verifier:
+  agent: runner
+  provider: pml
+  model: probe_runner
+  effort: low
+targets:
+  - domains.notes.features.creation
+verdict: incomplete
+implementation:
+  - target: {OBLIGATION}
+    status: partial
+    observation: The obligation is only partially implemented.
+limitations: []
+"""
+    )
+
+
 def product_copy(tmp_path: Path) -> Path:
     owner_source = tmp_path / "product-pml"
     owner_source.mkdir()
@@ -149,6 +173,30 @@ def test_cli_ingests_valid_report(tmp_path: Path) -> None:
         str(probe_path),
         str(report_path),
     ]) == 0
+
+
+def test_implementation_only_report_does_not_crash_or_mutate_evidence(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    report_path = tmp_path / "implementation-report.yaml"
+    write_implementation_only_report(report_path)
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_text()
+
+    assert ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    ) == []
+    assert state_path.read_text() == original
 
 
 def test_ingestion_rejects_mismatched_bindings_digest_without_writing(
