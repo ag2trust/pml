@@ -432,6 +432,11 @@ def test_verification_report_rejects_empty_evidence_sections_and_bounds() -> Non
     too_many_reproduction_steps = copy.deepcopy(report)
     too_many_reproduction_steps["checks"][1]["reproduction"] = ["step"] * 33
 
+    too_many_artifacts = copy.deepcopy(report)
+    too_many_artifacts["checks"][0]["evidence"] = [
+        f"artifact_{index}" for index in range(65)
+    ]
+
     oversized_text = copy.deepcopy(report)
     oversized_text["implementation"][0]["observation"] = "x" * 4097
 
@@ -442,6 +447,7 @@ def test_verification_report_rejects_empty_evidence_sections_and_bounds() -> Non
         too_many_implementations,
         too_many_checks,
         too_many_reproduction_steps,
+        too_many_artifacts,
         oversized_text,
     ):
         assert list(validator.iter_errors(invalid))
