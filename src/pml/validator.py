@@ -171,7 +171,9 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
 
     actor_ids = set(document.get("actors", {}))
     signal_ids = set(document.get("signals", {}))
-    architecture_ids = set(document.get("architecture", {}))
+    architecture = document.get("architecture", {})
+    architecture_map = architecture if isinstance(architecture, dict) else {}
+    architecture_ids = set(architecture_map)
     referenced_architecture: set[str] = set()
     for domain_id, domain in document.get("domains", {}).items():
         for feature_id, feature in domain.get("features", {}).items():
@@ -201,15 +203,24 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
             signal = reaction.get("on")
             if signal not in signal_ids:
                 diagnostics.append(Diagnostic(f"{node_id}.reactions.{reaction_id}.on", "undefined-reference", f"unknown signal '{signal}'"))
-    for decision_id, decision in document.get("architecture", {}).items():
+    for decision_id, decision in architecture_map.items():
+        if not isinstance(decision, dict):
+            continue
         prefix = f"architecture.{decision_id}"
         if decision_id not in referenced_architecture:
             diagnostics.append(Diagnostic(prefix, "unreferenced-architecture", "architecture decision is not referenced by a feature or component"))
         for field in ("selection", "rationale"):
-            if ARCHITECTURE_IMPLEMENTATION_DETAIL.search(decision.get(field, "")):
+            value = decision.get(field, "")
+            if isinstance(value, str) and ARCHITECTURE_IMPLEMENTATION_DETAIL.search(value):
                 diagnostics.append(Diagnostic(f"{prefix}.{field}", "implementation-detail", "architecture must not name implementation files, functions, classes, tables, endpoints, configuration syntax, or topology"))
-        for constraint_id, constraint in decision.get("constraints", {}).items():
-            if ARCHITECTURE_IMPLEMENTATION_DETAIL.search(constraint.get("statement", "")):
+        constraints = decision.get("constraints", {})
+        if not isinstance(constraints, dict):
+            continue
+        for constraint_id, constraint in constraints.items():
+            if not isinstance(constraint, dict):
+                continue
+            statement = constraint.get("statement", "")
+            if isinstance(statement, str) and ARCHITECTURE_IMPLEMENTATION_DETAIL.search(statement):
                 diagnostics.append(Diagnostic(f"{prefix}.constraints.{constraint_id}.statement", "implementation-detail", "architecture must not name implementation files, functions, classes, tables, endpoints, configuration syntax, or topology"))
     return diagnostics
 
