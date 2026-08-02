@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import copy
 import json
 from jsonschema import Draft202012Validator
 import yaml
@@ -397,3 +398,50 @@ def test_verification_report_matches_schema() -> None:
     schema = json.loads((ROOT / "schema" / "verification-report.schema.json").read_text())
     report = yaml.safe_load((ROOT / "examples" / "verification-report.yaml").read_text())
     assert list(Draft202012Validator(schema).iter_errors(report)) == []
+
+
+def test_verification_report_allows_implementation_without_checks() -> None:
+    schema = json.loads((ROOT / "schema" / "verification-report.schema.json").read_text())
+    report = yaml.safe_load((ROOT / "examples" / "verification-report.yaml").read_text())
+    del report["checks"]
+
+    assert list(Draft202012Validator(schema).iter_errors(report)) == []
+
+
+def test_verification_report_rejects_empty_evidence_sections_and_bounds() -> None:
+    schema = json.loads((ROOT / "schema" / "verification-report.schema.json").read_text())
+    report = yaml.safe_load((ROOT / "examples" / "verification-report.yaml").read_text())
+    validator = Draft202012Validator(schema)
+
+    empty = copy.deepcopy(report)
+    del empty["implementation"]
+    del empty["checks"]
+
+    unknown_status = copy.deepcopy(report)
+    unknown_status["implementation"][0]["status"] = "complete"
+
+    too_many_targets = copy.deepcopy(report)
+    too_many_targets["targets"] = [f"target_{index}" for index in range(65)]
+
+    too_many_implementations = copy.deepcopy(report)
+    too_many_implementations["implementation"] *= 65
+
+    too_many_checks = copy.deepcopy(report)
+    too_many_checks["checks"] *= 257
+
+    too_many_reproduction_steps = copy.deepcopy(report)
+    too_many_reproduction_steps["checks"][1]["reproduction"] = ["step"] * 33
+
+    oversized_text = copy.deepcopy(report)
+    oversized_text["implementation"][0]["observation"] = "x" * 4097
+
+    for invalid in (
+        empty,
+        unknown_status,
+        too_many_targets,
+        too_many_implementations,
+        too_many_checks,
+        too_many_reproduction_steps,
+        oversized_text,
+    ):
+        assert list(validator.iter_errors(invalid))

@@ -10,6 +10,10 @@ verifier:
 targets:
   - domains.assistants.features.creation
 verdict: verified
+implementation:
+  - target: domains.assistants.features.creation.rules.ownership
+    status: implemented
+    observation: The ownership rule is implemented in the evaluated product revision.
 checks:
   - target: domains.assistants.features.creation.rules.ownership
     result: passed
