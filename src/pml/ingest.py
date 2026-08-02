@@ -54,6 +54,7 @@ def ingest_report(
         return diagnostics
 
     checks = report.get("checks", [])
+    implementation = report.get("implementation", [])
     product_obligations = list(enumerate_obligations(definition))
     architecture_obligations = list(enumerate_architecture_obligations(definition))
     obligations = {
@@ -63,6 +64,15 @@ def ingest_report(
     bindings = locked_bindings.document
     binding_map = bindings["bindings"]
 
+    for index, assessment in enumerate(implementation):
+        target = obligations.get(assessment["target"])
+        location = f"{report_path}:implementation[{index}]"
+        if target is None:
+            diagnostics.append(Diagnostic(
+                f"{location}.target",
+                "undefined-reference",
+                f"unknown obligation '{assessment['target']}'",
+            ))
     for index, check in enumerate(checks):
         target = obligations.get(check["target"])
         location = f"{report_path}:checks[{index}]"
@@ -97,7 +107,10 @@ def ingest_report(
     if diagnostics:
         return diagnostics
 
-    touched_nodes = {obligations[check["target"]].node_id for check in checks}
+    touched_nodes = {
+        obligations[item["target"]].node_id
+        for item in implementation + checks
+    }
     if any(node_id.startswith("architecture.") for node_id in touched_nodes):
         diagnostics.extend(architecture_state_root_diagnostics(repo_root))
         if diagnostics:
@@ -170,6 +183,11 @@ def ingest_report(
 
     if diagnostics:
         return diagnostics
+
+    for assessment in implementation:
+        obligation = obligations[assessment["target"]]
+        _, state, _ = states[obligation.node_id]
+        state["obligations"][obligation.id]["implemented"] = assessment["status"]
 
     for check in checks:
         obligation = obligations[check["target"]]
