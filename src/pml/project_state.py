@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator
+import yaml
 
 from pml.obligations import (
     enumerate_architecture_obligations,
@@ -19,11 +20,15 @@ from pml.obligations import (
     verification_coverage,
     verification_plan,
 )
-from pml.validator import Diagnostic, _load, _path, load_document
+from pml.validator import Diagnostic, UniqueKeyLoader, _load, _path, load_document
 
 
 ROOT = Path(__file__).resolve().parents[2]
 MAX_ARCHITECTURE_STATE_ENTRIES = 64
+# Generated state is tooling output and currently measures well under 1 KiB in the
+# conformance examples. One MiB leaves ample room for obligations and evidence while
+# bounding memory used before YAML parsing. This is not a PML language constraint.
+MAX_STATE_FILE_BYTES = 1024 * 1024
 
 
 def state_path_for(repo_root: Path, node_id: str) -> Path:
@@ -374,13 +379,32 @@ def load_locked_bindings(
 
 
 def load_state(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
-    """Load an existing state file only when it conforms to the state schema."""
+    """Load bounded generated state only when it conforms to the state schema."""
 
     if not path.exists():
         return None, []
-    state, diagnostics = _load(path)
-    if state is None:
-        return None, diagnostics
+    try:
+        with path.open("rb") as stream:
+            encoded = stream.read(MAX_STATE_FILE_BYTES + 1)
+    except OSError as exc:
+        return None, [Diagnostic(str(path), "yaml", str(exc))]
+    if len(encoded) > MAX_STATE_FILE_BYTES:
+        return None, [Diagnostic(
+            str(path),
+            "state-size",
+            f"generated state exceeds the {MAX_STATE_FILE_BYTES}-byte tooling limit",
+        )]
+    try:
+        state = yaml.load(encoded.decode("utf-8"), Loader=UniqueKeyLoader)
+    except (UnicodeDecodeError, yaml.YAMLError) as exc:
+        return None, [Diagnostic(str(path), "yaml", str(exc))]
+    if not isinstance(state, dict):
+        return None, [Diagnostic(
+            str(path),
+            "structure",
+            "a generated state document must be a mapping",
+        )]
+    diagnostics: list[Diagnostic] = []
     schema_diagnostics = _schema_diagnostics(path, state, "pml-state.schema.json")
     diagnostics.extend(schema_diagnostics)
     if schema_diagnostics:
@@ -417,13 +441,9 @@ def validate_product_state(
         if not expected_path.is_file():
             diagnostics.append(Diagnostic(str(expected_path), "missing-state", f"node '{node_id}' has no state file"))
     for state_path in sorted(state_root.rglob("*.state.yaml")) if state_root.exists() else []:
-        state, errors = _load(state_path)
+        state, errors = load_state(state_path)
         diagnostics.extend(errors)
         if state is None:
-            continue
-        state_schema_errors = _schema_diagnostics(state_path, state, "pml-state.schema.json")
-        diagnostics.extend(state_schema_errors)
-        if state_schema_errors:
             continue
         node_id = state["node"]
         if node_id not in nodes:
@@ -538,13 +558,9 @@ def validate_architecture_state(
                 break
             state_paths.append(entry)
     for state_path in sorted(state_paths):
-        state, errors = _load(state_path)
+        state, errors = load_state(state_path)
         diagnostics.extend(errors)
         if state is None:
-            continue
-        schema_errors = _schema_diagnostics(state_path, state, "pml-state.schema.json")
-        diagnostics.extend(schema_errors)
-        if schema_errors:
             continue
         node_id = state["node"]
         if node_id not in decisions:
@@ -667,7 +683,8 @@ def validate_probe_evidence(
 
     for node_id, _ in list(iter_nodes(definition)) + list(iter_architecture(definition)):
         state_path = state_path_for(repo_root, node_id)
-        state, _ = _load(state_path)
+        state, state_errors = load_state(state_path)
+        diagnostics.extend(state_errors)
         if state is None:
             continue
         if state.get("bindings_digest") != locked_bindings.digest:

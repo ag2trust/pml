@@ -78,12 +78,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(diagnostic.format())
             print(f"PML STATUS UNAVAILABLE: {len(state_diagnostics)} violation(s)")
             return 1
+        status_diagnostics: list[Diagnostic] = []
         nodes = product_status(
             args.product_root,
             document,
             definition_source=path,
             locked_bindings=locked_bindings,
+            state_diagnostics=status_diagnostics,
         )
+        if status_diagnostics:
+            for diagnostic in status_diagnostics:
+                print(diagnostic.format())
+            print(
+                f"PML STATUS UNAVAILABLE: {len(status_diagnostics)} violation(s)"
+            )
+            return 1
         for node in nodes:
             print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
             for obligation in node.obligations:
@@ -104,12 +113,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"{len(state_diagnostics)} violation(s)"
             )
             return 1
+        status_diagnostics: list[Diagnostic] = []
         nodes = architecture_status(
             args.product_root,
             document,
             definition_source=path,
             locked_bindings=locked_bindings,
+            state_diagnostics=status_diagnostics,
         )
+        if status_diagnostics:
+            for diagnostic in status_diagnostics:
+                print(diagnostic.format())
+            print(
+                "PML ARCHITECTURE STATUS UNAVAILABLE: "
+                f"{len(status_diagnostics)} violation(s)"
+            )
+            return 1
         for node in nodes:
             print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
             for obligation in node.obligations:

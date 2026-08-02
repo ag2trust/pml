@@ -13,9 +13,10 @@ from pml.project_state import (
     canonical_hash,
     input_fingerprint,
     load_locked_bindings,
+    load_state,
     state_path_for,
 )
-from pml.validator import _load
+from pml.validator import Diagnostic
 
 
 @dataclass(frozen=True)
@@ -118,6 +119,7 @@ def product_status(
     locked_bindings: LockedBindings | None = None,
     *,
     definition_source: Path | None = None,
+    state_diagnostics: list[Diagnostic] | None = None,
 ) -> list[NodeStatus]:
     metadata = repo_root / ".pml"
     if locked_bindings is None:
@@ -135,7 +137,9 @@ def product_status(
     for node_id, node in nodes.items():
         state_path = metadata / "state" / Path(*node_id.split("."))
         state_path = state_path.with_suffix(".state.yaml")
-        state, _ = _load(state_path)
+        state, errors = load_state(state_path)
+        if state_diagnostics is not None:
+            state_diagnostics.extend(errors)
         state = state or {"obligations": {}, "related_fingerprints": {}}
         policy_current = state.get("bindings_digest") == locked_bindings.digest
         paths = binding_map.get(node_id, {}).get("paths", [])
@@ -185,6 +189,7 @@ def architecture_status(
     locked_bindings: LockedBindings | None = None,
     *,
     definition_source: Path | None = None,
+    state_diagnostics: list[Diagnostic] | None = None,
 ) -> list[NodeStatus]:
     """Derive architecture conformance separately from product conformance."""
 
@@ -194,7 +199,10 @@ def architecture_status(
         )
     if locked_bindings is None:
         return []
-    if architecture_state_root_diagnostics(repo_root):
+    root_errors = architecture_state_root_diagnostics(repo_root)
+    if root_errors:
+        if state_diagnostics is not None:
+            state_diagnostics.extend(root_errors)
         return []
     bindings = locked_bindings.document
     binding_map = bindings.get("architecture", {})
@@ -206,7 +214,17 @@ def architecture_status(
             continue
         decision_id = node_id.removeprefix("architecture.")
         state_path = state_path_for(repo_root, node_id)
-        state, _ = (None, []) if state_path.is_symlink() else _load(state_path)
+        if state_path.is_symlink():
+            state = None
+            errors = [Diagnostic(
+                str(state_path),
+                "state-path",
+                "architecture state file must not be a symbolic link",
+            )]
+        else:
+            state, errors = load_state(state_path)
+        if state_diagnostics is not None:
+            state_diagnostics.extend(errors)
         state = state or {"obligations": {}}
         policy_current = (
             state.get("definition_hash") == canonical_hash(decision)

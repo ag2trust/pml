@@ -7,6 +7,7 @@ from pml.cli import main
 from pml.ingest import ingest_report
 from pml.probes import load_probes, probe_fingerprint
 from pml.project_state import (
+    MAX_STATE_FILE_BYTES,
     bindings_digest,
     canonical_hash,
     input_fingerprint,
@@ -336,6 +337,36 @@ def test_invalid_existing_state_is_not_overwritten(tmp_path: Path) -> None:
     assert state_path.read_text() == original
 
 
+def test_oversized_product_state_is_not_read_or_overwritten(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    oversized = b"x" * (MAX_STATE_FILE_BYTES + 1)
+    state_path.write_bytes(oversized)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    probes, _ = load_probes(probe_path, definition)
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+
+    assert [item.code for item in diagnostics] == ["state-size"]
+    assert state_path.read_bytes() == oversized
+
+
 def test_report_requires_method_specific_identity(tmp_path: Path) -> None:
     definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
     assert definition is not None
@@ -512,6 +543,19 @@ def test_ingests_architecture_evidence_with_architecture_bound_paths(tmp_path: P
     assert state["bindings_digest"] == bindings_digest(bindings)
     assert state["input_fingerprint"] == input_fingerprint(product, ["runtime"])
     assert state["obligations"][obligation]["evidence"]["agent_judgment"]["input_fingerprint"] == state["input_fingerprint"]
+
+    state_path = metadata / "architecture" / "durable_store.state.yaml"
+    oversized = b"x" * (MAX_STATE_FILE_BYTES + 1)
+    state_path.write_bytes(oversized)
+    oversized_diagnostics = ingest_report(
+        report,
+        product,
+        definition,
+        {},
+        definition_source=manifest,
+    )
+    assert [item.code for item in oversized_diagnostics] == ["state-size"]
+    assert state_path.read_bytes() == oversized
 
 
 def test_ingestion_reconciles_added_architecture_constraint(tmp_path: Path) -> None:

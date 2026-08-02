@@ -9,11 +9,13 @@ from pml.obligations import Obligation, enumerate_architecture_obligations, enum
 from pml.cli import main
 from pml.project_state import (
     MAX_ARCHITECTURE_STATE_ENTRIES,
+    MAX_STATE_FILE_BYTES,
     LockedBindings,
     bindings_digest,
     canonical_hash,
     input_fingerprint,
     load_bindings,
+    load_state,
     validate_architecture_state,
     validate_probe_evidence,
     validate_product_state,
@@ -351,6 +353,47 @@ def test_status_rejects_a_mismatched_bindings_digest(
     assert "implementation=" not in output
 
 
+def test_oversized_product_state_fails_validation_and_status(
+    tmp_path: Path, capsys
+) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    state_path.write_bytes(b"x" * (MAX_STATE_FILE_BYTES + 1))
+
+    diagnostics = validate_product_state(
+        product, document, definition_source=manifest
+    )
+    assert [item.code for item in diagnostics] == ["state-size"]
+
+    assert main(["status", str(manifest), str(product)]) == 1
+    output = capsys.readouterr().out
+    assert "[state-size]" in output
+    assert f"{MAX_STATE_FILE_BYTES}-byte tooling limit" in output
+    assert "implementation=" not in output
+
+
+def test_state_size_limit_is_checked_before_yaml_parsing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    state_path = tmp_path / "oversized.state.yaml"
+    state_path.write_bytes(b"x" * (MAX_STATE_FILE_BYTES + 1))
+
+    def unexpected_parse(*args, **kwargs):
+        raise AssertionError("oversized state must not reach the YAML parser")
+
+    monkeypatch.setattr("pml.project_state.yaml.load", unexpected_parse)
+    state, diagnostics = load_state(state_path)
+
+    assert state is None
+    assert [item.code for item in diagnostics] == ["state-size"]
+
+
 def test_approved_bindings_change_makes_existing_evidence_stale(
     tmp_path: Path,
 ) -> None:
@@ -653,6 +696,43 @@ def test_architecture_state_limits_candidate_files(tmp_path: Path) -> None:
     )
 
     assert any(item.code == "state-limit" for item in diagnostics)
+
+
+def test_oversized_architecture_state_fails_validation_and_status(
+    tmp_path: Path, capsys
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    (product / "runtime").mkdir()
+    architecture = product / ".pml" / "architecture"
+    architecture.mkdir()
+    state_path = architecture / "durable_store.state.yaml"
+    state_path.write_bytes(b"x" * (MAX_STATE_FILE_BYTES + 1))
+
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
+    assert [item.code for item in diagnostics] == ["state-size"]
+
+    assert main([
+        "architecture-status",
+        str(manifest),
+        str(product),
+    ]) == 1
+    output = capsys.readouterr().out
+    assert "[state-size]" in output
+    assert f"{MAX_STATE_FILE_BYTES}-byte tooling limit" in output
+    assert "implementation=" not in output
 
 
 def test_architecture_state_limits_non_state_entries(tmp_path: Path) -> None:
