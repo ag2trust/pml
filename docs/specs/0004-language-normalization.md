@@ -3,6 +3,7 @@
 Status: Owner approved
 Approved direction: 2026-07-27
 Artifact boundary superseded by [0005](0005-bindings-boundary.md)
+Sync execution behavior superseded by [0007](0007-project-workflow.md)
 
 This decision records the canonical language model agreed during the PML reference
 review. It supersedes conflicting grammar in earlier draft documents.
@@ -52,9 +53,10 @@ definition define verification methods and coverage; their implementation paths
 remain relative to the implementing product repository. Generated state remains
 product-local and records evidence, scores, and freshness.
 
-Changes to a node or a related node invalidate affected confidence. Sync may restore
-approved deterministic coverage by running probes; it cannot manufacture agentic or
-human confidence.
+Changes to a node or a related node invalidate affected confidence. Sync reconciles
+generated state without executing verification. The separate `pml verify` operation
+may restore approved deterministic coverage by running probes; neither operation can
+manufacture agent-judgment or human-attestation evidence.
 
 ## Architecture boundary
 

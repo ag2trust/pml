@@ -1,7 +1,8 @@
 # PML 0.1 product state
 
 Status: Approved, normalized by [0004](0004-language-normalization.md); repository
-boundary superseded by [0005](0005-bindings-boundary.md)
+boundary superseded by [0005](0005-bindings-boundary.md); sync execution behavior
+superseded by [0007](0007-project-workflow.md)
 
 ## Repository boundary
 
@@ -55,9 +56,9 @@ Implementation progress remains a separate dimension.
 
 ## Sync and CI
 
-The planned `pml sync` command recalculates changed and related nodes, invalidates
-stale evidence, and runs approved probes. It carries historical agent or human
-evidence without refreshing it.
+`pml sync` recalculates changed and related nodes, reconciles generated state, and
+keeps changed evidence stale. It does not execute probes. Deterministic execution is
+the separate `pml verify` operation defined by [0007](0007-project-workflow.md).
 
 CI recomputes definition, input, related-node, and probe fingerprints. A mismatch
 proves committed state does not cover current inputs, so CI can enforce that sync
