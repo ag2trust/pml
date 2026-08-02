@@ -30,6 +30,7 @@
       "required": ["implemented", "evidence"],
       "properties": {
         "implemented": {"enum": ["implemented", "partial", "missing", "unknown"]},
+        "implementation": {"$ref": "#/$defs/implementationRecord"},
         "evidence": {
           "type": "object",
           "additionalProperties": false,
@@ -42,6 +43,30 @@
             "human_attestation": {"$ref": "#/$defs/humanEvidence"}
           }
         }
+      }
+    },
+    "implementationRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "observation", "report_id", "report_digest", "recorded", "verifier"],
+      "properties": {
+        "status": {"enum": ["implemented", "partial", "missing", "unknown"]},
+        "observation": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "report_id": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "report_digest": {"$ref": "#/$defs/hash"},
+        "recorded": {"$ref": "#/$defs/recorded"},
+        "verifier": {"$ref": "#/$defs/reportVerifier"}
+      }
+    },
+    "reportVerifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "provider", "model", "effort"],
+      "properties": {
+        "agent": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "provider": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "model": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "effort": {"enum": ["low", "medium", "high"]}
       }
     },
     "commonEvidence": {

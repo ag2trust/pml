@@ -20,10 +20,11 @@ from pml.project_state import (
     load_state,
     state_path_for,
 )
-from pml.validator import Diagnostic, _load, _path
+from pml.validator import Diagnostic, UniqueKeyLoader, _path
 
 
 SCHEMA = Path(__file__).resolve().parents[2] / "schema" / "verification-report.schema.json"
+MAX_REPORT_FILE_BYTES = 1024 * 1024
 
 
 def ingest_report(
@@ -42,9 +43,26 @@ def ingest_report(
         if locked_bindings is None:
             return lock_diagnostics
 
-    report, diagnostics = _load(report_path)
-    if report is None:
-        return diagnostics
+    diagnostics: list[Diagnostic] = []
+    try:
+        with report_path.open("rb") as stream:
+            encoded_report = stream.read(MAX_REPORT_FILE_BYTES + 1)
+    except OSError as exc:
+        return [Diagnostic(str(report_path), "yaml", str(exc))]
+    if len(encoded_report) > MAX_REPORT_FILE_BYTES:
+        return [Diagnostic(
+            str(report_path),
+            "report-size",
+            f"verification report exceeds the {MAX_REPORT_FILE_BYTES}-byte tooling limit",
+        )]
+    try:
+        report = yaml.load(encoded_report.decode("utf-8"), Loader=UniqueKeyLoader)
+    except (UnicodeDecodeError, yaml.YAMLError) as exc:
+        return [Diagnostic(str(report_path), "yaml", str(exc))]
+    if not isinstance(report, dict):
+        return [Diagnostic(
+            str(report_path), "structure", "a verification report must be a mapping"
+        )]
     schema = json.loads(SCHEMA.read_text())
     for error in sorted(
         Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).iter_errors(report),
@@ -64,15 +82,38 @@ def ingest_report(
     nodes = dict(list(iter_nodes(definition)) + list(iter_architecture(definition)))
     bindings = locked_bindings.document
     binding_map = bindings["bindings"]
+    declared_targets = set(report["targets"])
 
+    for index, node_id in enumerate(report["targets"]):
+        if node_id not in nodes:
+            diagnostics.append(Diagnostic(
+                f"{report_path}:targets[{index}]",
+                "undefined-reference",
+                f"unknown target '{node_id}'",
+            ))
+
+    implementation_targets: set[str] = set()
     for index, assessment in enumerate(implementation):
         target = obligations.get(assessment["target"])
         location = f"{report_path}:implementation[{index}]"
+        if assessment["target"] in implementation_targets:
+            diagnostics.append(Diagnostic(
+                f"{location}.target",
+                "duplicate-implementation",
+                f"duplicate implementation assessment for '{assessment['target']}'",
+            ))
+        implementation_targets.add(assessment["target"])
         if target is None:
             diagnostics.append(Diagnostic(
                 f"{location}.target",
                 "undefined-reference",
                 f"unknown obligation '{assessment['target']}'",
+            ))
+        elif target.node_id not in declared_targets:
+            diagnostics.append(Diagnostic(
+                f"{location}.target",
+                "undeclared-target",
+                f"obligation belongs to undeclared target '{target.node_id}'",
             ))
     for index, check in enumerate(checks):
         target = obligations.get(check["target"])
@@ -80,6 +121,12 @@ def ingest_report(
         if target is None:
             diagnostics.append(Diagnostic(f"{location}.target", "undefined-reference", f"unknown obligation '{check['target']}'"))
             continue
+        if target.node_id not in declared_targets:
+            diagnostics.append(Diagnostic(
+                f"{location}.target",
+                "undeclared-target",
+                f"obligation belongs to undeclared target '{target.node_id}'",
+            ))
         plan = verification_plan(bindings, target)
         if not plan:
             diagnostics.append(Diagnostic(
@@ -185,10 +232,20 @@ def ingest_report(
     if diagnostics:
         return diagnostics
 
+    report_digest = canonical_hash(report)
     for assessment in implementation:
         obligation = obligations[assessment["target"]]
         _, state, _ = states[obligation.node_id]
-        state["obligations"][obligation.id]["implemented"] = assessment["status"]
+        obligation_state = state["obligations"][obligation.id]
+        obligation_state["implemented"] = assessment["status"]
+        obligation_state["implementation"] = {
+            "status": assessment["status"],
+            "observation": assessment["observation"],
+            "report_id": report["verification"],
+            "report_digest": report_digest,
+            "recorded": report["recorded"],
+            "verifier": dict(report["verifier"]),
+        }
 
     for check in checks:
         obligation = obligations[check["target"]]

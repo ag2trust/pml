@@ -4,7 +4,7 @@ import shutil
 import yaml
 
 from pml.cli import main
-from pml.ingest import ingest_report
+from pml.ingest import MAX_REPORT_FILE_BYTES, ingest_report
 from pml.probes import load_probes, probe_fingerprint
 from pml.project_state import (
     MAX_STATE_FILE_BYTES,
@@ -200,6 +200,23 @@ def test_implementation_only_report_updates_implementation_state(
     assert state["obligations"][OBLIGATION]["evidence"] == {
         "deterministic_probe": {}
     }
+    implementation = state["obligations"][OBLIGATION]["implementation"]
+    assert implementation == {
+        "status": "partial",
+        "observation": "The obligation is only partially implemented.",
+        "report_id": "run_implementation_1",
+        "report_digest": canonical_hash(yaml.safe_load(report_path.read_text())),
+        "recorded": "2026-07-22T10:00:00Z",
+        "verifier": {
+            "agent": "runner",
+            "provider": "pml",
+            "model": "probe_runner",
+            "effort": "low",
+        },
+    }
+    assert validate_product_state(
+        product, definition, definition_source=owner_definition_path(product)
+    ) == []
 
 
 def test_mixed_report_updates_implementation_and_evidence(tmp_path: Path) -> None:
@@ -265,6 +282,88 @@ def test_implementation_report_rejects_unknown_obligation(tmp_path: Path) -> Non
     assert state_path.read_text() == original
 
 
+def test_report_rejects_undeclared_targets_before_writing(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    report_path = tmp_path / "implementation-report.yaml"
+    write_implementation_only_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    report["targets"] = ["domains.notes.features.unknown"]
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_text()
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    )
+
+    assert {item.code for item in diagnostics} == {
+        "undefined-reference", "undeclared-target"
+    }
+    assert state_path.read_text() == original
+
+
+def test_report_rejects_duplicate_implementation_assessments(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    report_path = tmp_path / "implementation-report.yaml"
+    write_implementation_only_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    report["implementation"].append(dict(report["implementation"][0]))
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_text()
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    )
+
+    assert {item.code for item in diagnostics} == {"duplicate-implementation"}
+    assert state_path.read_text() == original
+
+
+def test_ingestion_rejects_oversized_report_before_parsing(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    report_path = tmp_path / "oversized-report.yaml"
+    report_path.write_bytes(
+        b"limitations:\n  - " + b"x" * MAX_REPORT_FILE_BYTES
+    )
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_bytes()
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    )
+
+    assert {item.code for item in diagnostics} == {"report-size"}
+    assert state_path.read_bytes() == original
+
+
 def test_ingestion_rejects_oversized_generated_state_without_writing(
     tmp_path: Path,
 ) -> None:
@@ -281,7 +380,7 @@ def test_ingestion_rejects_oversized_generated_state_without_writing(
     report_path = tmp_path / "oversized-report.yaml"
     write_report(report_path)
     report = yaml.safe_load(report_path.read_text())
-    artifacts = [f"{index:04d}" + "x" * 4092 for index in range(64)]
+    artifacts = [f"{index:04d}" + "x" * 4076 for index in range(64)]
     report["checks"] = [{
         "target": OBLIGATION,
         "result": "passed",
