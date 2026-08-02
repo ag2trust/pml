@@ -12,6 +12,7 @@ import yaml
 from pml.obligations import enumerate_architecture_obligations, enumerate_obligations, iter_architecture, iter_nodes, required_methods, verification_plan
 from pml.project_state import (
     LockedBindings,
+    MAX_STATE_FILE_BYTES,
     architecture_state_root_diagnostics,
     canonical_hash,
     input_fingerprint,
@@ -212,7 +213,21 @@ def ingest_report(
             record["attester"] = check["attester"]
             evidence["human_attestation"] = record
 
+    serialized_states: list[tuple[Path, bytes]] = []
     for state_path, state, _ in states.values():
+        encoded = yaml.safe_dump(state, sort_keys=False).encode("utf-8")
+        if len(encoded) > MAX_STATE_FILE_BYTES:
+            diagnostics.append(Diagnostic(
+                str(state_path),
+                "state-size",
+                f"generated state exceeds the {MAX_STATE_FILE_BYTES}-byte tooling limit",
+            ))
+            continue
+        serialized_states.append((state_path, encoded))
+    if diagnostics:
+        return diagnostics
+
+    for state_path, encoded in serialized_states:
         state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(yaml.safe_dump(state, sort_keys=False))
+        state_path.write_bytes(encoded)
     return []

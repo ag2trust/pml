@@ -265,6 +265,51 @@ def test_implementation_report_rejects_unknown_obligation(tmp_path: Path) -> Non
     assert state_path.read_text() == original
 
 
+def test_ingestion_rejects_oversized_generated_state_without_writing(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    bindings = yaml.safe_load(owner_bindings_path(product).read_text())
+    plan = bindings["bindings"]["domains.notes.features.creation"][
+        "verification"
+    ][OBLIGATION]
+    probe_ids = [f"large_evidence_{index}" for index in range(4)]
+    plan["probes"] = {probe_id: 0.25 for probe_id in probe_ids}
+    approve_bindings(product, bindings)
+    report_path = tmp_path / "oversized-report.yaml"
+    write_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    artifacts = [f"{index:04d}" + "x" * 4092 for index in range(64)]
+    report["checks"] = [{
+        "target": OBLIGATION,
+        "result": "passed",
+        "method": "deterministic_probe",
+        "probe": probe_id,
+        "observation": "Probe exited successfully.",
+        "evidence": list(artifacts),
+    } for probe_id in probe_ids]
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+    probes = {probe_id: {"verifies": OBLIGATION} for probe_id in probe_ids}
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_bytes()
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+
+    assert {item.code for item in diagnostics} == {"state-size"}
+    assert state_path.read_bytes() == original
+
+
 def test_ingestion_rejects_mismatched_bindings_digest_without_writing(
     tmp_path: Path,
 ) -> None:
