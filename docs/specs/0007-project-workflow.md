@@ -87,6 +87,18 @@ reject duplicate probe IDs, missing bound probes, target mismatches, and unbound
 probe evidence. A probe definition change changes its fingerprint and makes evidence
 recorded against the prior definition stale.
 
+Discovery is a bounded tooling operation, not a filename convention or a product
+language construct. Before parsing probe content, tooling MUST visit no more than
+256 source-tree entries, accept no more than 64 regular probe files, and reject a
+probe file larger than 1 MiB. It MUST reject rather than follow symbolic links.
+Each accepted probe has at most 64 steps. A verification invocation executes no
+more than 64 bound probes, no more than 64 steps per probe, and has a 15-minute
+total wall-clock budget; a step has a 60-second wall-clock budget and at most 1 MiB
+of captured output. Reaching any limit rejects the operation without treating
+unvisited probes or incomplete execution as passing evidence. These limits bound
+tooling resources only; bindings remain the owner-approved policy that selects
+which probe IDs cover which obligations.
+
 ## State synchronization
 
 From a locked product repository, `pml sync`:
@@ -102,16 +114,24 @@ From a locked product repository, `pml sync`:
   fingerprints under which it was recorded, or clears it when policy reconciliation
   cannot preserve that stale association.
 
-`pml sync` MUST NOT execute probes, manufacture evidence, infer implementation
+After reconciliation, `pml sync` runs the same bounded deterministic verification
+defined below, so current passing probes may restore only their configured coverage.
+This preserves the approved sync behavior in [0003](0003-product-state.md#sync-and-ci)
+and [0004](0004-language-normalization.md#verification-boundary). It MUST NOT
+manufacture agent-judgment or human-attestation evidence, infer implementation
 progress, rewrite evidence fingerprints to make old evidence current, or alter the
-definition or bindings.
+definition or bindings. If reconciliation or deterministic verification cannot
+complete, sync leaves the affected evidence stale or records the actual failed or
+blocked deterministic result; it never silently refreshes stale evidence.
 
 ## Deterministic verification
 
 From a locked product repository, `pml verify` runs deterministic probes only. It:
 
 1. resolves and validates the locked definition, bindings, and probe definitions;
-2. selects every deterministic probe required by the bindings;
+2. independently discovers probe definitions under the locked source root, then
+   selects every bound deterministic probe subject to the discovery and execution
+   limits above;
 3. executes its declared steps;
 4. constructs the standard verification-report representation in memory;
 5. passes that result through the same ingestion validation boundary used for
@@ -128,12 +148,60 @@ Developer-managed agents and human workflows produce verification reports outsid
 PML. `pml ingest-report <report>` is their only supported state mutation boundary;
 external producers MUST NOT directly edit generated state.
 
-One report may cover one obligation, several features or components, or the whole
-project. It uses flat lists of fully qualified obligation IDs rather than duplicating
-the PML hierarchy. A report may contain either or both of:
+One report may cover one obligation, several features or components, or an entire
+project that fits the limits below. It uses flat lists of fully qualified obligation
+IDs rather than duplicating the PML hierarchy. A report is bounded before parsing:
+its UTF-8 representation is at most 1 MiB, it contains at most 64 declared targets, 64 implementation
+assessments, and 256 checks, and each text field is at most 4,096 Unicode code
+points. It may contain either or both of:
 
 - `implementation` assessments with `target`, `status`, and `observation`; and
 - verification `checks` using an approved evidence method.
+
+The report format is a closed map. The following is its canonical field grammar;
+future schema and semantic-validator work MUST implement this grammar before this
+workflow is implemented:
+
+```text
+identifier        = [a-z][a-z0-9_]*
+digest            = "sha256:" followed by 64 lowercase hexadecimal digits
+recorded-time     = RFC 3339 UTC timestamp ending in "Z"
+text              = non-empty Unicode scalar string, at most 4,096 code points
+obligation-id     = a resolved fully qualified product or architecture obligation ID
+
+report            = {
+  verification: identifier, version: text, recorded: recorded-time,
+  environment: isolated | local_integrated | staging | production,
+  verifier: {agent: identifier, provider: identifier, model: identifier,
+             effort: low | medium | high},
+  targets: unique non-empty list[obligation-id],
+  verdict: verified | failed | incomplete | blocked,
+  implementation?: list[implementation-assessment],
+  checks?: list[verification-check], limitations: list[text]
+}
+implementation-assessment = {
+  target: obligation-id,
+  status: implemented | partial | missing | unknown,
+  observation: text
+}
+verification-check = deterministic-check | agent-judgment-check | human-attestation-check
+common-check       = {target: obligation-id,
+                      result: passed | failed | blocked | not_evaluated,
+                      observation: text}
+deterministic-check = common-check + {method: deterministic_probe,
+                                      probe: identifier,
+                                      evidence?: unique list[text]}
+agent-judgment-check = common-check + {method: agent_judgment,
+                                       reproduction: non-empty list[text] of at most 32 items}
+human-attestation-check = common-check + {method: human_attestation,
+                                          attester: identifier}
+```
+
+At least one of `implementation` or `checks` is non-empty. Each assessment target
+and check target MUST also occur in `targets`; duplicate `(target, method)` checks
+and duplicate implementation targets are invalid. A deterministic `probe` MUST be
+an approved probe ID for the check's target. Unknown fields, targets, methods,
+statuses, and enum values are invalid.
 
 Implementation assessment and verification evidence remain independent. An
 implementation status never contributes verification coverage.
@@ -152,10 +220,16 @@ yet represented in PML requires a separate authored definition change.
 
 ## Evidence origin
 
-Accepted agent-judgment evidence records who produced it and the exact report from
-which it came. Generated state stores:
+Every accepted implementation assessment and evidence record, including a
+deterministic result synthesized by `sync` or `verify`, records who produced it and
+the exact report representation from which it came. `verification` is the canonical
+report ID. The canonical report digest is the `digest` production above computed
+over the schema- and semantics-valid report encoded as UTF-8 JSON with object keys
+sorted lexicographically, array order preserved, non-ASCII characters encoded
+directly, and no insignificant whitespace. A producer-supplied digest is not
+trusted or accepted as a substitute for this computed digest. Generated state stores:
 
-- the report ID and canonical report digest;
+- the canonical report ID and computed report digest;
 - recorded time;
 - agent, provider, model, and effort;
 - result and observation; and
@@ -187,3 +261,9 @@ operations.
 `pml check` validates the locked artifacts and generated ledger. `pml status` and
 `pml architecture-status` read state and derive their respective views; they do not
 write evidence.
+
+## Delivery boundary
+
+This is a design decision only. It adds no schema, semantic-validator, formatter,
+compiler, or CLI implementation. Those changes follow the repository development
+workflow after the workflow semantics are accepted.
