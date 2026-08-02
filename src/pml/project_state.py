@@ -34,6 +34,11 @@ MAX_PRODUCT_STATE_ENTRIES = 64
 # visited while discovering state so a tree containing no state files cannot force
 # an unbounded recursive traversal. This is a tooling limit, not PML syntax.
 MAX_PRODUCT_STATE_SCAN_ENTRIES = 64
+# Owner-binding boundary checks inspect product-controlled paths. Cap their
+# recursive traversal so a large in-repository directory cannot exhaust the
+# validator before an escaping path is found. This is a tooling limit, not PML
+# syntax.
+MAX_BOUNDARY_SCAN_ENTRIES = 64
 # Generated state is tooling output and currently measures well under 1 KiB in the
 # conformance examples. One MiB leaves ample room for obligations and evidence while
 # bounding memory used before YAML parsing. This is not a PML language constraint.
@@ -164,11 +169,14 @@ def _bounded_product_state_paths(
     return state_paths, False
 
 
-def outside_repository_paths(repo_root: Path, paths: list[str]) -> list[str]:
-    """Return bound paths or descendants that resolve outside the product repository."""
+def outside_repository_paths(
+    repo_root: Path, paths: list[str]
+) -> tuple[list[str], bool]:
+    """Return escaped bound paths and whether bounded traversal was exhausted."""
 
     resolved_root = repo_root.resolve()
     escaped: list[str] = []
+    scanned_entries = 0
     for binding in paths:
         target = repo_root / binding.rstrip("/")
         try:
@@ -177,12 +185,28 @@ def outside_repository_paths(repo_root: Path, paths: list[str]) -> list[str]:
             escaped.append(binding)
             continue
         if target.is_dir():
-            for child in sorted(target.rglob("*")):
+            pending = [target]
+            while pending:
+                directory = pending.pop()
                 try:
-                    child.resolve().relative_to(resolved_root)
-                except ValueError:
-                    escaped.append(child.relative_to(repo_root).as_posix())
-    return escaped
+                    with os.scandir(directory) as entries:
+                        for entry in entries:
+                            if scanned_entries == MAX_BOUNDARY_SCAN_ENTRIES:
+                                return escaped, True
+                            scanned_entries += 1
+                            child = Path(entry.path)
+                            try:
+                                child.resolve().relative_to(resolved_root)
+                            except ValueError:
+                                escaped.append(
+                                    child.relative_to(repo_root).as_posix()
+                                )
+                                continue
+                            if entry.is_dir(follow_symlinks=False):
+                                pending.append(child)
+                except OSError:
+                    continue
+    return escaped, False
 
 
 def _schema_diagnostics(path: Path, document: dict[str, Any], schema_name: str) -> list[Diagnostic]:
@@ -301,13 +325,20 @@ def _bindings_semantic_diagnostics(
         )
         for section, section_bindings in binding_sections:
             for node_id, binding in section_bindings.items():
-                for escaped_path in outside_repository_paths(
+                escaped_paths, scan_limit_reached = outside_repository_paths(
                     repo_root, binding["paths"]
-                ):
+                )
+                for escaped_path in escaped_paths:
                     diagnostics.append(Diagnostic(
                         f"{path}:{section}.{node_id}.paths",
                         "outside-repository",
                         f"binding '{escaped_path}' resolves outside the product repository",
+                    ))
+                if scan_limit_reached:
+                    diagnostics.append(Diagnostic(
+                        f"{path}:{section}.{node_id}.paths",
+                        "binding-scan-limit",
+                        "binding path contains too many entries to validate safely",
                     ))
     return diagnostics
 

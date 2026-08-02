@@ -9,6 +9,7 @@ from pml.obligations import Obligation, enumerate_architecture_obligations, enum
 from pml.cli import main
 from pml.project_state import (
     MAX_ARCHITECTURE_STATE_ENTRIES,
+    MAX_BOUNDARY_SCAN_ENTRIES,
     MAX_PRODUCT_STATE_ENTRIES,
     MAX_PRODUCT_STATE_SCAN_ENTRIES,
     MAX_STATE_FILE_BYTES,
@@ -1029,6 +1030,33 @@ def test_architecture_binding_rejects_child_symlink_outside_product_repository(t
         product, document, definition_source=manifest
     )
     assert any(item.code == "outside-repository" and "runtime/selection" in item.message for item in diagnostics)
+
+
+def test_architecture_binding_limits_in_repository_boundary_scan(
+    tmp_path: Path,
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = "architecture.durable_store.constraints.preserve_committed_records"
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation: {"agent_judgment": 1.0}},
+        }
+    })
+    runtime = product / "runtime"
+    runtime.mkdir()
+    for index in range(MAX_BOUNDARY_SCAN_ENTRIES + 1):
+        (runtime / f"in_repository_{index}").write_text("ordinary input\n")
+
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
+
+    assert any(item.code == "binding-scan-limit" for item in diagnostics)
 
 
 def test_architecture_decision_without_constraints_requires_no_state_or_binding(tmp_path: Path) -> None:
