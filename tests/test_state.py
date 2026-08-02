@@ -9,6 +9,7 @@ from pml.obligations import Obligation, enumerate_architecture_obligations, enum
 from pml.cli import main
 from pml.project_state import (
     MAX_ARCHITECTURE_STATE_ENTRIES,
+    MAX_PRODUCT_STATE_ENTRIES,
     MAX_STATE_FILE_BYTES,
     LockedBindings,
     bindings_digest,
@@ -392,6 +393,34 @@ def test_state_size_limit_is_checked_before_yaml_parsing(
 
     assert state is None
     assert [item.code for item in diagnostics] == ["state-size"]
+
+
+def test_product_state_limits_discovered_generated_state_files(
+    tmp_path: Path, monkeypatch
+) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    state_root = product / ".pml" / "state"
+    overflow = state_root / "overflow"
+    overflow.mkdir()
+    for index in range(MAX_PRODUCT_STATE_ENTRIES + 1):
+        (overflow / f"unexpected_{index}.state.yaml").write_text("not state\n")
+
+    loaded: list[Path] = []
+
+    def record_load(path: Path) -> tuple[None, list]:
+        loaded.append(path)
+        return None, []
+
+    monkeypatch.setattr("pml.project_state.load_state", record_load)
+    diagnostics = validate_product_state(
+        product, document, definition_source=manifest
+    )
+
+    assert len(loaded) == min(MAX_PRODUCT_STATE_ENTRIES, 2)
+    assert [item.code for item in diagnostics] == ["state-limit"]
 
 
 def test_approved_bindings_change_makes_existing_evidence_stale(

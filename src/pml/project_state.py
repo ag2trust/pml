@@ -25,6 +25,10 @@ from pml.validator import Diagnostic, UniqueKeyLoader, _load, _path, load_docume
 
 ROOT = Path(__file__).resolve().parents[2]
 MAX_ARCHITECTURE_STATE_ENTRIES = 64
+# State discovery is also bounded so an untrusted product repository cannot make
+# validation retain or diagnose an unbounded number of generated files. This is a
+# tooling limit, not a PML language constraint.
+MAX_PRODUCT_STATE_ENTRIES = 64
 # Generated state is tooling output and currently measures well under 1 KiB in the
 # conformance examples. One MiB leaves ample room for obligations and evidence while
 # bounding memory used before YAML parsing. This is not a PML language constraint.
@@ -440,7 +444,22 @@ def validate_product_state(
         expected_path = state_root.joinpath(*node_id.split(".")).with_suffix(".state.yaml")
         if not expected_path.is_file():
             diagnostics.append(Diagnostic(str(expected_path), "missing-state", f"node '{node_id}' has no state file"))
-    for state_path in sorted(state_root.rglob("*.state.yaml")) if state_root.exists() else []:
+    state_paths: list[Path] = []
+    if state_root.exists():
+        # Allow every approved node and one extra file to be diagnosed, subject to
+        # the absolute tooling cap. Do not sort the rglob iterator: sorting it
+        # would materialize every generated state path before this limit applies.
+        max_state_files = min(MAX_PRODUCT_STATE_ENTRIES, max(1, len(nodes)) + 1)
+        for state_path in state_root.rglob("*.state.yaml"):
+            if len(state_paths) == max_state_files:
+                diagnostics.append(Diagnostic(
+                    str(state_root),
+                    "state-limit",
+                    "product state contains too many files",
+                ))
+                break
+            state_paths.append(state_path)
+    for state_path in sorted(state_paths):
         state, errors = load_state(state_path)
         diagnostics.extend(errors)
         if state is None:
