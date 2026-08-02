@@ -36,6 +36,19 @@ reactions with `on` for direct consequences. Signals never require code events.
 Use untyped `related_to` paths when changes in either feature/component should affect
 the other's verification freshness.
 
+## Record architecture decisions independently
+
+Use the optional top-level `architecture` registry only for a technical selection
+that needs Owner approval even when product behavior would still be correct. A
+decision has a closed category, canonical `selection` and `rationale`, and optional
+ID-keyed normative `constraints`. Reference its ID from the affected feature or
+component; do not use `applies_to`, `supports`, inline definitions, or recursive
+decisions. Every decision needs at least one reference.
+
+Architecture constraints use external verification bindings and generated evidence
+separately from product obligations. Do not use architecture to name files,
+functions, classes, tables, endpoints, configuration syntax, or topology.
+
 ## Keep verification external
 
 The compiler resolves authored behavior into stable obligations. Product-local

@@ -6,7 +6,15 @@ import yaml
 from pml.cli import main
 from pml.ingest import ingest_report
 from pml.probes import load_probes, probe_fingerprint
-from pml.project_state import validate_probe_evidence, validate_product_state
+from pml.project_state import (
+    MAX_STATE_FILE_BYTES,
+    bindings_digest,
+    canonical_hash,
+    input_fingerprint,
+    validate_probe_evidence,
+    validate_product_state,
+)
+from pml.status import product_status
 from pml.validator import load_document
 
 
@@ -56,9 +64,33 @@ limitations: []
 
 
 def product_copy(tmp_path: Path) -> Path:
+    owner_source = tmp_path / "product-pml"
+    owner_source.mkdir()
+    shutil.copy(ROOT / "examples" / "minimal.pml.yaml", owner_source)
+    shutil.copy(ROOT / "examples" / "bindings.yaml", owner_source)
     product = tmp_path / "product"
     shutil.copytree(ROOT / "examples" / "product-repository", product)
+    lock_path = product / ".pml" / "pml.lock"
+    lock = yaml.safe_load(lock_path.read_text())
+    lock["definition"]["source"] = "../product-pml/minimal.pml.yaml"
+    lock_path.write_text(yaml.safe_dump(lock, sort_keys=False))
     return product
+
+
+def owner_bindings_path(product: Path) -> Path:
+    return product.parent / "product-pml" / "bindings.yaml"
+
+
+def owner_definition_path(product: Path) -> Path:
+    return product.parent / "product-pml" / "minimal.pml.yaml"
+
+
+def approve_bindings(product: Path, bindings: dict) -> None:
+    owner_bindings_path(product).write_text(yaml.safe_dump(bindings, sort_keys=False))
+    lock_path = product / ".pml" / "pml.lock"
+    lock = yaml.safe_load(lock_path.read_text())
+    lock["bindings"]["digest"] = bindings_digest(bindings)
+    lock_path.write_text(yaml.safe_dump(lock, sort_keys=False))
 
 
 def test_ingests_current_probe_evidence(tmp_path: Path) -> None:
@@ -72,9 +104,24 @@ def test_ingests_current_probe_evidence(tmp_path: Path) -> None:
     probes, diagnostics = load_probes(probe_path, definition)
     assert diagnostics == []
 
-    assert ingest_report(report_path, product, definition, probes) == []
-    assert validate_product_state(product, definition) == []
-    assert validate_probe_evidence(product, definition, probes) == []
+    assert ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
+    assert validate_product_state(
+        product,
+        definition,
+        definition_source=owner_definition_path(product),
+    ) == []
+    assert validate_probe_evidence(
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
 
     state_path = (
         product
@@ -97,29 +144,139 @@ def test_cli_ingests_valid_report(tmp_path: Path) -> None:
 
     assert main([
         "ingest-report",
-        str(ROOT / "examples" / "minimal.pml.yaml"),
+        str(owner_definition_path(product)),
         str(product),
         str(probe_path),
         str(report_path),
     ]) == 0
 
 
+def test_ingestion_rejects_mismatched_bindings_digest_without_writing(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    probes, _ = load_probes(probe_path, definition)
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_text()
+    lock_path = product / ".pml" / "pml.lock"
+    lock = yaml.safe_load(lock_path.read_text())
+    lock["bindings"]["digest"] = f"sha256:{'0' * 64}"
+    lock_path.write_text(yaml.safe_dump(lock, sort_keys=False))
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+
+    assert {item.code for item in diagnostics} == {"bindings-digest"}
+    assert state_path.read_text() == original
+
+
+def test_partial_ingestion_clears_evidence_from_prior_bindings(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    bindings_path = owner_bindings_path(product)
+    bindings = yaml.safe_load(bindings_path.read_text())
+    plan = bindings["bindings"]["domains.notes.features.creation"][
+        "verification"
+    ][OBLIGATION]
+    plan["probes"]["preserve_content"] = 0.5
+    plan["agent_judgment"] = 0.5
+    approve_bindings(product, bindings)
+
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    state = yaml.safe_load(state_path.read_text())
+    state["bindings_digest"] = bindings_digest(bindings)
+    state["obligations"][OBLIGATION]["evidence"]["agent_judgment"] = {
+        "result": "passed",
+        "input_fingerprint": state["input_fingerprint"],
+        "recorded": "2026-07-31T10:00:00Z",
+        "observation": "Passed under the prior coverage policy.",
+        "reproduction": ["Evaluate the obligation."],
+    }
+    state_path.write_text(yaml.safe_dump(state, sort_keys=False))
+
+    plan["probes"]["preserve_content"] = 0.75
+    plan["agent_judgment"] = 0.25
+    approve_bindings(product, bindings)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    probes, probe_diagnostics = load_probes(
+        probe_path, definition, bindings
+    )
+    assert probe_diagnostics == []
+
+    assert ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
+
+    reconciled = yaml.safe_load(state_path.read_text())
+    evidence = reconciled["obligations"][OBLIGATION]["evidence"]
+    assert set(evidence) == {"deterministic_probe"}
+    assert reconciled["bindings_digest"] == bindings_digest(bindings)
+    statuses = product_status(
+        product,
+        definition,
+        definition_source=owner_definition_path(product),
+    )
+    preserve_status = next(
+        item
+        for node in statuses
+        for item in node.obligations
+        if item.obligation_id == OBLIGATION
+    )
+    assert (preserve_status.signal, preserve_status.verified_coverage) == (
+        "PARTIAL",
+        0.75,
+    )
+
+
 def test_rejects_probe_without_coverage_binding(tmp_path: Path) -> None:
     definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
     assert definition is not None
     product = product_copy(tmp_path)
-    bindings_path = product / ".pml" / "bindings.yaml"
+    bindings_path = owner_bindings_path(product)
     bindings = yaml.safe_load(bindings_path.read_text())
     plans = bindings["bindings"]["domains.notes.features.creation"]["verification"]
     plans[OBLIGATION] = {"agent_judgment": 1.0}
-    bindings_path.write_text(yaml.safe_dump(bindings, sort_keys=False))
+    approve_bindings(product, bindings)
     probe_path = tmp_path / "preserve.probe.yaml"
     report_path = tmp_path / "report.yaml"
     write_probe(probe_path)
     write_report(report_path)
     probes, _ = load_probes(probe_path, definition)
 
-    diagnostics = ingest_report(report_path, product, definition, probes)
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
 
     assert any(item.code == "unbound-probe" for item in diagnostics)
 
@@ -130,7 +287,7 @@ def test_reports_missing_verification_plan_without_follow_on_errors(
     definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
     assert definition is not None
     product = product_copy(tmp_path)
-    bindings_path = product / ".pml" / "bindings.yaml"
+    bindings_path = owner_bindings_path(product)
     bindings = yaml.safe_load(bindings_path.read_text())
     plans = bindings["bindings"]["domains.notes.features.creation"]["verification"]
     del plans[OBLIGATION]
@@ -141,7 +298,13 @@ def test_reports_missing_verification_plan_without_follow_on_errors(
     write_report(report_path)
     probes, _ = load_probes(probe_path, definition)
 
-    diagnostics = ingest_report(report_path, product, definition, probes)
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
 
     assert [item.code for item in diagnostics] == ["missing-verification-plan"]
 
@@ -162,10 +325,46 @@ def test_invalid_existing_state_is_not_overwritten(tmp_path: Path) -> None:
     write_report(report_path)
     probes, _ = load_probes(probe_path, definition)
 
-    diagnostics = ingest_report(report_path, product, definition, probes)
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
 
     assert any(item.code == "yaml" for item in diagnostics)
     assert state_path.read_text() == original
+
+
+def test_oversized_product_state_is_not_read_or_overwritten(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    oversized = b"x" * (MAX_STATE_FILE_BYTES + 1)
+    state_path.write_bytes(oversized)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    probes, _ = load_probes(probe_path, definition)
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+
+    assert [item.code for item in diagnostics] == ["state-size"]
+    assert state_path.read_bytes() == oversized
 
 
 def test_report_requires_method_specific_identity(tmp_path: Path) -> None:
@@ -178,7 +377,13 @@ def test_report_requires_method_specific_identity(tmp_path: Path) -> None:
     del report["checks"][0]["probe"]
     report_path.write_text(yaml.safe_dump(report, sort_keys=False))
 
-    diagnostics = ingest_report(report_path, product, definition, {})
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    )
 
     assert any(item.code == "schema" for item in diagnostics)
 
@@ -195,7 +400,13 @@ def test_agent_report_requires_nonempty_reproduction(tmp_path: Path) -> None:
     report["checks"][0]["reproduction"] = []
     report_path.write_text(yaml.safe_dump(report, sort_keys=False))
 
-    diagnostics = ingest_report(report_path, product, definition, {})
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    )
 
     assert any(item.code == "schema" for item in diagnostics)
 
@@ -211,7 +422,13 @@ def test_report_rejects_empty_probe_and_artifact_identifiers(tmp_path: Path) -> 
     report["checks"][0]["evidence"] = []
     report_path.write_text(yaml.safe_dump(report, sort_keys=False))
 
-    diagnostics = ingest_report(report_path, product, definition, {})
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    )
 
     assert {item.code for item in diagnostics} == {"schema"}
 
@@ -229,7 +446,13 @@ def test_probe_artifacts_are_preserved(tmp_path: Path) -> None:
     report_path.write_text(yaml.safe_dump(report, sort_keys=False))
     probes, _ = load_probes(probe_path, definition)
 
-    assert ingest_report(report_path, product, definition, probes) == []
+    assert ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
 
     state_path = (
         product
@@ -240,3 +463,198 @@ def test_probe_artifacts_are_preserved(tmp_path: Path) -> None:
         "deterministic_probe"
     ]["preserve_content"]
     assert record["artifacts"] == ["evidence/preserve-content.json"]
+
+
+def test_ingests_architecture_evidence_with_architecture_bound_paths(tmp_path: Path) -> None:
+    definition, diagnostics = load_document(ROOT / "examples" / "architecture-decisions.pml.yaml")
+    assert diagnostics == []
+    assert definition is not None
+    owner = tmp_path / "product-pml"
+    owner.mkdir()
+    manifest = owner / "architecture-decisions.pml.yaml"
+    manifest.write_text(yaml.safe_dump(definition, sort_keys=False))
+    product = tmp_path / "product"
+    metadata = product / ".pml"
+    metadata.mkdir(parents=True)
+    runtime = product / "runtime"
+    runtime.mkdir()
+    (runtime / "selection").write_text("approved\n")
+    obligation = "architecture.durable_store.constraints.preserve_committed_records"
+    product_obligation = (
+        "domains.records.features.preservation.rules.record_remains_available"
+    )
+    bindings = {
+        "pml_bindings": "0.1",
+        "bindings": {
+            "domains.records.features.preservation": {
+                "paths": ["runtime"],
+                "verification": {
+                    product_obligation: {"agent_judgment": 1.0}
+                },
+            }
+        },
+        "architecture": {
+            "durable_store": {
+                "paths": ["runtime"],
+                "verification": {obligation: {"agent_judgment": 1.0}},
+            }
+        },
+    }
+    (owner / "bindings.yaml").write_text(yaml.safe_dump(bindings, sort_keys=False))
+    (metadata / "pml.lock").write_text(yaml.safe_dump({
+        "pml_lock": "0.1",
+        "definition": {
+            "source": str(manifest),
+            "revision": "approved",
+            "digest": canonical_hash(definition),
+        },
+        "bindings": {"digest": bindings_digest(bindings)},
+    }, sort_keys=False))
+    report = tmp_path / "architecture-report.yaml"
+    report.write_text("\n".join([
+        "verification: architecture_run",
+        "version: working_tree",
+        'recorded: "2026-07-29T10:00:00Z"',
+        "environment: local_integrated",
+        "verifier:",
+        "  agent: verifier",
+        "  provider: pml",
+        "  model: verifier",
+        "  effort: low",
+        "targets: [architecture.durable_store]",
+        "verdict: verified",
+        "checks:",
+        f"  - target: {obligation}",
+        "    result: passed",
+        "    method: agent_judgment",
+        "    observation: The approved store preserves committed records.",
+        "    reproduction: [Run the approved preservation check.]",
+        "limitations: []",
+        "",
+    ]))
+    assert ingest_report(
+        report,
+        product,
+        definition,
+        {},
+        definition_source=manifest,
+    ) == []
+    state = yaml.safe_load((metadata / "architecture" / "durable_store.state.yaml").read_text())
+    assert state["bindings_digest"] == bindings_digest(bindings)
+    assert state["input_fingerprint"] == input_fingerprint(product, ["runtime"])
+    assert state["obligations"][obligation]["evidence"]["agent_judgment"]["input_fingerprint"] == state["input_fingerprint"]
+
+    state_path = metadata / "architecture" / "durable_store.state.yaml"
+    oversized = b"x" * (MAX_STATE_FILE_BYTES + 1)
+    state_path.write_bytes(oversized)
+    oversized_diagnostics = ingest_report(
+        report,
+        product,
+        definition,
+        {},
+        definition_source=manifest,
+    )
+    assert [item.code for item in oversized_diagnostics] == ["state-size"]
+    assert state_path.read_bytes() == oversized
+
+
+def test_ingestion_reconciles_added_architecture_constraint(tmp_path: Path) -> None:
+    definition, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert definition is not None
+    owner = tmp_path / "product-pml"
+    owner.mkdir()
+    manifest = owner / "architecture-decisions.pml.yaml"
+    product = tmp_path / "product"
+    metadata = product / ".pml"
+    metadata.mkdir(parents=True)
+    runtime = product / "runtime"
+    runtime.mkdir()
+    original_obligation = (
+        "architecture.durable_store.constraints.preserve_committed_records"
+    )
+    added_obligation = "architecture.durable_store.constraints.recoverable_records"
+    bindings = {
+        "pml_bindings": "0.1",
+        "bindings": {
+            "domains.records.features.preservation": {
+                "paths": ["runtime"],
+                "verification": {
+                    "domains.records.features.preservation.rules.record_remains_available": {
+                        "agent_judgment": 1.0
+                    }
+                },
+            }
+        },
+        "architecture": {
+            "durable_store": {
+                "paths": ["runtime"],
+                "verification": {original_obligation: {"agent_judgment": 1.0}},
+            }
+        },
+    }
+    manifest.write_text(yaml.safe_dump(definition, sort_keys=False))
+    (owner / "bindings.yaml").write_text(yaml.safe_dump(bindings, sort_keys=False))
+    lock_path = metadata / "pml.lock"
+    lock = {
+        "pml_lock": "0.1",
+        "definition": {
+            "source": str(manifest),
+            "revision": "approved",
+            "digest": canonical_hash(definition),
+        },
+        "bindings": {"digest": bindings_digest(bindings)},
+    }
+    lock_path.write_text(yaml.safe_dump(lock, sort_keys=False))
+    report = tmp_path / "architecture-report.yaml"
+    report.write_text("\n".join([
+        "verification: architecture_run",
+        "version: working_tree",
+        'recorded: "2026-08-01T10:00:00Z"',
+        "environment: local_integrated",
+        "verifier:",
+        "  agent: verifier",
+        "  provider: pml",
+        "  model: verifier",
+        "  effort: low",
+        "targets: [architecture.durable_store]",
+        "verdict: verified",
+        "checks:",
+        f"  - target: {original_obligation}",
+        "    result: passed",
+        "    method: agent_judgment",
+        "    observation: The approved store preserves committed records.",
+        "    reproduction: [Run the approved preservation check.]",
+        "limitations: []",
+        "",
+    ]))
+    assert ingest_report(
+        report, product, definition, {}, definition_source=manifest
+    ) == []
+
+    definition["architecture"]["durable_store"]["constraints"][
+        "recoverable_records"
+    ] = {"statement": "The durable store MUST recover committed records."}
+    bindings["architecture"]["durable_store"]["verification"][
+        added_obligation
+    ] = {"agent_judgment": 1.0}
+    manifest.write_text(yaml.safe_dump(definition, sort_keys=False))
+    (owner / "bindings.yaml").write_text(yaml.safe_dump(bindings, sort_keys=False))
+    lock["definition"]["digest"] = canonical_hash(definition)
+    lock["bindings"]["digest"] = bindings_digest(bindings)
+    lock_path.write_text(yaml.safe_dump(lock, sort_keys=False))
+    report_data = yaml.safe_load(report.read_text())
+    report_data["checks"][0]["target"] = added_obligation
+    report_data["checks"][0]["observation"] = "The approved store recovers committed records."
+    report.write_text(yaml.safe_dump(report_data, sort_keys=False))
+
+    assert ingest_report(
+        report, product, definition, {}, definition_source=manifest
+    ) == []
+    state = yaml.safe_load(
+        (metadata / "architecture" / "durable_store.state.yaml").read_text()
+    )
+    assert set(state["obligations"]) == {original_obligation, added_obligation}
+    assert state["obligations"][added_obligation]["evidence"]["agent_judgment"]["result"] == "passed"

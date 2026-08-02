@@ -6,9 +6,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pml.obligations import Obligation, enumerate_obligations, iter_nodes, verification_plan
-from pml.project_state import input_fingerprint
-from pml.validator import _load
+from pml.obligations import Obligation, enumerate_architecture_obligations, enumerate_obligations, iter_architecture, iter_nodes, verification_plan
+from pml.project_state import (
+    LockedBindings,
+    architecture_state_root_diagnostics,
+    canonical_hash,
+    input_fingerprint,
+    load_locked_bindings,
+    load_state,
+    state_path_for,
+)
+from pml.validator import Diagnostic
 
 
 @dataclass(frozen=True)
@@ -105,10 +113,23 @@ def derive_obligation_status(
     return ObligationStatus(obligation.id, signal, min(verified_coverage, 1.0))
 
 
-def product_status(repo_root: Path, definition: dict[str, Any]) -> list[NodeStatus]:
+def product_status(
+    repo_root: Path,
+    definition: dict[str, Any],
+    locked_bindings: LockedBindings | None = None,
+    *,
+    definition_source: Path | None = None,
+    state_diagnostics: list[Diagnostic] | None = None,
+) -> list[NodeStatus]:
     metadata = repo_root / ".pml"
-    bindings, _ = _load(metadata / "bindings.yaml")
-    binding_map = bindings.get("bindings", {}) if bindings else {}
+    if locked_bindings is None:
+        locked_bindings, _ = load_locked_bindings(
+            repo_root, definition, definition_source
+        )
+    if locked_bindings is None:
+        return []
+    bindings = locked_bindings.document
+    binding_map = bindings["bindings"]
     nodes = dict(iter_nodes(definition))
     result: list[NodeStatus] = []
     implementation_weight = {"implemented": 1.0, "partial": 0.5, "missing": 0.0, "unknown": 0.0}
@@ -116,11 +137,14 @@ def product_status(repo_root: Path, definition: dict[str, Any]) -> list[NodeStat
     for node_id, node in nodes.items():
         state_path = metadata / "state" / Path(*node_id.split("."))
         state_path = state_path.with_suffix(".state.yaml")
-        state, _ = _load(state_path)
+        state, errors = load_state(state_path)
+        if state_diagnostics is not None:
+            state_diagnostics.extend(errors)
         state = state or {"obligations": {}, "related_fingerprints": {}}
+        policy_current = state.get("bindings_digest") == locked_bindings.digest
         paths = binding_map.get(node_id, {}).get("paths", [])
         current_input = input_fingerprint(repo_root, paths)
-        related_current = True
+        related_current = policy_current
         related_nodes = set(node.get("related_to", []))
         related_nodes.update(
             other_id for other_id, other in nodes.items()
@@ -146,8 +170,81 @@ def product_status(repo_root: Path, definition: dict[str, Any]) -> list[NodeStat
                 obligation_state,
                 current_input,
                 related_current,
-                verification_plan(bindings or {}, obligation),
+                verification_plan(bindings, obligation),
             )
+            statuses.append(status)
+            coverage_total += status.verified_coverage
+        result.append(NodeStatus(
+            node_id=node_id,
+            implementation_percent=(100.0 * implemented_total / len(obligations)) if obligations else 100.0,
+            verification_percent=(100.0 * coverage_total / len(obligations)) if obligations else 100.0,
+            obligations=tuple(statuses),
+        ))
+    return result
+
+
+def architecture_status(
+    repo_root: Path,
+    definition: dict[str, Any],
+    locked_bindings: LockedBindings | None = None,
+    *,
+    definition_source: Path | None = None,
+    state_diagnostics: list[Diagnostic] | None = None,
+) -> list[NodeStatus]:
+    """Derive architecture conformance separately from product conformance."""
+
+    if locked_bindings is None:
+        locked_bindings, _ = load_locked_bindings(
+            repo_root, definition, definition_source
+        )
+    if locked_bindings is None:
+        return []
+    root_errors = architecture_state_root_diagnostics(repo_root)
+    if root_errors:
+        if state_diagnostics is not None:
+            state_diagnostics.extend(root_errors)
+        return []
+    bindings = locked_bindings.document
+    binding_map = bindings.get("architecture", {})
+    result: list[NodeStatus] = []
+    implementation_weight = {"implemented": 1.0, "partial": 0.5, "missing": 0.0, "unknown": 0.0}
+    for node_id, decision in iter_architecture(definition):
+        obligations = list(enumerate_architecture_obligations(definition, node_id))
+        if not obligations:
+            continue
+        decision_id = node_id.removeprefix("architecture.")
+        state_path = state_path_for(repo_root, node_id)
+        if state_path.is_symlink():
+            state = None
+            errors = [Diagnostic(
+                str(state_path),
+                "state-path",
+                "architecture state file must not be a symbolic link",
+            )]
+        else:
+            state, errors = load_state(state_path)
+        if state is not None and state["node"] != node_id:
+            errors.append(Diagnostic(
+                f"{state_path}:node",
+                "state-path",
+                f"state for '{state['node']}' must be at {state_path_for(repo_root, state['node'])}",
+            ))
+            state = None
+        if state_diagnostics is not None:
+            state_diagnostics.extend(errors)
+        state = state or {"obligations": {}}
+        policy_current = (
+            state.get("definition_hash") == canonical_hash(decision)
+            and state.get("bindings_digest") == locked_bindings.digest
+        )
+        current_input = input_fingerprint(repo_root, binding_map.get(decision_id, {}).get("paths", []))
+        statuses: list[ObligationStatus] = []
+        implemented_total = 0.0
+        coverage_total = 0.0
+        for obligation in obligations:
+            obligation_state = state["obligations"].get(obligation.id, {"implemented": "unknown", "evidence": {}})
+            implemented_total += implementation_weight[obligation_state["implemented"]]
+            status = derive_obligation_status(obligation, obligation_state, current_input, policy_current, verification_plan(bindings, obligation))
             statuses.append(status)
             coverage_total += status.verified_coverage
         result.append(NodeStatus(

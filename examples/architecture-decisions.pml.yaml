@@ -1,0 +1,26 @@
+pml: "0.1-draft"
+
+project:
+  id: architecture_sample
+  name: Architecture Sample
+  purpose: Demonstrate independently approved architecture decisions.
+
+architecture:
+  durable_store:
+    category: database
+    selection: PostgreSQL
+    rationale: Owner approval is required to replace the approved durable store.
+    constraints:
+      preserve_committed_records:
+        statement: The durable store MUST preserve committed records across restarts.
+
+domains:
+  records:
+    purpose: Manage durable records.
+    features:
+      preservation:
+        purpose: Preserve a record across restarts.
+        architecture: [durable_store]
+        rules:
+          record_remains_available:
+            statement: A committed Record MUST remain available after a restart.

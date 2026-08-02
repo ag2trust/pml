@@ -60,10 +60,20 @@ product repository. `definition.revision` identifies the approved source revisio
 The two digests are separate so tooling can report whether behavior or verification
 policy changed.
 
+For product-state operations, the resolved `definition.source` MUST identify the
+exact definition file or modular source directory supplied as the approved
+definition. A content-equivalent redirect to another source is invalid and MUST NOT
+be used to select bindings.
+
 The definition digest covers the canonical approved definition. The bindings
 digest covers the canonical validated bindings. A missing or mismatched digest is
 an error; tooling MUST NOT evaluate current confidence against unpinned behavior or
 coverage policy.
+
+The canonical bindings digest is `sha256:` plus the lowercase SHA-256 hexadecimal
+digest of the schema- and semantics-valid document encoded as UTF-8 JSON. Object
+keys are sorted lexicographically, array order is preserved, non-ASCII characters
+are encoded directly, and no insignificant whitespace is emitted.
 
 ## State authority
 

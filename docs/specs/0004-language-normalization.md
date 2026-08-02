@@ -2,6 +2,7 @@
 
 Status: Owner approved
 Approved direction: 2026-07-27
+Artifact boundary superseded by [0005](0005-bindings-boundary.md)
 
 This decision records the canonical language model agreed during the PML reference
 review. It supersedes conflicting grammar in earlier draft documents.
@@ -46,8 +47,10 @@ other components through `related_to`.
 
 An obligation is a resolved tooling concept, not an authored section. Rules,
 reactions, and use-case outcomes produce stable obligation paths. Approved product
-definitions contain behavior only. Product-local bindings define verification
-methods and coverage. Generated state records evidence, scores, and freshness.
+definitions contain behavior only. Owner-controlled bindings stored beside the
+definition define verification methods and coverage; their implementation paths
+remain relative to the implementing product repository. Generated state remains
+product-local and records evidence, scores, and freshness.
 
 Changes to a node or a related node invalidate affected confidence. Sync may restore
 approved deterministic coverage by running probes; it cannot manufacture agentic or
@@ -59,3 +62,10 @@ Architecture is an optional flat registry of independently owner-mandated techni
 decisions. Features and components reference those decisions bottom-up. Architecture
 does not duplicate behavioral outcomes and technology existence is never conformance
 evidence.
+
+Architecture decisions have the canonical fields `category`, `selection`,
+`rationale`, and optional ID-keyed `constraints`. Categories are closed. Constraints
+resolve into architecture-only obligations and use external verification bindings and
+generated evidence independently of product obligations. Unreferenced decisions are
+invalid; `applies_to`, `supports`, inline decisions, and recursive decisions do not
+exist in the language.

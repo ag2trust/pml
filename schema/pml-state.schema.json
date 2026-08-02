@@ -4,11 +4,12 @@
   "title": "PML product node state 0.1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["pml_state", "node", "definition_hash", "input_fingerprint", "obligations"],
+  "required": ["pml_state", "node", "definition_hash", "bindings_digest", "input_fingerprint", "obligations"],
   "properties": {
     "pml_state": {"const": "0.1"},
     "node": {"type": "string", "minLength": 1},
     "definition_hash": {"$ref": "#/$defs/hash"},
+    "bindings_digest": {"$ref": "#/$defs/hash"},
     "input_fingerprint": {"$ref": "#/$defs/hash"},
     "related_fingerprints": {
       "type": "object",

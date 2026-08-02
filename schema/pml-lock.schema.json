@@ -4,7 +4,7 @@
   "title": "PML definition lock 0.1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["pml_lock", "definition"],
+  "required": ["pml_lock", "definition", "bindings"],
   "properties": {
     "pml_lock": {"const": "0.1"},
     "definition": {
@@ -14,6 +14,14 @@
       "properties": {
         "source": {"type": "string", "minLength": 1},
         "revision": {"type": "string", "minLength": 1},
+        "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest"],
+      "properties": {
         "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
       }
     }

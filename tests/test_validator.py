@@ -22,6 +22,49 @@ def test_minimal_example_is_valid() -> None:
     assert validate_file(ROOT / "examples" / "minimal.pml.yaml") == []
 
 
+def test_architecture_decisions_example_is_valid() -> None:
+    assert validate_file(ROOT / "examples" / "architecture-decisions.pml.yaml") == []
+
+
+def test_invalid_architecture_example_has_required_diagnostics() -> None:
+    diagnostics = validate_file(ROOT / "examples" / "architecture-invalid.pml.yaml")
+    assert {item.code for item in diagnostics} >= {
+        "schema",
+        "unreferenced-architecture",
+        "implementation-detail",
+    }
+
+
+def test_malformed_architecture_registry_returns_schema_diagnostics(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "examples" / "minimal.pml.yaml").read_text().replace(
+        "domains:\n", "architecture: []\ndomains:\n", 1
+    )
+    manifest = tmp_path / "malformed-architecture.pml.yaml"
+    manifest.write_text(source)
+
+    diagnostics = validate_file(manifest)
+
+    assert any(item.code == "schema" and item.path == "architecture" for item in diagnostics)
+
+
+def test_malformed_node_architecture_value_returns_schema_diagnostics(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "examples" / "minimal.pml.yaml").read_text().replace(
+        "        actors:\n",
+        "        architecture: [[invalid]]\n        actors:\n",
+        1,
+    )
+    manifest = tmp_path / "malformed-node-architecture.pml.yaml"
+    manifest.write_text(source)
+
+    diagnostics = validate_file(manifest)
+
+    assert any(item.code == "schema" and "architecture" in item.path for item in diagnostics)
+
+
 def test_invalid_example_has_documented_diagnostics() -> None:
     diagnostics = validate_file(ROOT / "examples" / "invalid.pml.yaml")
     actual = "\n".join(item.format() for item in diagnostics) + "\n"
@@ -253,6 +296,101 @@ def test_rejects_unknown_signal_relationship_and_architecture(tmp_path: Path) ->
     manifest.write_text(source)
     diagnostics = validate_file(manifest)
     assert sum(item.code == "undefined-reference" for item in diagnostics) == 3
+
+
+def test_architecture_requires_bottom_up_references_and_rejects_implementation_detail(tmp_path: Path) -> None:
+    source = (ROOT / "examples" / "minimal.pml.yaml").read_text().replace(
+        "domains:\n",
+        """architecture:
+  approved_runtime:
+    category: runtime
+    selection: Approved runtime.
+    rationale: Owner approval is required to replace this runtime.
+    constraints:
+      portable_execution:
+        statement: The runtime MUST preserve portable execution.
+domains:
+""",
+        1,
+    )
+    manifest = tmp_path / "unreferenced.pml.yaml"
+    manifest.write_text(source)
+    diagnostics = validate_file(manifest)
+    assert any(item.code == "unreferenced-architecture" for item in diagnostics)
+
+    manifest.write_text(source.replace(
+        "        actors:\n",
+        "        architecture: [approved_runtime]\n        actors:\n",
+        1,
+    ).replace("Approved runtime.", "runtime.py"))
+    diagnostics = validate_file(manifest)
+    assert any(item.code == "implementation-detail" for item in diagnostics)
+
+    manifest.write_text(source.replace(
+        "        actors:\n",
+        "        architecture: [approved_runtime]\n        actors:\n",
+        1,
+    ).replace("Approved runtime.", "Node.js (LTS)"))
+    assert validate_file(manifest) == []
+
+    manifest.write_text(source.replace(
+        "        actors:\n",
+        "        architecture: [approved_runtime]\n        actors:\n",
+        1,
+    ).replace("Approved runtime.", "initializeRuntime()"))
+    diagnostics = validate_file(manifest)
+    assert any(item.code == "implementation-detail" for item in diagnostics)
+
+    manifest.write_text(source.replace(
+        "        actors:\n",
+        "        architecture: [approved_runtime]\n        actors:\n",
+        1,
+    ).replace("Approved runtime.", "DATABASE_URL=approved"))
+    diagnostics = validate_file(manifest)
+    assert any(item.code == "implementation-detail" for item in diagnostics)
+
+    manifest.write_text(source.replace(
+        "        actors:\n",
+        "        architecture: [approved_runtime]\n        actors:\n",
+        1,
+    ).replace("Approved runtime.", "'DATABASE_HOST: database.internal'"))
+    diagnostics = validate_file(manifest)
+    assert any(item.code == "implementation-detail" for item in diagnostics)
+
+    referenced_source = source.replace(
+        "        actors:\n",
+        "        architecture: [approved_runtime]\n        actors:\n",
+        1,
+    )
+    for field in (
+        "selection: Approved runtime.",
+        "rationale: Owner approval is required to replace this runtime.",
+        "statement: The runtime MUST preserve portable execution.",
+    ):
+        manifest.write_text(referenced_source.replace(
+            field,
+            field.split(":", 1)[0]
+            + ': \'{"host": "database.internal", "port": 5432}\'',
+        ))
+        diagnostics = validate_file(manifest)
+        assert any(item.code == "implementation-detail" for item in diagnostics)
+
+
+def test_architecture_rejects_inline_definitions_and_unknown_categories(tmp_path: Path) -> None:
+    source = (ROOT / "examples" / "minimal.pml.yaml").read_text().replace(
+        "        actors:\n",
+        """        architecture:
+          category: invented
+          selection: Inline selection.
+          rationale: Inline rationale.
+        actors:
+""",
+        1,
+    )
+    manifest = tmp_path / "inline.pml.yaml"
+    manifest.write_text(source)
+    messages = "\n".join(item.message for item in validate_file(manifest))
+    assert "architecture" in messages
 
 
 def test_verification_report_matches_schema() -> None:

@@ -156,6 +156,13 @@ technologies, purposes, responsibilities, and normative constraints, but not
 filenames, functions, classes, tables, endpoints, topology, or configuration syntax.
 Technology existence never proves behavioral conformance.
 
+`constraints` resolve separately as
+`architecture.<decision_id>.constraints.<constraint_id>`. Their bindings belong in
+the `architecture` map of the owner-controlled bindings resolved by `pml.lock`, and
+their generated state belongs under `.pml/architecture/`; they never contribute to
+product status. Each decision must be referenced by a feature or component. There
+are no `applies_to`, `supports`, inline, or recursive architecture constructs.
+
 ## Obligations and verification
 
 An **obligation** is the tooling term for one resolved, independently verifiable
@@ -166,6 +173,23 @@ Definitions state behavior. External bindings select deterministic probes, agent
 verification, or human attestation and assign their coverage. Generated state records
 current evidence, confidence, and freshness. Verification mechanics and scores never
 appear in an approved product definition.
+
+Bindings are an owner-controlled artifact beside the definition, not a PML language
+section and not product-local generated state. A product-local `pml.lock` resolves
+the owner source through `definition.source` and separately pins
+`definition.digest` and `bindings.digest`. For a single-file source,
+`bindings.yaml` is beside that file; for a modular directory source, it is in that
+directory. Bound implementation paths always resolve from the implementing product
+repository. Product-state commands require the resolved source to be the exact
+definition file or modular directory supplied to the command; equivalent content at
+a different path cannot redirect bindings selection.
+
+The canonical bindings digest is `sha256:` followed by the lowercase SHA-256 hex
+digest of the validated document's UTF-8 JSON encoding. Object keys are sorted,
+arrays retain authored order, non-ASCII text is encoded directly, and JSON uses no
+insignificant whitespace. Schema or semantic failures prevent digest acceptance.
+Generated node state records that digest so a policy change makes prior evidence
+stale until state is reconciled.
 
 When a node or a `related_to` node changes, sync invalidates affected obligation
 confidence. Current passing probes restore only their approved coverage; agentic or

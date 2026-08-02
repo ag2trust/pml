@@ -62,3 +62,12 @@ evidence without refreshing it.
 CI recomputes definition, input, related-node, and probe fingerprints. A mismatch
 proves committed state does not cover current inputs, so CI can enforce that sync
 has processed the latest change without trusting a mutable “synced” flag.
+
+## Architecture conformance
+
+Architecture constraints use the same plan and evidence requirements but do not
+share product binding entries or state. Their owner-controlled bindings are keyed by
+decision ID under the `architecture` map, generated state is
+`.pml/architecture/<decision>.state.yaml`, and `pml architecture-status` derives
+their status independently. Neither evidence kind can prove the other conformance
+dimension.
