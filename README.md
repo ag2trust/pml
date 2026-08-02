@@ -106,11 +106,12 @@ Verification coverage is approved per obligation in owner-controlled bindings. S
 stores implementation facts and typed evidence; confidence and freshness are derived.
 See [`docs/specs/0005-bindings-boundary.md`](docs/specs/0005-bindings-boundary.md).
 
-For resource safety, PML tooling reads at most 1 MiB from each generated
-`.state.yaml` file and bounds generated-state discovery. Oversized state is rejected
-before YAML parsing, and excess state files produce a diagnostic without being
-materialized for validation. These are tooling limits, not PML language constraints;
-current schemas and examples produce state files far below the limits.
+For resource safety, PML tooling fingerprints bound inputs in fixed-size chunks,
+reads at most 1 MiB from each generated `.state.yaml` file, and bounds
+generated-state discovery. Oversized state is rejected before YAML parsing, and
+excess state files or entries produce a diagnostic without being materialized for
+validation. These are tooling limits, not PML language constraints; current schemas
+and examples produce state files far below the limits.
 
 Architecture constraints have independent bindings and state. Inspect their derived
 conformance without mixing it into product status with:

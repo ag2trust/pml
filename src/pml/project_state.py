@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -29,10 +30,15 @@ MAX_ARCHITECTURE_STATE_ENTRIES = 64
 # validation retain or diagnose an unbounded number of generated files. This is a
 # tooling limit, not a PML language constraint.
 MAX_PRODUCT_STATE_ENTRIES = 64
+# A product-state tree is untrusted generated output. Bound every directory entry
+# visited while discovering state so a tree containing no state files cannot force
+# an unbounded recursive traversal. This is a tooling limit, not PML syntax.
+MAX_PRODUCT_STATE_SCAN_ENTRIES = 64
 # Generated state is tooling output and currently measures well under 1 KiB in the
 # conformance examples. One MiB leaves ample room for obligations and evidence while
 # bounding memory used before YAML parsing. This is not a PML language constraint.
 MAX_STATE_FILE_BYTES = 1024 * 1024
+FINGERPRINT_READ_CHUNK_BYTES = 64 * 1024
 
 
 def state_path_for(repo_root: Path, node_id: str) -> Path:
@@ -89,6 +95,16 @@ def bindings_digest(bindings: dict[str, Any]) -> str:
     return canonical_hash(bindings)
 
 
+def _file_fingerprint(path: Path) -> str:
+    """Hash a bound file without materializing its complete content in memory."""
+
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(FINGERPRINT_READ_CHUNK_BYTES):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def input_fingerprint(repo_root: Path, paths: list[str]) -> str:
     """Hash path names and content deterministically, including missing bindings."""
 
@@ -102,7 +118,7 @@ def input_fingerprint(repo_root: Path, paths: list[str]) -> str:
             records.append((binding, "outside-repository"))
             continue
         if target.is_file():
-            records.append((target.relative_to(repo_root).as_posix(), hashlib.sha256(target.read_bytes()).hexdigest()))
+            records.append((target.relative_to(repo_root).as_posix(), _file_fingerprint(target)))
         elif target.is_dir():
             for child in sorted(item for item in target.rglob("*") if item.is_file()):
                 try:
@@ -112,10 +128,40 @@ def input_fingerprint(repo_root: Path, paths: list[str]) -> str:
                     continue
                 if relative.parts[:2] == (".pml", "state"):
                     continue
-                records.append((relative.as_posix(), hashlib.sha256(child.read_bytes()).hexdigest()))
+                records.append((relative.as_posix(), _file_fingerprint(child)))
         else:
             records.append((binding, "missing"))
     return canonical_hash(records)
+
+
+def _bounded_product_state_paths(
+    state_root: Path, max_state_files: int
+) -> tuple[list[Path], bool]:
+    """Discover generated product state with bounded recursive traversal."""
+
+    state_paths: list[Path] = []
+    pending = [state_root]
+    scanned_entries = 0
+    while pending:
+        directory = pending.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if scanned_entries == MAX_PRODUCT_STATE_SCAN_ENTRIES:
+                        return state_paths, True
+                    scanned_entries += 1
+                    path = Path(entry.path)
+                    if entry.is_dir(follow_symlinks=False):
+                        pending.append(path)
+                    elif entry.name.endswith(".state.yaml"):
+                        if len(state_paths) == max_state_files:
+                            return state_paths, True
+                        state_paths.append(path)
+        except OSError:
+            # State loading below reports errors for candidate files. A vanished
+            # directory simply has no candidates left to validate.
+            continue
+    return state_paths, False
 
 
 def outside_repository_paths(repo_root: Path, paths: list[str]) -> list[str]:
@@ -447,18 +493,18 @@ def validate_product_state(
     state_paths: list[Path] = []
     if state_root.exists():
         # Allow every approved node and one extra file to be diagnosed, subject to
-        # the absolute tooling cap. Do not sort the rglob iterator: sorting it
-        # would materialize every generated state path before this limit applies.
+        # the absolute tooling cap. Discovery also bounds all entries visited, so
+        # non-state files cannot make recursive scanning unbounded.
         max_state_files = min(MAX_PRODUCT_STATE_ENTRIES, max(1, len(nodes)) + 1)
-        for state_path in state_root.rglob("*.state.yaml"):
-            if len(state_paths) == max_state_files:
-                diagnostics.append(Diagnostic(
-                    str(state_root),
-                    "state-limit",
-                    "product state contains too many files",
-                ))
-                break
-            state_paths.append(state_path)
+        state_paths, state_limit_reached = _bounded_product_state_paths(
+            state_root, max_state_files
+        )
+        if state_limit_reached:
+            diagnostics.append(Diagnostic(
+                str(state_root),
+                "state-limit",
+                "product state contains too many files or entries",
+            ))
     for state_path in sorted(state_paths):
         state, errors = load_state(state_path)
         diagnostics.extend(errors)

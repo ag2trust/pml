@@ -10,6 +10,7 @@ from pml.cli import main
 from pml.project_state import (
     MAX_ARCHITECTURE_STATE_ENTRIES,
     MAX_PRODUCT_STATE_ENTRIES,
+    MAX_PRODUCT_STATE_SCAN_ENTRIES,
     MAX_STATE_FILE_BYTES,
     LockedBindings,
     bindings_digest,
@@ -421,6 +422,34 @@ def test_product_state_limits_discovered_generated_state_files(
 
     assert len(loaded) == min(MAX_PRODUCT_STATE_ENTRIES, 2)
     assert [item.code for item in diagnostics] == ["state-limit"]
+
+
+def test_product_state_limits_non_state_recursive_traversal(tmp_path: Path) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    non_state = product / ".pml" / "state" / "non_state"
+    non_state.mkdir()
+    for index in range(MAX_PRODUCT_STATE_SCAN_ENTRIES + 1):
+        (non_state / f"unexpected_{index}.txt").write_text("not state\n")
+
+    diagnostics = validate_product_state(
+        product, document, definition_source=manifest
+    )
+
+    assert [item.code for item in diagnostics] == ["state-limit"]
+
+
+def test_input_fingerprint_streams_bound_file_content(tmp_path: Path, monkeypatch) -> None:
+    bound = tmp_path / "bound.bin"
+    bound.write_bytes(b"x" * (128 * 1024))
+
+    def unexpected_read_bytes(self: Path) -> bytes:
+        raise AssertionError("bound input must be fingerprinted in chunks")
+
+    monkeypatch.setattr(Path, "read_bytes", unexpected_read_bytes)
+    assert input_fingerprint(tmp_path, ["bound.bin"]).startswith("sha256:")
 
 
 def test_approved_bindings_change_makes_existing_evidence_stale(

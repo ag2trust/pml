@@ -319,6 +319,14 @@ domains:
     diagnostics = validate_file(manifest)
     assert any(item.code == "implementation-detail" for item in diagnostics)
 
+    manifest.write_text(source.replace(
+        "        actors:\n",
+        "        architecture: [approved_runtime]\n        actors:\n",
+        1,
+    ).replace("Approved runtime.", "'DATABASE_HOST: database.internal'"))
+    diagnostics = validate_file(manifest)
+    assert any(item.code == "implementation-detail" for item in diagnostics)
+
     referenced_source = source.replace(
         "        actors:\n",
         "        architecture: [approved_runtime]\n        actors:\n",
