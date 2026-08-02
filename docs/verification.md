@@ -40,6 +40,11 @@ Changes to a node or a `related_to` node make its evidence stale. `pml sync` may
 refresh deterministic probes; agent and human evidence require explicit
 re-verification.
 
+Architecture constraints use the same verification methods and coverage total, but
+their bindings, state, and derived status are separate from product conformance.
+Architecture evidence cannot establish product behavior, and product evidence cannot
+establish an architecture decision.
+
 Reports conform to
 [`schema/verification-report.schema.json`](../schema/verification-report.schema.json)
 and are validated before state is updated. Executable sync remains a separate tooling

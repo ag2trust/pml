@@ -1,0 +1,23 @@
+pml: "0.1-draft"
+
+project:
+  id: architecture_invalid
+  name: Invalid Architecture Sample
+  purpose: Demonstrate architecture diagnostics.
+
+architecture:
+  unreferenced_choice:
+    category: storage
+    selection: runtime.py
+    rationale: Owner approval is required.
+    applies_to: all records
+
+domains:
+  records:
+    purpose: Manage durable records.
+    features:
+      preservation:
+        purpose: Preserve a record across restarts.
+        rules:
+          record_remains_available:
+            statement: A committed Record MUST remain available after a restart.

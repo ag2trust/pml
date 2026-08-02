@@ -9,13 +9,15 @@ from typing import Any
 from jsonschema import Draft202012Validator
 import yaml
 
-from pml.obligations import enumerate_obligations, iter_nodes, required_methods, verification_plan
+from pml.obligations import enumerate_architecture_obligations, enumerate_obligations, iter_architecture, iter_nodes, required_methods, verification_plan
 from pml.project_state import (
     LockedBindings,
+    architecture_state_root_diagnostics,
     canonical_hash,
     input_fingerprint,
     load_locked_bindings,
     load_state,
+    state_path_for,
 )
 from pml.validator import Diagnostic, _load, _path
 
@@ -51,8 +53,12 @@ def ingest_report(
     if diagnostics:
         return diagnostics
 
-    obligations = {item.id: item for item in enumerate_obligations(definition)}
-    nodes = dict(iter_nodes(definition))
+    product_obligations = list(enumerate_obligations(definition))
+    architecture_obligations = list(enumerate_architecture_obligations(definition))
+    obligations = {
+        item.id: item for item in product_obligations + architecture_obligations
+    }
+    nodes = dict(list(iter_nodes(definition)) + list(iter_architecture(definition)))
     bindings = locked_bindings.document
     binding_map = bindings["bindings"]
 
@@ -91,14 +97,33 @@ def ingest_report(
         return diagnostics
 
     touched_nodes = {obligations[check["target"]].node_id for check in report["checks"]}
+    if any(node_id.startswith("architecture.") for node_id in touched_nodes):
+        diagnostics.extend(architecture_state_root_diagnostics(repo_root))
+        if diagnostics:
+            return diagnostics
     states: dict[str, tuple[Path, dict[str, Any], str]] = {}
     for node_id in touched_nodes:
         node = nodes[node_id]
         current_definition_hash = canonical_hash(node)
-        paths = binding_map.get(node_id, {}).get("paths", [])
+        if node_id.startswith("architecture."):
+            paths = bindings.get("architecture", {}).get(
+                node_id.removeprefix("architecture."), {}
+            ).get("paths", [])
+            node_obligations = list(
+                enumerate_architecture_obligations(definition, node_id)
+            )
+        else:
+            paths = binding_map.get(node_id, {}).get("paths", [])
+            node_obligations = list(enumerate_obligations(definition, node_id))
         current_input = input_fingerprint(repo_root, paths)
-        state_path = repo_root / ".pml" / "state" / Path(*node_id.split("."))
-        state_path = state_path.with_suffix(".state.yaml")
+        state_path = state_path_for(repo_root, node_id)
+        if node_id.startswith("architecture.") and state_path.is_symlink():
+            diagnostics.append(Diagnostic(
+                str(state_path),
+                "state-path",
+                "architecture state file must not be a symbolic link",
+            ))
+            continue
         state, state_errors = load_state(state_path)
         if state_errors:
             diagnostics.extend(state_errors)
@@ -109,7 +134,7 @@ def ingest_report(
                 "node": node_id,
                 "obligations": {
                     obligation.id: {"implemented": "unknown", "evidence": {}}
-                    for obligation in enumerate_obligations(definition, node_id)
+                    for obligation in node_obligations
                 },
             }
         elif (
@@ -118,10 +143,16 @@ def ingest_report(
         ):
             for obligation_state in state["obligations"].values():
                 obligation_state["evidence"] = {}
+        state["obligations"] = {
+            obligation.id: state["obligations"].get(
+                obligation.id, {"implemented": "unknown", "evidence": {}}
+            )
+            for obligation in node_obligations
+        }
         state["definition_hash"] = current_definition_hash
         state["bindings_digest"] = locked_bindings.digest
         state["input_fingerprint"] = current_input
-        related_nodes = set(node.get("related_to", []))
+        related_nodes = set(node.get("related_to", [])) if not node_id.startswith("architecture.") else set()
         related_nodes.update(
             other_id for other_id, other in nodes.items()
             if node_id in other.get("related_to", [])

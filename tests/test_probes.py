@@ -56,6 +56,36 @@ def test_approved_probe_is_valid_and_bound_to_obligation() -> None:
     assert probe_fingerprint(probes["assistant_config_persistence"]).startswith("sha256:")
 
 
+def test_architecture_constraint_probe_is_valid_and_complete(tmp_path: Path) -> None:
+    definition, diagnostics = load_document(ROOT / "examples" / "architecture-decisions.pml.yaml")
+    assert diagnostics == []
+    assert definition is not None
+    obligation = "architecture.durable_store.constraints.preserve_committed_records"
+    bindings = {
+        "bindings": {},
+        "architecture": {
+            "durable_store": {
+                "verification": {obligation: {"probes": {"durable_store": 1.0}}}
+            }
+        },
+    }
+    probe = tmp_path / "durable-store.probe.yaml"
+    probe.write_text(
+        f"""\
+pml_probe: "0.1"
+probe: durable_store
+verifies: {obligation}
+env: staging
+steps:
+  - cli: [records, verify-preservation]
+    expect: {{exit: 0}}
+"""
+    )
+    probes, probe_diagnostics = load_probes(probe, definition, bindings)
+    assert probe_diagnostics == []
+    assert missing_probe_diagnostics(probes, definition, bindings) == []
+
+
 def test_probe_rejects_unknown_actor_and_forward_variable(tmp_path: Path) -> None:
     definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
     assert definition is not None

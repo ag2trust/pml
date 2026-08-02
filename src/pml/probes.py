@@ -9,7 +9,11 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from pml.obligations import enumerate_obligations, verification_plan
+from pml.obligations import (
+    enumerate_architecture_obligations,
+    enumerate_obligations,
+    verification_plan,
+)
 from pml.project_state import canonical_hash
 from pml.validator import Diagnostic, _load, _path
 
@@ -36,7 +40,11 @@ def load_probes(
     probes: dict[str, dict[str, Any]] = {}
     schema = json.loads(SCHEMA.read_text())
     validator = Draft202012Validator(schema)
-    obligations = {item.id: item for item in enumerate_obligations(definition)}
+    obligations = {
+        item.id: item
+        for item in list(enumerate_obligations(definition))
+        + list(enumerate_architecture_obligations(definition))
+    }
     actors = set(definition.get("actors", {}))
 
     if not sources:
@@ -103,7 +111,7 @@ def missing_probe_diagnostics(
 
     available = set(probes)
     diagnostics: list[Diagnostic] = []
-    for obligation in enumerate_obligations(definition):
+    for obligation in list(enumerate_obligations(definition)) + list(enumerate_architecture_obligations(definition)):
         for probe_id in verification_plan(bindings, obligation).get("probes", {}):
             if probe_id not in available:
                 diagnostics.append(
