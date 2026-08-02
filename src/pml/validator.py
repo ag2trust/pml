@@ -195,7 +195,12 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
         for signal in node.get("emits", []):
             if signal not in signal_ids:
                 diagnostics.append(Diagnostic(f"{node_id}.emits", "undefined-reference", f"unknown signal '{signal}'"))
-        for decision in node.get("architecture", []):
+        node_architecture = node.get("architecture", [])
+        if not isinstance(node_architecture, (list, dict)):
+            node_architecture = []
+        for decision in node_architecture:
+            if not isinstance(decision, str):
+                continue
             referenced_architecture.add(decision)
             if decision not in architecture_ids:
                 diagnostics.append(Diagnostic(f"{node_id}.architecture", "undefined-reference", f"unknown architecture decision '{decision}'"))

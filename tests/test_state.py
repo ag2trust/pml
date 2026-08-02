@@ -666,6 +666,64 @@ domains:
     assert [(item.node_id, item.verification_percent) for item in status] == [("architecture.approved_runtime", 0)]
 
 
+def test_architecture_status_ignores_state_for_a_different_decision(
+    tmp_path: Path,
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, digest = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    runtime = product / "runtime"
+    runtime.mkdir()
+    (runtime / "selection").write_text("approved\n")
+    architecture = product / ".pml" / "architecture"
+    architecture.mkdir()
+    current_input = input_fingerprint(product, ["runtime"])
+    state = {
+        "pml_state": "0.1",
+        "node": "architecture.other_decision",
+        "definition_hash": canonical_hash(document["architecture"]["durable_store"]),
+        "bindings_digest": digest,
+        "input_fingerprint": current_input,
+        "obligations": {
+            obligation.id: {
+                "implemented": "implemented",
+                "evidence": {
+                    "agent_judgment": {
+                        "result": "passed",
+                        "input_fingerprint": current_input,
+                        "recorded": "2026-08-02T00:00:00Z",
+                        "observation": "The constraint holds.",
+                        "reproduction": ["Run the approved check."],
+                    }
+                },
+            }
+        },
+    }
+    (architecture / "durable_store.state.yaml").write_text(
+        yaml.safe_dump(state, sort_keys=False)
+    )
+    status_diagnostics: list = []
+
+    status = architecture_status(
+        product,
+        document,
+        definition_source=manifest,
+        state_diagnostics=status_diagnostics,
+    )
+
+    assert status[0].obligations[0].signal == "UNVERIFIED"
+    assert any(item.code == "state-path" for item in status_diagnostics)
+
+
 def test_architecture_state_rejects_duplicate_and_nested_state_paths(
     tmp_path: Path,
     capsys,

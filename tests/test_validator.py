@@ -49,6 +49,22 @@ def test_malformed_architecture_registry_returns_schema_diagnostics(
     assert any(item.code == "schema" and item.path == "architecture" for item in diagnostics)
 
 
+def test_malformed_node_architecture_value_returns_schema_diagnostics(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "examples" / "minimal.pml.yaml").read_text().replace(
+        "        actors:\n",
+        "        architecture: [[invalid]]\n        actors:\n",
+        1,
+    )
+    manifest = tmp_path / "malformed-node-architecture.pml.yaml"
+    manifest.write_text(source)
+
+    diagnostics = validate_file(manifest)
+
+    assert any(item.code == "schema" and "architecture" in item.path for item in diagnostics)
+
+
 def test_invalid_example_has_documented_diagnostics() -> None:
     diagnostics = validate_file(ROOT / "examples" / "invalid.pml.yaml")
     actual = "\n".join(item.format() for item in diagnostics) + "\n"

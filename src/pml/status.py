@@ -223,6 +223,13 @@ def architecture_status(
             )]
         else:
             state, errors = load_state(state_path)
+        if state is not None and state["node"] != node_id:
+            errors.append(Diagnostic(
+                f"{state_path}:node",
+                "state-path",
+                f"state for '{state['node']}' must be at {state_path_for(repo_root, state['node'])}",
+            ))
+            state = None
         if state_diagnostics is not None:
             state_diagnostics.extend(errors)
         state = state or {"obligations": {}}
