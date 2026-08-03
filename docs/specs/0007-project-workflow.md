@@ -19,6 +19,7 @@ policy:
   *.pml.yaml
   bindings.yaml
   probes/**/*.probe.yaml
+  reviews.yaml
 ```
 
 The implementing product contains only the content lock and generated evidence
@@ -31,9 +32,23 @@ ledger:
   architecture/**
 ```
 
-PML does not define an `approve` command or an authored approval field. Review and
-ownership remain repository concerns. Creating a lock means only that the product
-pins the exact current authored artifacts.
+Review metadata remains separate from the normative definition. The optional
+`reviews.yaml` records whether a feature, component, or obligation was authored by
+an agent or a human and whether its current content is pending, approved, or
+rejected. An absent review record is treated as pending. Unknown target references
+are rejected.
+
+An approval is bound to the digest of the reviewed target. When that content
+changes, the prior approval becomes stale and the target is treated as pending
+until reviewed again. Ordinary validation permits pending targets; an explicit
+strict check may require every reviewable target to have a current approval.
+
+PML trusts review metadata because the owner-controlled PML repository and its
+merge policy are the approval boundary; it does not attempt to cryptographically
+prove that a reviewer is human. Creating a lock means only that the product pins
+the exact current authored artifacts. The lock records a review digest separately
+from definition and bindings digests so review changes do not masquerade as product
+intent changes.
 
 ## Installation
 
