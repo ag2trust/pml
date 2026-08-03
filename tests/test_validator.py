@@ -1,9 +1,11 @@
 from pathlib import Path
 
+import copy
 import json
 from jsonschema import Draft202012Validator
 import yaml
 
+from pml.formats import FORMAT_CHECKER
 from pml.validator import validate_file
 
 
@@ -397,3 +399,107 @@ def test_verification_report_matches_schema() -> None:
     schema = json.loads((ROOT / "schema" / "verification-report.schema.json").read_text())
     report = yaml.safe_load((ROOT / "examples" / "verification-report.yaml").read_text())
     assert list(Draft202012Validator(schema).iter_errors(report)) == []
+
+
+def test_invalid_verification_report_fails_schema() -> None:
+    schema = json.loads((ROOT / "schema" / "verification-report.schema.json").read_text())
+    report = yaml.safe_load(
+        (ROOT / "examples" / "invalid-verification-report.yaml").read_text()
+    )
+
+    assert list(Draft202012Validator(schema).iter_errors(report))
+
+
+def test_verification_report_allows_implementation_without_checks() -> None:
+    schema = json.loads((ROOT / "schema" / "verification-report.schema.json").read_text())
+    report = yaml.safe_load((ROOT / "examples" / "verification-report.yaml").read_text())
+    del report["checks"]
+
+    assert list(Draft202012Validator(schema).iter_errors(report)) == []
+
+
+def test_verification_report_rejects_empty_evidence_sections_and_bounds() -> None:
+    schema = json.loads((ROOT / "schema" / "verification-report.schema.json").read_text())
+    report = yaml.safe_load((ROOT / "examples" / "verification-report.yaml").read_text())
+    validator = Draft202012Validator(schema)
+
+    empty = copy.deepcopy(report)
+    del empty["implementation"]
+    del empty["checks"]
+
+    unknown_status = copy.deepcopy(report)
+    unknown_status["implementation"][0]["status"] = "complete"
+
+    too_many_targets = copy.deepcopy(report)
+    too_many_targets["targets"] = [f"target_{index}" for index in range(65)]
+
+    too_many_implementations = copy.deepcopy(report)
+    too_many_implementations["implementation"] *= 65
+
+    too_many_checks = copy.deepcopy(report)
+    too_many_checks["checks"] *= 257
+
+    too_many_reproduction_steps = copy.deepcopy(report)
+    too_many_reproduction_steps["checks"][1]["reproduction"] = ["step"] * 33
+
+    oversized_text = copy.deepcopy(report)
+    oversized_text["implementation"][0]["observation"] = "x" * 4097
+
+    for invalid in (
+        empty,
+        unknown_status,
+        too_many_targets,
+        too_many_implementations,
+        too_many_checks,
+        too_many_reproduction_steps,
+        oversized_text,
+    ):
+        assert list(validator.iter_errors(invalid))
+
+    many_artifacts = copy.deepcopy(report)
+    many_artifacts["checks"][0]["evidence"] = [
+        f"artifact_{index}" for index in range(65)
+    ]
+    assert list(validator.iter_errors(many_artifacts)) == []
+
+
+def test_verification_report_enforces_ids_utc_and_closed_check_types() -> None:
+    schema = json.loads((ROOT / "schema" / "verification-report.schema.json").read_text())
+    report = yaml.safe_load((ROOT / "examples" / "verification-report.yaml").read_text())
+    validator = Draft202012Validator(schema, format_checker=FORMAT_CHECKER)
+
+    invalid_report_id = copy.deepcopy(report)
+    invalid_report_id["verification"] = "verification-example"
+
+    invalid_probe_id = copy.deepcopy(report)
+    invalid_probe_id["checks"][0]["probe"] = "assistant-ownership"
+
+    non_utc_recorded = copy.deepcopy(report)
+    non_utc_recorded["recorded"] = "2026-07-22T06:00:00-04:00"
+
+    invalid_recorded = copy.deepcopy(report)
+    invalid_recorded["recorded"] = "2026-02-30T12:00:00Z"
+
+    irrelevant_probe = copy.deepcopy(report)
+    irrelevant_probe["checks"][1]["probe"] = "assistant_ownership"
+
+    irrelevant_attester = copy.deepcopy(report)
+    irrelevant_attester["checks"][0]["attester"] = "Owner"
+
+    irrelevant_reproduction = copy.deepcopy(report)
+    irrelevant_reproduction["checks"][0]["reproduction"] = ["Run it."]
+
+    irrelevant_evidence = copy.deepcopy(report)
+    irrelevant_evidence["checks"][1]["evidence"] = ["artifact.json"]
+
+    for invalid in (
+        invalid_report_id,
+        invalid_probe_id,
+        non_utc_recorded,
+        invalid_recorded,
+        irrelevant_probe,
+        irrelevant_attester,
+        irrelevant_reproduction,
+        irrelevant_evidence,
+    ):
+        assert list(validator.iter_errors(invalid))

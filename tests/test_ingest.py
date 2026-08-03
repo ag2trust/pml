@@ -4,7 +4,7 @@ import shutil
 import yaml
 
 from pml.cli import main
-from pml.ingest import ingest_report
+from pml.ingest import MAX_REPORT_FILE_BYTES, ingest_report
 from pml.probes import load_probes, probe_fingerprint
 from pml.project_state import (
     MAX_STATE_FILE_BYTES,
@@ -20,6 +20,7 @@ from pml.validator import load_document
 
 ROOT = Path(__file__).resolve().parents[1]
 OBLIGATION = "domains.notes.features.creation.rules.preserve_content"
+USE_CASE = "domains.notes.features.creation.use_cases.create_note"
 
 
 def write_probe(path: Path) -> None:
@@ -58,6 +59,30 @@ checks:
     method: deterministic_probe
     probe: preserve_content
     observation: Probe exited successfully.
+limitations: []
+"""
+    )
+
+
+def write_implementation_only_report(path: Path) -> None:
+    path.write_text(
+        f"""\
+verification: run_implementation_1
+version: working_tree
+recorded: "2026-07-22T10:00:00Z"
+environment: local_integrated
+verifier:
+  agent: runner
+  provider: pml
+  model: probe_runner
+  effort: low
+targets:
+  - domains.notes.features.creation
+verdict: incomplete
+implementation:
+  - target: {OBLIGATION}
+    status: partial
+    observation: The obligation is only partially implemented.
 limitations: []
 """
     )
@@ -130,9 +155,156 @@ def test_ingests_current_probe_evidence(tmp_path: Path) -> None:
     state = yaml.safe_load(state_path.read_text())
     evidence = state["obligations"][OBLIGATION]["evidence"]
     record = evidence["deterministic_probe"]["preserve_content"]
+    report = yaml.safe_load(report_path.read_text())
+    assert record["report_id"] == "run_1"
+    assert record["report_digest"] == canonical_hash(report)
+    assert record["recorded"] == report["recorded"]
+    assert record["verifier"] == report["verifier"]
+    assert record["probe"] == "preserve_content"
     assert record["probe_fingerprint"] == probe_fingerprint(
         probes["preserve_content"]
     )
+
+
+def test_report_rejects_duplicate_evidence_lanes_without_writing(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    report["checks"].append(dict(report["checks"][0]))
+    report["checks"].extend([
+        {
+            "target": USE_CASE,
+            "result": "passed",
+            "method": "agent_judgment",
+            "observation": "The use case completed.",
+            "reproduction": ["Create a note."],
+        },
+        {
+            "target": USE_CASE,
+            "result": "failed",
+            "method": "agent_judgment",
+            "observation": "The repeated check failed.",
+            "reproduction": ["Create another note."],
+        },
+    ])
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+    probes, diagnostics = load_probes(probe_path, definition)
+    assert diagnostics == []
+    state_path = (
+        product / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_bytes()
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+
+    assert {item.code for item in diagnostics} == {"duplicate-check"}
+    assert len(diagnostics) == 2
+    assert state_path.read_bytes() == original
+
+
+def test_report_preserves_distinct_deterministic_probe_results(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    bindings = yaml.safe_load(owner_bindings_path(product).read_text())
+    plan = bindings["bindings"]["domains.notes.features.creation"][
+        "verification"
+    ][OBLIGATION]
+    plan["probes"] = {"preserve_content": 0.5, "restart_content": 0.5}
+    approve_bindings(product, bindings)
+    probes = {
+        "preserve_content": {"probe": "preserve_content", "verifies": OBLIGATION},
+        "restart_content": {"probe": "restart_content", "verifies": OBLIGATION},
+    }
+    report_path = tmp_path / "report.yaml"
+    write_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    second = dict(report["checks"][0])
+    second["probe"] = "restart_content"
+    second["observation"] = "Restart probe exited successfully."
+    report["checks"].append(second)
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+
+    assert ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
+    state = yaml.safe_load((
+        product / ".pml/state/domains/notes/features/creation.state.yaml"
+    ).read_text())
+    evidence = state["obligations"][OBLIGATION]["evidence"][
+        "deterministic_probe"
+    ]
+    assert set(evidence) == {"preserve_content", "restart_content"}
+
+
+def test_agent_and_human_evidence_store_report_origin(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    bindings = yaml.safe_load(owner_bindings_path(product).read_text())
+    bindings["bindings"]["domains.notes.features.creation"]["verification"][
+        USE_CASE
+    ] = {"agent_judgment": 0.5, "human_attestation": 0.5}
+    approve_bindings(product, bindings)
+    report_path = tmp_path / "report.yaml"
+    write_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    report["checks"] = [
+        {
+            "target": USE_CASE,
+            "result": "passed",
+            "method": "agent_judgment",
+            "observation": "The use case completed.",
+            "reproduction": ["Create a note."],
+        },
+        {
+            "target": USE_CASE,
+            "result": "passed",
+            "method": "human_attestation",
+            "observation": "The owner observed the use case.",
+            "attester": "Product owner",
+        },
+    ]
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+
+    assert ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    ) == []
+    state = yaml.safe_load((
+        product / ".pml/state/domains/notes/features/creation.state.yaml"
+    ).read_text())
+    evidence = state["obligations"][USE_CASE]["evidence"]
+    digest = canonical_hash(report)
+    for record in evidence.values():
+        assert record["report_id"] == report["verification"]
+        assert record["report_digest"] == digest
+        assert record["recorded"] == report["recorded"]
+        assert record["verifier"] == report["verifier"]
+    assert evidence["agent_judgment"]["reproduction"] == ["Create a note."]
+    assert evidence["human_attestation"]["attester"] == "Product owner"
 
 
 def test_cli_ingests_valid_report(tmp_path: Path) -> None:
@@ -149,6 +321,240 @@ def test_cli_ingests_valid_report(tmp_path: Path) -> None:
         str(probe_path),
         str(report_path),
     ]) == 0
+
+
+def test_implementation_only_report_updates_implementation_state(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    report_path = tmp_path / "implementation-report.yaml"
+    write_implementation_only_report(report_path)
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+
+    assert ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    ) == []
+    state = yaml.safe_load(state_path.read_text())
+    assert state["obligations"][OBLIGATION]["implemented"] == "partial"
+    assert state["obligations"][OBLIGATION]["evidence"] == {
+        "deterministic_probe": {}
+    }
+    implementation = state["obligations"][OBLIGATION]["implementation"]
+    assert implementation == {
+        "status": "partial",
+        "observation": "The obligation is only partially implemented.",
+        "report_id": "run_implementation_1",
+        "report_digest": canonical_hash(yaml.safe_load(report_path.read_text())),
+        "recorded": "2026-07-22T10:00:00Z",
+        "verifier": {
+            "agent": "runner",
+            "provider": "pml",
+            "model": "probe_runner",
+            "effort": "low",
+        },
+    }
+    assert validate_product_state(
+        product, definition, definition_source=owner_definition_path(product)
+    ) == []
+
+
+def test_mixed_report_updates_implementation_and_evidence(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "mixed-report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    report["implementation"] = [{
+        "target": OBLIGATION,
+        "status": "partial",
+        "observation": "The obligation is only partially implemented.",
+    }]
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+    probes, diagnostics = load_probes(probe_path, definition)
+    assert diagnostics == []
+
+    assert ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
+
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    state = yaml.safe_load(state_path.read_text())
+    obligation_state = state["obligations"][OBLIGATION]
+    assert obligation_state["implemented"] == "partial"
+    assert "preserve_content" in obligation_state["evidence"]["deterministic_probe"]
+
+
+def test_implementation_report_rejects_unknown_obligation(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    report_path = tmp_path / "implementation-report.yaml"
+    write_implementation_only_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    report["implementation"][0]["target"] = "domains.notes.features.creation.rules.unknown"
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_text()
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    )
+
+    assert {item.code for item in diagnostics} == {"undefined-reference"}
+    assert state_path.read_text() == original
+
+
+def test_report_rejects_undeclared_targets_before_writing(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    report_path = tmp_path / "implementation-report.yaml"
+    write_implementation_only_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    report["targets"] = ["domains.notes.features.unknown"]
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_text()
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    )
+
+    assert {item.code for item in diagnostics} == {
+        "undefined-reference", "undeclared-target"
+    }
+    assert state_path.read_text() == original
+
+
+def test_report_rejects_duplicate_implementation_assessments(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    report_path = tmp_path / "implementation-report.yaml"
+    write_implementation_only_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    report["implementation"].append(dict(report["implementation"][0]))
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_text()
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    )
+
+    assert {item.code for item in diagnostics} == {"duplicate-implementation"}
+    assert state_path.read_text() == original
+
+
+def test_ingestion_rejects_oversized_report_before_parsing(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    report_path = tmp_path / "oversized-report.yaml"
+    report_path.write_bytes(
+        b"limitations:\n  - " + b"x" * MAX_REPORT_FILE_BYTES
+    )
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_bytes()
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    )
+
+    assert {item.code for item in diagnostics} == {"report-size"}
+    assert state_path.read_bytes() == original
+
+
+def test_ingestion_rejects_oversized_generated_state_without_writing(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    bindings = yaml.safe_load(owner_bindings_path(product).read_text())
+    plan = bindings["bindings"]["domains.notes.features.creation"][
+        "verification"
+    ][OBLIGATION]
+    probe_ids = [f"large_evidence_{index}" for index in range(4)]
+    plan["probes"] = {probe_id: 0.25 for probe_id in probe_ids}
+    approve_bindings(product, bindings)
+    report_path = tmp_path / "oversized-report.yaml"
+    write_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    artifacts = [f"{index:04d}" + "x" * 4076 for index in range(64)]
+    report["checks"] = [{
+        "target": OBLIGATION,
+        "result": "passed",
+        "method": "deterministic_probe",
+        "probe": probe_id,
+        "observation": "Probe exited successfully.",
+        "evidence": list(artifacts),
+    } for probe_id in probe_ids]
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+    probes = {probe_id: {"verifies": OBLIGATION} for probe_id in probe_ids}
+    state_path = (
+        product
+        / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_bytes()
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+
+    assert {item.code for item in diagnostics} == {"state-size"}
+    assert state_path.read_bytes() == original
 
 
 def test_ingestion_rejects_mismatched_bindings_digest_without_writing(
@@ -210,6 +616,14 @@ def test_partial_ingestion_clears_evidence_from_prior_bindings(
         "input_fingerprint": state["input_fingerprint"],
         "recorded": "2026-07-31T10:00:00Z",
         "observation": "Passed under the prior coverage policy.",
+        "report_id": "prior_policy",
+        "report_digest": f"sha256:{'3' * 64}",
+        "verifier": {
+            "agent": "prior verifier",
+            "provider": "pml",
+            "model": "prior model",
+            "effort": "low",
+        },
         "reproduction": ["Evaluate the obligation."],
     }
     state_path.write_text(yaml.safe_dump(state, sort_keys=False))

@@ -1,4 +1,4 @@
-verification: verification-example-001
+verification: verification_example_001
 version: abc123
 recorded: "2026-07-22T10:00:00Z"
 environment: local_integrated
@@ -10,6 +10,10 @@ verifier:
 targets:
   - domains.assistants.features.creation
 verdict: verified
+implementation:
+  - target: domains.assistants.features.creation.rules.ownership
+    status: implemented
+    observation: The ownership rule is implemented in the evaluated product revision.
 checks:
   - target: domains.assistants.features.creation.rules.ownership
     result: passed

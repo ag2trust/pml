@@ -28,6 +28,16 @@ from pml.validator import load_document
 
 
 ROOT = Path(__file__).resolve().parents[1]
+EVIDENCE_ORIGIN = {
+    "report_id": "state_fixture",
+    "report_digest": f"sha256:{'3' * 64}",
+    "verifier": {
+        "agent": "state fixture",
+        "provider": "pml",
+        "model": "fixture model",
+        "effort": "low",
+    },
+}
 
 
 def copy_example_layout(tmp_path: Path) -> tuple[Path, Path]:
@@ -188,6 +198,57 @@ def test_state_schema_rejects_authored_scores_and_freshness() -> None:
     messages = "\n".join(error.message for error in errors)
     assert "verification_score" in messages
     assert "freshness" in messages
+
+
+def test_state_loader_rejects_legacy_evidence_without_report_origin(
+    tmp_path: Path,
+) -> None:
+    state = yaml.safe_load((
+        ROOT
+        / "examples/product-repository/.pml/state/domains/notes/features/creation.state.yaml"
+    ).read_text())
+    obligation = "domains.notes.features.creation.rules.preserve_content"
+    state["obligations"][obligation]["evidence"]["deterministic_probe"] = {
+        "preserve_content": {
+            "result": "passed",
+            "input_fingerprint": state["input_fingerprint"],
+            "recorded": "2026-07-31T10:00:00Z",
+            "observation": "Legacy evidence lacks its report origin.",
+            "probe_fingerprint": f"sha256:{'2' * 64}",
+        }
+    }
+    state_path = tmp_path / "legacy.state.yaml"
+    state_path.write_text(yaml.safe_dump(state, sort_keys=False))
+
+    loaded, diagnostics = load_state(state_path)
+
+    assert loaded is None
+    assert {item.code for item in diagnostics} == {"schema"}
+    assert any("report_id" in item.message for item in diagnostics)
+
+
+def test_state_loader_rejects_implementation_flag_report_mismatch(
+    tmp_path: Path,
+) -> None:
+    state = yaml.safe_load((
+        ROOT
+        / "examples/product-repository/.pml/state/domains/notes/features/creation.state.yaml"
+    ).read_text())
+    obligation = "domains.notes.features.creation.rules.preserve_content"
+    state["obligations"][obligation]["implemented"] = "implemented"
+    state["obligations"][obligation]["implementation"] = {
+        "status": "missing",
+        "observation": "The accepted report found the behavior missing.",
+        **EVIDENCE_ORIGIN,
+        "recorded": "2026-08-02T12:00:00Z",
+    }
+    state_path = tmp_path / "mismatched.state.yaml"
+    state_path.write_text(yaml.safe_dump(state, sort_keys=False))
+
+    loaded, diagnostics = load_state(state_path)
+
+    assert loaded is None
+    assert [item.code for item in diagnostics] == ["implementation-mismatch"]
 
 
 def test_lock_requires_an_independent_bindings_digest() -> None:
@@ -471,6 +532,8 @@ def test_approved_bindings_change_makes_existing_evidence_stale(
             "input_fingerprint": state["input_fingerprint"],
             "recorded": "2026-07-31T10:00:00Z",
             "observation": "Probe passed under the prior policy.",
+            **EVIDENCE_ORIGIN,
+            "probe": "preserve_content",
             "probe_fingerprint": f"sha256:{'2' * 64}",
         }
     }
@@ -702,6 +765,7 @@ def test_architecture_status_ignores_state_for_a_different_decision(
                         "input_fingerprint": current_input,
                         "recorded": "2026-08-02T00:00:00Z",
                         "observation": "The constraint holds.",
+                        **EVIDENCE_ORIGIN,
                         "reproduction": ["Run the approved check."],
                     }
                 },
@@ -1024,6 +1088,7 @@ def test_architecture_status_makes_evidence_stale_after_decision_change(
                         "input_fingerprint": current_input,
                         "recorded": "2026-08-01T00:00:00Z",
                         "observation": "The approved constraint holds.",
+                        **EVIDENCE_ORIGIN,
                         "reproduction": ["Run the approved check."],
                     }
                 },

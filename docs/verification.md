@@ -36,9 +36,10 @@ A current passing probe contributes only its assigned coverage. Agent judgment m
 include an observation and reproduction steps. Human evidence identifies the
 attester. Reading implementation may guide verification but never proves behavior.
 
-Changes to a node or a `related_to` node make its evidence stale. `pml sync` may
-refresh deterministic probes; agent and human evidence require explicit
-re-verification.
+Changes to a node or a `related_to` node make its evidence stale. `pml sync`
+reconciles generated state but never executes probes or refreshes evidence.
+Deterministic probes run through `pml verify`; agent and human evidence require
+explicit re-verification and report ingestion.
 
 Architecture constraints use the same verification methods and coverage total, but
 their bindings, state, and derived status are separate from product conformance.
@@ -47,8 +48,8 @@ establish an architecture decision.
 
 Reports conform to
 [`schema/verification-report.schema.json`](../schema/verification-report.schema.json)
-and are validated before state is updated. Executable sync remains a separate tooling
-layer.
+and are validated before state is updated. Probe execution and state synchronization
+remain separate tooling operations.
 
 The following remains available for isolated validation of an explicit owner
 bindings file:

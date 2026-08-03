@@ -196,10 +196,13 @@ human-attestation-check = common-check + {method: human_attestation,
 ```
 
 At least one of `implementation` or `checks` is non-empty. The resolved node of each
-assessment or check obligation MUST occur in `targets`; duplicate `(target, method)`
-checks and duplicate implementation targets are invalid. A deterministic `probe`
-MUST be an approved probe ID for the check's target. Unknown fields, targets,
-methods, statuses, and enum values are invalid.
+assessment or check obligation MUST occur in `targets`; duplicate
+`(target, method, probe)` deterministic checks, duplicate `(target, method)` agent
+or human checks, and duplicate implementation targets are invalid. This preserves
+independent results for multiple approved deterministic probes on one obligation
+without allowing a later entry to overwrite the same evidence lane. A deterministic
+`probe` MUST be an approved probe ID for the check's target. Unknown fields,
+targets, methods, statuses, and enum values are invalid.
 
 Implementation assessment and verification evidence remain independent. An
 implementation status never contributes verification coverage.
