@@ -1,4 +1,4 @@
-verification: verification-example-001
+verification: verification_example_001
 version: abc123
 recorded: "2026-07-22T10:00:00Z"
 environment: local_integrated

@@ -210,9 +210,31 @@ def test_check_probes_validates_recorded_evidence(tmp_path: Path) -> None:
             "input_fingerprint": state["input_fingerprint"],
             "recorded": "2026-07-27T10:00:00Z",
             "observation": "Probe completed.",
+            "report_id": "probe_run",
+            "report_digest": f"sha256:{'3' * 64}",
+            "verifier": {
+                "agent": "probe runner",
+                "provider": "pml",
+                "model": "probe runner",
+                "effort": "low",
+            },
+            "probe": "preserve_content",
             "probe_fingerprint": probe_fingerprint(probes["preserve_content"]),
         }
     }
     state_path.write_text(yaml.safe_dump(state, sort_keys=False))
 
     assert main(["check", str(owner_definition_path(product)), str(product), "--probes", str(probe_path)]) == 0
+
+    state["obligations"]["domains.notes.features.creation.rules.preserve_content"][
+        "evidence"
+    ]["deterministic_probe"]["preserve_content"]["probe"] = "different_probe"
+    state_path.write_text(yaml.safe_dump(state, sort_keys=False))
+
+    assert main([
+        "check",
+        str(owner_definition_path(product)),
+        str(product),
+        "--probes",
+        str(probe_path),
+    ]) == 1

@@ -3,42 +3,153 @@
   "title": "PML verification report",
   "type": "object",
   "additionalProperties": false,
-  "required": ["verification", "version", "recorded", "environment", "verifier", "targets", "verdict", "limitations"],
+  "required": [
+    "verification",
+    "version",
+    "recorded",
+    "environment",
+    "verifier",
+    "targets",
+    "verdict",
+    "limitations"
+  ],
   "properties": {
-    "verification": {"type": "string", "minLength": 1, "maxLength": 4096},
-    "version": {"type": "string", "minLength": 1, "maxLength": 4096},
-    "recorded": {"type": "string", "format": "date-time", "maxLength": 4096},
-    "environment": {"enum": ["isolated", "local_integrated", "staging", "production"]},
-    "verifier": {
-      "type": "object", "additionalProperties": false, "required": ["agent", "provider", "model", "effort"],
-      "properties": {"agent": {"type": "string", "minLength": 1, "maxLength": 4096}, "provider": {"type": "string", "minLength": 1, "maxLength": 4096}, "model": {"type": "string", "minLength": 1, "maxLength": 4096}, "effort": {"enum": ["low", "medium", "high"]}}
+    "verification": {"$ref": "#/$defs/identifier"},
+    "version": {"$ref": "#/$defs/text"},
+    "recorded": {"$ref": "#/$defs/recordedTime"},
+    "environment": {
+      "enum": ["isolated", "local_integrated", "staging", "production"]
     },
-    "targets": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "string", "minLength": 1, "maxLength": 4096}, "uniqueItems": true},
+    "verifier": {"$ref": "#/$defs/verifier"},
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {"$ref": "#/$defs/text"},
+      "uniqueItems": true
+    },
     "verdict": {"enum": ["verified", "failed", "incomplete", "blocked"]},
     "implementation": {
-      "type": "array", "minItems": 1, "maxItems": 64,
-      "items": {
-        "type": "object", "additionalProperties": false, "required": ["target", "status", "observation"],
-        "properties": {"target": {"type": "string", "minLength": 1, "maxLength": 4096}, "status": {"enum": ["implemented", "partial", "missing", "unknown"]}, "observation": {"type": "string", "minLength": 1, "maxLength": 4096}}
-      }
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {"$ref": "#/$defs/implementationAssessment"}
     },
     "checks": {
-      "type": "array", "minItems": 1, "maxItems": 256,
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
       "items": {
-        "type": "object", "additionalProperties": false, "required": ["target", "result", "method", "observation"],
-        "properties": {"target": {"type": "string", "minLength": 1, "maxLength": 4096}, "result": {"enum": ["passed", "failed", "not_evaluated", "blocked"]}, "method": {"enum": ["deterministic_probe", "human_attestation", "agent_judgment"]}, "probe": {"type": "string", "minLength": 1, "maxLength": 4096}, "attester": {"type": "string", "minLength": 1, "maxLength": 4096}, "reproduction": {"type": "array", "minItems": 1, "maxItems": 32, "items": {"type": "string", "minLength": 1, "maxLength": 4096}}, "observation": {"type": "string", "minLength": 1, "maxLength": 4096}, "evidence": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "string", "minLength": 1, "maxLength": 4096}, "uniqueItems": true}},
-        "if": {"properties": {"method": {"const": "agent_judgment"}}, "required": ["method"]},
-        "then": {"required": ["reproduction"]},
-        "allOf": [
-          {"if": {"properties": {"method": {"const": "deterministic_probe"}}, "required": ["method"]}, "then": {"required": ["probe"]}},
-          {"if": {"properties": {"method": {"const": "human_attestation"}}, "required": ["method"]}, "then": {"required": ["attester"]}}
+        "oneOf": [
+          {"$ref": "#/$defs/deterministicCheck"},
+          {"$ref": "#/$defs/agentJudgmentCheck"},
+          {"$ref": "#/$defs/humanAttestationCheck"}
         ]
       }
     },
-    "limitations": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 4096}}
+    "limitations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/text"}
+    }
   },
   "anyOf": [
     {"required": ["implementation"]},
     {"required": ["checks"]}
-  ]
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "recordedTime": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?Z$"
+    },
+    "verifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "provider", "model", "effort"],
+      "properties": {
+        "agent": {"$ref": "#/$defs/text"},
+        "provider": {"$ref": "#/$defs/text"},
+        "model": {"$ref": "#/$defs/text"},
+        "effort": {"enum": ["low", "medium", "high"]}
+      }
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "result": {"enum": ["passed", "failed", "not_evaluated", "blocked"]},
+    "implementationAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "status", "observation"],
+      "properties": {
+        "target": {"$ref": "#/$defs/target"},
+        "status": {"enum": ["implemented", "partial", "missing", "unknown"]},
+        "observation": {"$ref": "#/$defs/text"}
+      }
+    },
+    "deterministicCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "result", "method", "probe", "observation"],
+      "properties": {
+        "target": {"$ref": "#/$defs/target"},
+        "result": {"$ref": "#/$defs/result"},
+        "method": {"const": "deterministic_probe"},
+        "probe": {"$ref": "#/$defs/identifier"},
+        "observation": {"$ref": "#/$defs/text"},
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/text"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "agentJudgmentCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "result",
+        "method",
+        "reproduction",
+        "observation"
+      ],
+      "properties": {
+        "target": {"$ref": "#/$defs/target"},
+        "result": {"$ref": "#/$defs/result"},
+        "method": {"const": "agent_judgment"},
+        "reproduction": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {"$ref": "#/$defs/text"}
+        },
+        "observation": {"$ref": "#/$defs/text"}
+      }
+    },
+    "humanAttestationCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "result", "method", "attester", "observation"],
+      "properties": {
+        "target": {"$ref": "#/$defs/target"},
+        "result": {"$ref": "#/$defs/result"},
+        "method": {"const": "human_attestation"},
+        "attester": {"$ref": "#/$defs/text"},
+        "observation": {"$ref": "#/$defs/text"}
+      }
+    }
+  }
 }

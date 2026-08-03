@@ -12,6 +12,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 import yaml
 
+from pml.formats import FORMAT_CHECKER
 from pml.obligations import (
     enumerate_architecture_obligations,
     enumerate_obligations,
@@ -211,7 +212,9 @@ def outside_repository_paths(
 
 def _schema_diagnostics(path: Path, document: dict[str, Any], schema_name: str) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
-    validator = Draft202012Validator(_schema(schema_name), format_checker=Draft202012Validator.FORMAT_CHECKER)
+    validator = Draft202012Validator(
+        _schema(schema_name), format_checker=FORMAT_CHECKER
+    )
     for error in sorted(validator.iter_errors(document), key=lambda item: list(item.absolute_path)):
         diagnostics.append(Diagnostic(f"{path}:{_path(error.absolute_path)}", "schema", error.message))
     return diagnostics
@@ -489,6 +492,19 @@ def load_state(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
     schema_diagnostics = _schema_diagnostics(path, state, "pml-state.schema.json")
     diagnostics.extend(schema_diagnostics)
     if schema_diagnostics:
+        return None, diagnostics
+    for obligation_id, obligation_state in state["obligations"].items():
+        implementation = obligation_state.get("implementation")
+        if (
+            implementation is not None
+            and implementation["status"] != obligation_state["implemented"]
+        ):
+            diagnostics.append(Diagnostic(
+                f"{path}:obligations.{obligation_id}.implemented",
+                "implementation-mismatch",
+                "implementation status does not match its accepted report record",
+            ))
+    if diagnostics:
         return None, diagnostics
     return state, diagnostics
 
@@ -823,6 +839,12 @@ def validate_probe_evidence(
                 if record is None:
                     diagnostics.append(Diagnostic(location, "missing-probe-evidence", "approved probe has no evidence"))
                     continue
+                if record["probe"] != probe_id:
+                    diagnostics.append(Diagnostic(
+                        f"{location}.probe",
+                        "probe-mismatch",
+                        "evidence record names a different approved probe",
+                    ))
                 if record["input_fingerprint"] != current_input:
                     diagnostics.append(Diagnostic(location, "stale-probe-evidence", "probe evidence does not cover current bound inputs"))
                 if record["probe_fingerprint"] != canonical_hash(probe):

@@ -9,6 +9,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 import yaml
 
+from pml.formats import FORMAT_CHECKER
 from pml.obligations import enumerate_architecture_obligations, enumerate_obligations, iter_architecture, iter_nodes, required_methods, verification_plan
 from pml.project_state import (
     LockedBindings,
@@ -65,7 +66,7 @@ def ingest_report(
         )]
     schema = json.loads(SCHEMA.read_text())
     for error in sorted(
-        Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).iter_errors(report),
+        Draft202012Validator(schema, format_checker=FORMAT_CHECKER).iter_errors(report),
         key=lambda item: list(item.absolute_path),
     ):
         diagnostics.append(Diagnostic(f"{report_path}:{_path(error.absolute_path)}", "schema", error.message))
@@ -115,9 +116,23 @@ def ingest_report(
                 "undeclared-target",
                 f"obligation belongs to undeclared target '{target.node_id}'",
             ))
+    verification_keys: set[tuple[str, ...]] = set()
     for index, check in enumerate(checks):
         target = obligations.get(check["target"])
         location = f"{report_path}:checks[{index}]"
+        if check["method"] == "deterministic_probe":
+            verification_key = (
+                check["target"], check["method"], check["probe"]
+            )
+        else:
+            verification_key = (check["target"], check["method"])
+        if verification_key in verification_keys:
+            diagnostics.append(Diagnostic(
+                location,
+                "duplicate-check",
+                "duplicate verification check for the same approved evidence lane",
+            ))
+        verification_keys.add(verification_key)
         if target is None:
             diagnostics.append(Diagnostic(f"{location}.target", "undefined-reference", f"unknown obligation '{check['target']}'"))
             continue
@@ -256,15 +271,19 @@ def ingest_report(
             "input_fingerprint": current_input,
             "recorded": report["recorded"],
             "observation": check["observation"],
+            "report_id": report["verification"],
+            "report_digest": report_digest,
+            "verifier": dict(report["verifier"]),
         }
         if check["method"] == "deterministic_probe":
             probe_id = check["probe"]
+            record["probe"] = probe_id
             record["probe_fingerprint"] = canonical_hash(probes[probe_id])
             if "evidence" in check:
                 record["artifacts"] = check["evidence"]
             evidence.setdefault("deterministic_probe", {})[probe_id] = record
         elif check["method"] == "agent_judgment":
-            record["reproduction"] = check.get("reproduction", [])
+            record["reproduction"] = check["reproduction"]
             evidence["agent_judgment"] = record
         else:
             record["attester"] = check["attester"]

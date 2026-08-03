@@ -20,6 +20,7 @@ from pml.validator import load_document
 
 ROOT = Path(__file__).resolve().parents[1]
 OBLIGATION = "domains.notes.features.creation.rules.preserve_content"
+USE_CASE = "domains.notes.features.creation.use_cases.create_note"
 
 
 def write_probe(path: Path) -> None:
@@ -154,9 +155,156 @@ def test_ingests_current_probe_evidence(tmp_path: Path) -> None:
     state = yaml.safe_load(state_path.read_text())
     evidence = state["obligations"][OBLIGATION]["evidence"]
     record = evidence["deterministic_probe"]["preserve_content"]
+    report = yaml.safe_load(report_path.read_text())
+    assert record["report_id"] == "run_1"
+    assert record["report_digest"] == canonical_hash(report)
+    assert record["recorded"] == report["recorded"]
+    assert record["verifier"] == report["verifier"]
+    assert record["probe"] == "preserve_content"
     assert record["probe_fingerprint"] == probe_fingerprint(
         probes["preserve_content"]
     )
+
+
+def test_report_rejects_duplicate_evidence_lanes_without_writing(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    report["checks"].append(dict(report["checks"][0]))
+    report["checks"].extend([
+        {
+            "target": USE_CASE,
+            "result": "passed",
+            "method": "agent_judgment",
+            "observation": "The use case completed.",
+            "reproduction": ["Create a note."],
+        },
+        {
+            "target": USE_CASE,
+            "result": "failed",
+            "method": "agent_judgment",
+            "observation": "The repeated check failed.",
+            "reproduction": ["Create another note."],
+        },
+    ])
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+    probes, diagnostics = load_probes(probe_path, definition)
+    assert diagnostics == []
+    state_path = (
+        product / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    original = state_path.read_bytes()
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+
+    assert {item.code for item in diagnostics} == {"duplicate-check"}
+    assert len(diagnostics) == 2
+    assert state_path.read_bytes() == original
+
+
+def test_report_preserves_distinct_deterministic_probe_results(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    bindings = yaml.safe_load(owner_bindings_path(product).read_text())
+    plan = bindings["bindings"]["domains.notes.features.creation"][
+        "verification"
+    ][OBLIGATION]
+    plan["probes"] = {"preserve_content": 0.5, "restart_content": 0.5}
+    approve_bindings(product, bindings)
+    probes = {
+        "preserve_content": {"probe": "preserve_content", "verifies": OBLIGATION},
+        "restart_content": {"probe": "restart_content", "verifies": OBLIGATION},
+    }
+    report_path = tmp_path / "report.yaml"
+    write_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    second = dict(report["checks"][0])
+    second["probe"] = "restart_content"
+    second["observation"] = "Restart probe exited successfully."
+    report["checks"].append(second)
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+
+    assert ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
+    state = yaml.safe_load((
+        product / ".pml/state/domains/notes/features/creation.state.yaml"
+    ).read_text())
+    evidence = state["obligations"][OBLIGATION]["evidence"][
+        "deterministic_probe"
+    ]
+    assert set(evidence) == {"preserve_content", "restart_content"}
+
+
+def test_agent_and_human_evidence_store_report_origin(tmp_path: Path) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    bindings = yaml.safe_load(owner_bindings_path(product).read_text())
+    bindings["bindings"]["domains.notes.features.creation"]["verification"][
+        USE_CASE
+    ] = {"agent_judgment": 0.5, "human_attestation": 0.5}
+    approve_bindings(product, bindings)
+    report_path = tmp_path / "report.yaml"
+    write_report(report_path)
+    report = yaml.safe_load(report_path.read_text())
+    report["checks"] = [
+        {
+            "target": USE_CASE,
+            "result": "passed",
+            "method": "agent_judgment",
+            "observation": "The use case completed.",
+            "reproduction": ["Create a note."],
+        },
+        {
+            "target": USE_CASE,
+            "result": "passed",
+            "method": "human_attestation",
+            "observation": "The owner observed the use case.",
+            "attester": "Product owner",
+        },
+    ]
+    report_path.write_text(yaml.safe_dump(report, sort_keys=False))
+
+    assert ingest_report(
+        report_path,
+        product,
+        definition,
+        {},
+        definition_source=owner_definition_path(product),
+    ) == []
+    state = yaml.safe_load((
+        product / ".pml/state/domains/notes/features/creation.state.yaml"
+    ).read_text())
+    evidence = state["obligations"][USE_CASE]["evidence"]
+    digest = canonical_hash(report)
+    for record in evidence.values():
+        assert record["report_id"] == report["verification"]
+        assert record["report_digest"] == digest
+        assert record["recorded"] == report["recorded"]
+        assert record["verifier"] == report["verifier"]
+    assert evidence["agent_judgment"]["reproduction"] == ["Create a note."]
+    assert evidence["human_attestation"]["attester"] == "Product owner"
 
 
 def test_cli_ingests_valid_report(tmp_path: Path) -> None:
@@ -468,6 +616,14 @@ def test_partial_ingestion_clears_evidence_from_prior_bindings(
         "input_fingerprint": state["input_fingerprint"],
         "recorded": "2026-07-31T10:00:00Z",
         "observation": "Passed under the prior coverage policy.",
+        "report_id": "prior_policy",
+        "report_digest": f"sha256:{'3' * 64}",
+        "verifier": {
+            "agent": "prior verifier",
+            "provider": "pml",
+            "model": "prior model",
+            "effort": "low",
+        },
         "reproduction": ["Evaluate the obligation."],
     }
     state_path.write_text(yaml.safe_dump(state, sort_keys=False))

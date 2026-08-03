@@ -1,0 +1,21 @@
+verification: verification-example-001
+version: working_tree
+recorded: "2026-08-02T12:00:00-04:00"
+environment: local_integrated
+verifier:
+  agent: verifier
+  provider: example
+  model: example-model
+  effort: low
+targets:
+  - domains.notes.features.creation
+verdict: verified
+checks:
+  - target: domains.notes.features.creation.rules.preserve_content
+    result: passed
+    method: agent_judgment
+    observation: The content remained available.
+    reproduction:
+      - Create and reopen a note.
+    probe: preserve-content
+limitations: []
