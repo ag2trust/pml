@@ -11,8 +11,8 @@ external evidence ingestion. It does not add product-language keywords.
 
 Safety comes from artifact separation, not from a tooling approval ceremony.
 
-The owner-controlled PML source contains authored product intent and verification
-policy:
+The owner-controlled PML source contains authored product intent, verification
+policy, and separate review metadata:
 
 ```text
 <project>-pml/
@@ -32,11 +32,13 @@ ledger:
   architecture/**
 ```
 
-Review metadata remains separate from the normative definition. The optional
-`reviews.yaml` records whether a feature, component, or obligation was authored by
-an agent or a human and whether its current content is pending, approved, or
-rejected. An absent review record is treated as pending. Unknown target references
-are rejected.
+Review metadata remains separate from the normative definition. For a feature,
+component, or obligation, the optional `reviews.yaml` declares an authoring origin
+of agent or human and records whether its current content is pending, approved, or
+rejected. The origin is repository-controlled metadata, not a claim that PML
+independently verifies. An absent review record is treated as pending. Each review
+target is a feature, component, or obligation ID and must resolve in the validated
+definition; an unknown target rejects the review metadata.
 
 An approval is bound to the digest of the reviewed target. When that content
 changes, the prior approval becomes stale and the target is treated as pending
