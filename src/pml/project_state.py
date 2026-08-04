@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import stat
 from typing import Any
 
 from jsonschema import Draft202012Validator
@@ -191,6 +192,12 @@ def _product_state_access_diagnostic(path: Path, exc: OSError) -> Diagnostic:
     )
 
 
+def _non_regular_state_diagnostic(path: Path) -> Diagnostic:
+    return Diagnostic(
+        str(path), "state-path", "generated state must be a regular file"
+    )
+
+
 def _read_product_state(
     repo_root: Path, state_path: Path
 ) -> tuple[bytes | None, list[Diagnostic]]:
@@ -208,7 +215,9 @@ def _read_product_state(
     try:
         try:
             state_fd = os.open(
-                parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd
+                parts[-1],
+                os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                dir_fd=parent_fd,
             )
         except FileNotFoundError:
             return None, []
@@ -217,6 +226,8 @@ def _read_product_state(
     finally:
         os.close(parent_fd)
     try:
+        if not stat.S_ISREG(os.fstat(state_fd).st_mode):
+            return None, [_non_regular_state_diagnostic(state_path)]
         chunks: list[bytes] = []
         remaining = MAX_STATE_FILE_BYTES + 1
         while remaining:
@@ -248,7 +259,7 @@ def write_product_state(
         try:
             state_fd = os.open(
                 parts[-1],
-                os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
+                os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
                 0o666,
                 dir_fd=parent_fd,
             )
@@ -257,6 +268,9 @@ def write_product_state(
     finally:
         os.close(parent_fd)
     try:
+        if not stat.S_ISREG(os.fstat(state_fd).st_mode):
+            return [_non_regular_state_diagnostic(state_path)]
+        os.ftruncate(state_fd, 0)
         written = 0
         while written < len(encoded):
             written += os.write(state_fd, encoded[written:])
@@ -301,7 +315,9 @@ def _read_architecture_state(
     try:
         try:
             state_fd = os.open(
-                state_path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root_fd
+                state_path.name,
+                os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                dir_fd=root_fd,
             )
         except FileNotFoundError:
             return None, []
@@ -310,6 +326,8 @@ def _read_architecture_state(
     finally:
         os.close(root_fd)
     try:
+        if not stat.S_ISREG(os.fstat(state_fd).st_mode):
+            return None, [_non_regular_state_diagnostic(state_path)]
         chunks: list[bytes] = []
         remaining = MAX_STATE_FILE_BYTES + 1
         while remaining:
@@ -338,7 +356,7 @@ def write_architecture_state(
         try:
             state_fd = os.open(
                 state_path.name,
-                os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
+                os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
                 0o666,
                 dir_fd=root_fd,
             )
@@ -347,6 +365,9 @@ def write_architecture_state(
     finally:
         os.close(root_fd)
     try:
+        if not stat.S_ISREG(os.fstat(state_fd).st_mode):
+            return [_non_regular_state_diagnostic(state_path)]
+        os.ftruncate(state_fd, 0)
         written = 0
         while written < len(encoded):
             written += os.write(state_fd, encoded[written:])
@@ -495,7 +516,7 @@ def _architecture_state_paths(
                         "architecture state contains too many entries",
                     ))
                     break
-                if entry.is_symlink() or entry.is_dir(follow_symlinks=False):
+                if not entry.is_file(follow_symlinks=False):
                     diagnostics.append(Diagnostic(
                         str(path),
                         "state-path",

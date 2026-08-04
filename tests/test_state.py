@@ -1062,6 +1062,30 @@ def test_architecture_state_write_stays_in_pinned_directory_after_symlink_swap(
     ).read_bytes() == b"pinned state"
 
 
+def test_architecture_state_rejects_fifo_without_opening_it(tmp_path: Path) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    architecture = product / ".pml" / "architecture"
+    architecture.mkdir()
+    os.mkfifo(architecture / "durable_store.state.yaml")
+
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
+
+    assert any(item.code == "state-path" for item in diagnostics)
+
+
 def test_product_state_scan_closes_queued_descriptors_on_limit(
     tmp_path: Path, monkeypatch
 ) -> None:
