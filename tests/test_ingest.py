@@ -15,7 +15,7 @@ from pml.project_state import (
     validate_product_state,
 )
 from pml.status import product_status
-from pml.validator import load_document
+from pml.validator import Diagnostic, load_document
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -194,6 +194,55 @@ def test_ingest_rejects_product_state_root_symlink_outside_repository(
 
     assert [item.code for item in diagnostics] == ["state-path"]
     assert list(external.iterdir()) == []
+
+
+def test_product_state_path_rejects_nested_symlink_outside_repository(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    probes, diagnostics = load_probes(probe_path, definition)
+    assert diagnostics == []
+    state_root = product / ".pml" / "state"
+    external = tmp_path / "external"
+    external.mkdir()
+    shutil.move(state_root / "domains", external / "domains")
+    (state_root / "domains").symlink_to(
+        external / "domains", target_is_directory=True
+    )
+    external_state = (
+        external / "domains/notes/features/creation.state.yaml"
+    )
+    original = external_state.read_bytes()
+
+    diagnostics = validate_product_state(
+        product, definition, definition_source=owner_definition_path(product)
+    )
+    assert [item.code for item in diagnostics] == ["state-path"]
+    status_diagnostics: list[Diagnostic] = []
+    assert product_status(
+        product,
+        definition,
+        definition_source=owner_definition_path(product),
+        state_diagnostics=status_diagnostics,
+    ) == []
+    assert [item.code for item in status_diagnostics] == ["state-path"]
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert external_state.read_bytes() == original
 
 
 def test_report_rejects_duplicate_evidence_lanes_without_writing(

@@ -109,6 +109,51 @@ def product_state_root_diagnostics(repo_root: Path) -> list[Diagnostic]:
     return []
 
 
+def product_state_paths_diagnostics(
+    repo_root: Path, state_paths: list[Path]
+) -> list[Diagnostic]:
+    """Reject product-state paths that escape through a symbolic link."""
+
+    diagnostics = product_state_root_diagnostics(repo_root)
+    if diagnostics:
+        return diagnostics
+    root = repo_root / ".pml" / "state"
+    resolved_root = repo_root.resolve()
+    reported: set[Path] = set()
+    for state_path in state_paths:
+        try:
+            relative = state_path.relative_to(root)
+        except ValueError:
+            diagnostics.append(Diagnostic(
+                str(state_path),
+                "outside-repository",
+                "product state path must be below the product state root",
+            ))
+            continue
+        candidate = root
+        for part in relative.parts:
+            candidate /= part
+            if candidate.is_symlink():
+                if candidate not in reported:
+                    diagnostics.append(Diagnostic(
+                        str(candidate),
+                        "state-path",
+                        "product state path must not contain a symbolic link",
+                    ))
+                    reported.add(candidate)
+                break
+        else:
+            try:
+                state_path.resolve().relative_to(resolved_root)
+            except ValueError:
+                diagnostics.append(Diagnostic(
+                    str(state_path),
+                    "outside-repository",
+                    "product state path resolves outside the product repository",
+                ))
+    return diagnostics
+
+
 def _schema(name: str) -> dict[str, Any]:
     return json.loads((ROOT / "schema" / name).read_text())
 
@@ -560,12 +605,17 @@ def validate_product_state(
     binding_map = bindings["bindings"]
 
     state_root = metadata / "state"
-    root_errors = product_state_root_diagnostics(repo_root)
-    diagnostics.extend(root_errors)
-    if root_errors:
+    expected_paths = {
+        node_id: state_path_for(repo_root, node_id) for node_id in nodes
+    }
+    path_errors = product_state_paths_diagnostics(
+        repo_root, list(expected_paths.values())
+    )
+    diagnostics.extend(path_errors)
+    if path_errors:
         return diagnostics
     for node_id in nodes:
-        expected_path = state_root.joinpath(*node_id.split(".")).with_suffix(".state.yaml")
+        expected_path = expected_paths[node_id]
         if not expected_path.is_file():
             diagnostics.append(Diagnostic(str(expected_path), "missing-state", f"node '{node_id}' has no state file"))
     state_paths: list[Path] = []
@@ -583,6 +633,10 @@ def validate_product_state(
                 "state-limit",
                 "product state contains too many files or entries",
             ))
+    path_errors = product_state_paths_diagnostics(repo_root, state_paths)
+    diagnostics.extend(path_errors)
+    if path_errors:
+        return diagnostics
     for state_path in sorted(state_paths):
         state, errors = load_state(state_path)
         diagnostics.extend(errors)
@@ -592,7 +646,7 @@ def validate_product_state(
         if node_id not in nodes:
             diagnostics.append(Diagnostic(f"{state_path}:node", "undefined-reference", f"unknown node '{node_id}'"))
             continue
-        expected_path = state_root.joinpath(*node_id.split(".")).with_suffix(".state.yaml")
+        expected_path = expected_paths[node_id]
         if state_path != expected_path:
             diagnostics.append(Diagnostic(str(state_path), "state-path", f"state for '{node_id}' must be at {expected_path}"))
         expected_definition_hash = canonical_hash(nodes[node_id])
