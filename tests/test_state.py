@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import shutil
 
 import json
@@ -18,6 +19,7 @@ from pml.project_state import (
     canonical_hash,
     input_fingerprint,
     load_bindings,
+    write_product_state,
     load_state,
     validate_architecture_state,
     validate_probe_evidence,
@@ -477,7 +479,7 @@ def test_product_state_limits_discovered_generated_state_files(
         loaded.append(path)
         return None, []
 
-    monkeypatch.setattr("pml.project_state.load_state", record_load)
+    monkeypatch.setattr("pml.project_state.load_product_state", lambda _, path: record_load(path))
     diagnostics = validate_product_state(
         product, document, definition_source=manifest
     )
@@ -995,6 +997,66 @@ def test_product_state_root_rejects_symlink_outside_product_repository(
 
     assert [item.code for item in diagnostics] == ["state-path"]
     assert list(external.iterdir()) == []
+
+
+def test_product_state_write_stays_in_pinned_directory_after_symlink_swap(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = (
+        product / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    state_path.parent.mkdir(parents=True)
+    external = tmp_path / "external"
+    external_state = external / "notes/features/creation.state.yaml"
+    external_state.parent.mkdir(parents=True)
+    external_state.write_bytes(b"external state")
+    original_domains = product / "original-domains"
+    original_open = os.open
+
+    def swap_before_state_open(path, flags, mode=0o777, *, dir_fd=None):
+        if path == "creation.state.yaml" and flags & os.O_CREAT:
+            (product / ".pml/state/domains").rename(original_domains)
+            (product / ".pml/state/domains").symlink_to(
+                external, target_is_directory=True
+            )
+        return original_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr("pml.project_state.os.open", swap_before_state_open)
+
+    assert write_product_state(product, state_path, b"pinned state") == []
+    assert external_state.read_bytes() == b"external state"
+    assert (
+        original_domains / "notes/features/creation.state.yaml"
+    ).read_bytes() == b"pinned state"
+
+
+def test_probe_evidence_rejects_architecture_state_root_symlink(
+    tmp_path: Path,
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    external = tmp_path / "external"
+    external.mkdir()
+    (product / ".pml" / "architecture").symlink_to(
+        external, target_is_directory=True
+    )
+
+    diagnostics = validate_probe_evidence(
+        product, document, {}, definition_source=manifest
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
 
 
 def test_architecture_state_and_status_ignore_product_local_bindings(

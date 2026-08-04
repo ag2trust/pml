@@ -154,6 +154,119 @@ def product_state_paths_diagnostics(
     return diagnostics
 
 
+def _product_state_parts(repo_root: Path, state_path: Path) -> tuple[str, ...]:
+    root = repo_root / ".pml" / "state"
+    return state_path.relative_to(root).parts
+
+
+def _open_product_state_directory(
+    repo_root: Path, parts: tuple[str, ...], *, create: bool
+) -> int:
+    """Open a product-state directory without following any path component."""
+
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = os.open(repo_root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in (".pml", "state", *parts):
+            try:
+                child_fd = os.open(part, directory_flags, dir_fd=fd)
+            except FileNotFoundError:
+                if not create:
+                    raise
+                os.mkdir(part, dir_fd=fd)
+                child_fd = os.open(part, directory_flags, dir_fd=fd)
+            os.close(fd)
+            fd = child_fd
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
+def _product_state_access_diagnostic(path: Path, exc: OSError) -> Diagnostic:
+    return Diagnostic(
+        str(path),
+        "state-path",
+        f"could not safely access product state path: {exc}",
+    )
+
+
+def _read_product_state(
+    repo_root: Path, state_path: Path
+) -> tuple[bytes | None, list[Diagnostic]]:
+    """Read generated product state through non-following directory handles."""
+
+    try:
+        parts = _product_state_parts(repo_root, state_path)
+        parent_fd = _open_product_state_directory(
+            repo_root, parts[:-1], create=False
+        )
+    except FileNotFoundError:
+        return None, []
+    except (OSError, ValueError) as exc:
+        return None, [_product_state_access_diagnostic(state_path, exc)]
+    try:
+        try:
+            state_fd = os.open(
+                parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd
+            )
+        except FileNotFoundError:
+            return None, []
+        except OSError as exc:
+            return None, [_product_state_access_diagnostic(state_path, exc)]
+    finally:
+        os.close(parent_fd)
+    try:
+        chunks: list[bytes] = []
+        remaining = MAX_STATE_FILE_BYTES + 1
+        while remaining:
+            chunk = os.read(state_fd, min(FINGERPRINT_READ_CHUNK_BYTES, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks), []
+    except OSError as exc:
+        return None, [_product_state_access_diagnostic(state_path, exc)]
+    finally:
+        os.close(state_fd)
+
+
+def write_product_state(
+    repo_root: Path, state_path: Path, encoded: bytes
+) -> list[Diagnostic]:
+    """Write generated product state without following mutable path components."""
+
+    try:
+        parts = _product_state_parts(repo_root, state_path)
+        parent_fd = _open_product_state_directory(
+            repo_root, parts[:-1], create=True
+        )
+    except (OSError, ValueError) as exc:
+        return [_product_state_access_diagnostic(state_path, exc)]
+    try:
+        try:
+            state_fd = os.open(
+                parts[-1],
+                os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
+                0o666,
+                dir_fd=parent_fd,
+            )
+        except OSError as exc:
+            return [_product_state_access_diagnostic(state_path, exc)]
+    finally:
+        os.close(parent_fd)
+    try:
+        written = 0
+        while written < len(encoded):
+            written += os.write(state_fd, encoded[written:])
+    except OSError as exc:
+        return [_product_state_access_diagnostic(state_path, exc)]
+    finally:
+        os.close(state_fd)
+    return []
+
+
 def _schema(name: str) -> dict[str, Any]:
     return json.loads((ROOT / "schema" / name).read_text())
 
@@ -213,33 +326,50 @@ def input_fingerprint(repo_root: Path, paths: list[str]) -> str:
 
 
 def _bounded_product_state_paths(
-    state_root: Path, max_state_files: int
-) -> tuple[list[Path], bool]:
+    repo_root: Path, max_state_files: int
+) -> tuple[list[Path], bool, list[Diagnostic]]:
     """Discover generated product state with bounded recursive traversal."""
 
+    state_root = repo_root / ".pml" / "state"
+    try:
+        root_fd = _open_product_state_directory(repo_root, (), create=False)
+    except FileNotFoundError:
+        return [], False, []
+    except OSError as exc:
+        return [], False, [_product_state_access_diagnostic(state_root, exc)]
     state_paths: list[Path] = []
-    pending = [state_root]
+    pending = [(root_fd, state_root)]
     scanned_entries = 0
     while pending:
-        directory = pending.pop()
+        directory_fd, directory = pending.pop()
         try:
-            with os.scandir(directory) as entries:
+            with os.scandir(directory_fd) as entries:
                 for entry in entries:
                     if scanned_entries == MAX_PRODUCT_STATE_SCAN_ENTRIES:
-                        return state_paths, True
+                        return state_paths, True, []
                     scanned_entries += 1
-                    path = Path(entry.path)
+                    path = directory / entry.name
                     if entry.is_dir(follow_symlinks=False):
-                        pending.append(path)
+                        try:
+                            child_fd = os.open(
+                                entry.name,
+                                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                dir_fd=directory_fd,
+                            )
+                        except OSError as exc:
+                            return state_paths, False, [
+                                _product_state_access_diagnostic(path, exc)
+                            ]
+                        pending.append((child_fd, directory / entry.name))
                     elif entry.name.endswith(".state.yaml"):
                         if len(state_paths) == max_state_files:
-                            return state_paths, True
-                        state_paths.append(path)
-        except OSError:
-            # State loading below reports errors for candidate files. A vanished
-            # directory simply has no candidates left to validate.
-            continue
-    return state_paths, False
+                            return state_paths, True, []
+                        state_paths.append(directory / entry.name)
+        except OSError as exc:
+            return state_paths, False, [
+                _product_state_access_diagnostic(directory, exc)
+            ]
+    return state_paths, False, []
 
 
 def outside_repository_paths(
@@ -534,16 +664,11 @@ def load_locked_bindings(
     ), diagnostics
 
 
-def load_state(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
-    """Load bounded generated state only when it conforms to the state schema."""
+def _load_state_encoded(
+    path: Path, encoded: bytes
+) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
+    """Validate bounded generated state bytes against the state schema."""
 
-    if not path.exists():
-        return None, []
-    try:
-        with path.open("rb") as stream:
-            encoded = stream.read(MAX_STATE_FILE_BYTES + 1)
-    except OSError as exc:
-        return None, [Diagnostic(str(path), "yaml", str(exc))]
     if len(encoded) > MAX_STATE_FILE_BYTES:
         return None, [Diagnostic(
             str(path),
@@ -581,6 +706,30 @@ def load_state(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
     return state, diagnostics
 
 
+def load_state(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
+    """Load bounded generated state only when it conforms to the state schema."""
+
+    if not path.exists():
+        return None, []
+    try:
+        with path.open("rb") as stream:
+            encoded = stream.read(MAX_STATE_FILE_BYTES + 1)
+    except OSError as exc:
+        return None, [Diagnostic(str(path), "yaml", str(exc))]
+    return _load_state_encoded(path, encoded)
+
+
+def load_product_state(
+    repo_root: Path, state_path: Path
+) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
+    """Load generated product state through non-following path components."""
+
+    encoded, diagnostics = _read_product_state(repo_root, state_path)
+    if encoded is None:
+        return None, diagnostics
+    return _load_state_encoded(state_path, encoded)
+
+
 def validate_product_state(
     repo_root: Path,
     definition: dict[str, Any],
@@ -614,31 +763,33 @@ def validate_product_state(
     diagnostics.extend(path_errors)
     if path_errors:
         return diagnostics
-    for node_id in nodes:
-        expected_path = expected_paths[node_id]
-        if not expected_path.is_file():
-            diagnostics.append(Diagnostic(str(expected_path), "missing-state", f"node '{node_id}' has no state file"))
-    state_paths: list[Path] = []
-    if state_root.exists():
-        # Allow every approved node and one extra file to be diagnosed, subject to
-        # the absolute tooling cap. Discovery also bounds all entries visited, so
-        # non-state files cannot make recursive scanning unbounded.
-        max_state_files = min(MAX_PRODUCT_STATE_ENTRIES, max(1, len(nodes)) + 1)
-        state_paths, state_limit_reached = _bounded_product_state_paths(
-            state_root, max_state_files
-        )
-        if state_limit_reached:
-            diagnostics.append(Diagnostic(
-                str(state_root),
-                "state-limit",
-                "product state contains too many files or entries",
-            ))
+    # Allow every approved node and one extra file to be diagnosed, subject to
+    # the absolute tooling cap. Discovery also bounds all entries visited, so
+    # non-state files cannot make recursive scanning unbounded.
+    max_state_files = min(MAX_PRODUCT_STATE_ENTRIES, max(1, len(nodes)) + 1)
+    state_paths, state_limit_reached, scan_errors = _bounded_product_state_paths(
+        repo_root, max_state_files
+    )
+    diagnostics.extend(scan_errors)
+    if scan_errors:
+        return diagnostics
+    discovered_paths = set(state_paths)
+    if not state_limit_reached:
+        for node_id, expected_path in expected_paths.items():
+            if expected_path not in discovered_paths:
+                diagnostics.append(Diagnostic(str(expected_path), "missing-state", f"node '{node_id}' has no state file"))
+    if state_limit_reached:
+        diagnostics.append(Diagnostic(
+            str(state_root),
+            "state-limit",
+            "product state contains too many files or entries",
+        ))
     path_errors = product_state_paths_diagnostics(repo_root, state_paths)
     diagnostics.extend(path_errors)
     if path_errors:
         return diagnostics
     for state_path in sorted(state_paths):
-        state, errors = load_state(state_path)
+        state, errors = load_product_state(repo_root, state_path)
         diagnostics.extend(errors)
         if state is None:
             continue
@@ -885,11 +1036,18 @@ def validate_probe_evidence(
     ]
     path_errors = product_state_paths_diagnostics(repo_root, product_state_paths)
     diagnostics.extend(path_errors)
+    if any(node_id.startswith("architecture.") for node_id, _ in nodes):
+        diagnostics.extend(architecture_state_root_diagnostics(repo_root))
     if path_errors:
+        return diagnostics
+    if diagnostics:
         return diagnostics
     for node_id, _ in nodes:
         state_path = state_path_for(repo_root, node_id)
-        state, state_errors = load_state(state_path)
+        if node_id.startswith("architecture."):
+            state, state_errors = load_state(state_path)
+        else:
+            state, state_errors = load_product_state(repo_root, state_path)
         diagnostics.extend(state_errors)
         if state is None:
             continue

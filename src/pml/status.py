@@ -14,6 +14,7 @@ from pml.project_state import (
     canonical_hash,
     input_fingerprint,
     load_locked_bindings,
+    load_product_state,
     load_state,
     state_path_for,
 )
@@ -145,7 +146,7 @@ def product_status(
 
     for node_id, node in nodes.items():
         state_path = state_path_for(repo_root, node_id)
-        state, errors = load_state(state_path)
+        state, errors = load_product_state(repo_root, state_path)
         if state_diagnostics is not None:
             state_diagnostics.extend(errors)
         state = state or {"obligations": {}, "related_fingerprints": {}}

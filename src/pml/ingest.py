@@ -18,9 +18,11 @@ from pml.project_state import (
     canonical_hash,
     input_fingerprint,
     load_locked_bindings,
+    load_product_state,
     load_state,
     product_state_paths_diagnostics,
     state_path_for,
+    write_product_state,
 )
 from pml.validator import Diagnostic, UniqueKeyLoader, _path
 
@@ -211,7 +213,10 @@ def ingest_report(
                 "architecture state file must not be a symbolic link",
             ))
             continue
-        state, state_errors = load_state(state_path)
+        if node_id.startswith("architecture."):
+            state, state_errors = load_state(state_path)
+        else:
+            state, state_errors = load_product_state(repo_root, state_path)
         if state_errors:
             diagnostics.extend(state_errors)
             continue
@@ -314,6 +319,11 @@ def ingest_report(
         return diagnostics
 
     for state_path, encoded in serialized_states:
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_bytes(encoded)
+        if state_path.is_relative_to(repo_root / ".pml" / "state"):
+            diagnostics.extend(write_product_state(repo_root, state_path, encoded))
+        else:
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_bytes(encoded)
+    if diagnostics:
+        return diagnostics
     return []
