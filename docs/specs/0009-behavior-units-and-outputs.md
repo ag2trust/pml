@@ -26,9 +26,14 @@ Project → Domain → Feature → Behavior
 ```
 
 A behavior is a cohesive, independently addressable unit of observable product
-conduct within a feature. It accepts relevant context and, for each evaluation,
+conduct within a feature. It evaluates relevant context and, for each evaluation,
 completes with one primary output. A behavior is not required to correspond to a
 file, function, class, endpoint, service, job, UI component, or test.
+
+A behavior has no separate `purpose`. The containing feature owns the product
+intention; the behavior ID identifies the conduct and its output states the
+completion contract. A future need for independently authored behavior intention
+requires a separate language decision rather than an alias for `purpose`.
 
 Behaviors are direct children of features and do not nest. Features and behaviors
 may establish symmetric `related_to` relationships with other features and
@@ -36,9 +41,10 @@ behaviors. Architecture decisions may be referenced by features and behaviors.
 
 ## Singular output
 
-Every behavior has exactly one authored `output`. Inputs remain an optional list
-because one behavior may require several pieces of product context. Output is a
-singular completion contract, not a list of unrelated effects.
+Every behavior has exactly one authored `output`. Relevant product information may
+be listed under optional singular `context`. Context is not a function-argument or
+payload declaration and does not imply that every item is always available. Output
+is a singular completion contract, not a list of unrelated effects.
 
 A direct output has one statement and may emit product signals:
 
@@ -112,8 +118,7 @@ output = output-case | {
   one_of: map[identifier, output-case] with 2..7 entries
 }
 behavior = {
-  purpose: non-empty text,
-  inputs?: unique non-empty list[non-empty text],
+  context?: unique non-empty list[non-empty text],
   output: output,
   rules?: rule-map,
   reactions?: reaction-map,
@@ -133,6 +138,8 @@ canonical vocabulary before a stable release:
 
 - feature `components` becomes `behaviors`;
 - component definitions become behavior definitions;
+- component `purpose` is removed rather than renamed;
+- component `inputs` becomes behavior `context`;
 - plural `outputs` becomes required singular `output`;
 - behavior-level `emits` moves into the direct output or its alternatives;
 - semantic paths replace `.components.` with `.behaviors.`;
