@@ -10,6 +10,7 @@ from pml.obligations import Obligation, enumerate_architecture_obligations, enum
 from pml.project_state import (
     LockedBindings,
     architecture_state_root_diagnostics,
+    product_state_root_diagnostics,
     canonical_hash,
     input_fingerprint,
     load_locked_bindings,
@@ -127,6 +128,11 @@ def product_status(
             repo_root, definition, definition_source
         )
     if locked_bindings is None:
+        return []
+    root_errors = product_state_root_diagnostics(repo_root)
+    if root_errors:
+        if state_diagnostics is not None:
+            state_diagnostics.extend(root_errors)
         return []
     bindings = locked_bindings.document
     binding_map = bindings["bindings"]

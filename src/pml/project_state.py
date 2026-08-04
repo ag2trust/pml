@@ -82,6 +82,33 @@ def architecture_state_root_diagnostics(repo_root: Path) -> list[Diagnostic]:
     return []
 
 
+def product_state_root_diagnostics(repo_root: Path) -> list[Diagnostic]:
+    """Reject a generated product-state root that escapes its repository."""
+
+    root = repo_root / ".pml" / "state"
+    if root.is_symlink():
+        return [Diagnostic(
+            str(root),
+            "state-path",
+            "product state root must not be a symbolic link",
+        )]
+    if root.exists() and not root.is_dir():
+        return [Diagnostic(
+            str(root),
+            "state-path",
+            "product state root must be a directory",
+        )]
+    try:
+        root.resolve().relative_to(repo_root.resolve())
+    except ValueError:
+        return [Diagnostic(
+            str(root),
+            "outside-repository",
+            "product state root resolves outside the product repository",
+        )]
+    return []
+
+
 def _schema(name: str) -> dict[str, Any]:
     return json.loads((ROOT / "schema" / name).read_text())
 
@@ -533,6 +560,10 @@ def validate_product_state(
     binding_map = bindings["bindings"]
 
     state_root = metadata / "state"
+    root_errors = product_state_root_diagnostics(repo_root)
+    diagnostics.extend(root_errors)
+    if root_errors:
+        return diagnostics
     for node_id in nodes:
         expected_path = state_root.joinpath(*node_id.split(".")).with_suffix(".state.yaml")
         if not expected_path.is_file():

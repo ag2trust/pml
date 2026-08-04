@@ -19,6 +19,7 @@ from pml.project_state import (
     input_fingerprint,
     load_locked_bindings,
     load_state,
+    product_state_root_diagnostics,
     state_path_for,
 )
 from pml.validator import Diagnostic, UniqueKeyLoader, _path
@@ -174,10 +175,12 @@ def ingest_report(
         obligations[item["target"]].node_id
         for item in implementation + checks
     }
+    if any(not node_id.startswith("architecture.") for node_id in touched_nodes):
+        diagnostics.extend(product_state_root_diagnostics(repo_root))
     if any(node_id.startswith("architecture.") for node_id in touched_nodes):
         diagnostics.extend(architecture_state_root_diagnostics(repo_root))
-        if diagnostics:
-            return diagnostics
+    if diagnostics:
+        return diagnostics
     states: dict[str, tuple[Path, dict[str, Any], str]] = {}
     for node_id in touched_nodes:
         node = nodes[node_id]

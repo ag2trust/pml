@@ -166,6 +166,36 @@ def test_ingests_current_probe_evidence(tmp_path: Path) -> None:
     )
 
 
+def test_ingest_rejects_product_state_root_symlink_outside_repository(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    probes, diagnostics = load_probes(probe_path, definition)
+    assert diagnostics == []
+    external = tmp_path / "external"
+    external.mkdir()
+    state_root = product / ".pml" / "state"
+    shutil.rmtree(state_root)
+    state_root.symlink_to(external, target_is_directory=True)
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert list(external.iterdir()) == []
+
+
 def test_report_rejects_duplicate_evidence_lanes_without_writing(
     tmp_path: Path,
 ) -> None:

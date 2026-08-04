@@ -976,6 +976,27 @@ def test_architecture_state_root_rejects_symlink_outside_product_repository(
     assert list(external.iterdir()) == []
 
 
+def test_product_state_root_rejects_symlink_outside_product_repository(
+    tmp_path: Path,
+) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    external = tmp_path / "external"
+    external.mkdir()
+    state_root = product / ".pml" / "state"
+    shutil.rmtree(state_root)
+    state_root.symlink_to(external, target_is_directory=True)
+
+    diagnostics = validate_product_state(
+        product, document, definition_source=manifest
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert list(external.iterdir()) == []
+
+
 def test_architecture_state_and_status_ignore_product_local_bindings(
     tmp_path: Path,
     capsys,
