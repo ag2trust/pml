@@ -865,7 +865,6 @@ def validate_probe_evidence(
     """Enforce complete, current, passing evidence for every approved probe."""
 
     diagnostics: list[Diagnostic] = []
-    metadata = repo_root / ".pml"
     if locked_bindings is None:
         locked_bindings, errors = load_locked_bindings(
             repo_root, definition, definition_source
@@ -878,7 +877,17 @@ def validate_probe_evidence(
     for probe_id, probe in probes.items():
         probe_by_obligation.setdefault(probe["verifies"], {})[probe_id] = probe
 
-    for node_id, _ in list(iter_nodes(definition)) + list(iter_architecture(definition)):
+    nodes = list(iter_nodes(definition)) + list(iter_architecture(definition))
+    product_state_paths = [
+        state_path_for(repo_root, node_id)
+        for node_id, _ in nodes
+        if not node_id.startswith("architecture.")
+    ]
+    path_errors = product_state_paths_diagnostics(repo_root, product_state_paths)
+    diagnostics.extend(path_errors)
+    if path_errors:
+        return diagnostics
+    for node_id, _ in nodes:
         state_path = state_path_for(repo_root, node_id)
         state, state_errors = load_state(state_path)
         diagnostics.extend(state_errors)

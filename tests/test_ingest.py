@@ -208,6 +208,19 @@ def test_product_state_path_rejects_nested_symlink_outside_repository(
     write_report(report_path)
     probes, diagnostics = load_probes(probe_path, definition)
     assert diagnostics == []
+    assert ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
+    assert validate_probe_evidence(
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
     state_root = product / ".pml" / "state"
     external = tmp_path / "external"
     external.mkdir()
@@ -232,6 +245,14 @@ def test_product_state_path_rejects_nested_symlink_outside_repository(
         state_diagnostics=status_diagnostics,
     ) == []
     assert [item.code for item in status_diagnostics] == ["state-path"]
+
+    diagnostics = validate_probe_evidence(
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+    assert [item.code for item in diagnostics] == ["state-path"]
 
     diagnostics = ingest_report(
         report_path,
