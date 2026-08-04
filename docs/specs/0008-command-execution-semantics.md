@@ -16,9 +16,11 @@ underspecified statements in 0007.
 product repository. The default source is the sibling `<product-directory>-pml`.
 The command creates:
 
-- source `pml.yaml` containing fixed language version `0.1-draft`, the project ID, and
-  project name, while deliberately omitting normative purpose and domain content;
-- source `bindings.yaml` with an empty bindings map;
+- source `index.pml.yaml` containing fixed language version `0.1-draft`, the
+  project ID, and project name, while deliberately omitting normative purpose and
+  domain content;
+- source `bindings.yaml` containing `pml_bindings: "0.1"` and an empty `bindings`
+  map;
 - source `probes/`; and
 - product-local `.pml/`.
 
@@ -98,6 +100,11 @@ adjacent `environments.yaml`. They are separate from definitions, bindings, prob
 reviews, and generated state. The closed authored shape is:
 
 ```text
+identifier           = [a-z][a-z0-9_]*
+actor-id              = identifier resolving to an actor in the definition
+safe-product-relative-path = non-empty POSIX relative path that is not ".",
+                             contains no empty, ".", or ".." segment, does not
+                             start with .git or .pml, and contains no backslash
 host-variable        = [A-Z_][A-Z0-9_]*
 http-header          = an RFC 9110 field-name token
 absolute-http-url    = absolute http or https URL with a host and without
@@ -216,8 +223,9 @@ After probe execution and before ingestion, the report `version` is the implemen
 product Git commit with `+dirty` when tracked or untracked product files outside
 `.pml/` differ, or `unversioned` outside Git. Generated `.pml/` changes do not mark
 the product version dirty. A generated report ID has the form
-`pml_verify_<utc-basic-time>_<random-suffix>`, using only lowercase identifier
-characters. Its recorded time is the invocation completion time.
+`pml_verify_<yyyymmddhhmmss>_<12-lowercase-hex-digits>`. The timestamp is UTC and
+contains digits only, so the complete ID matches `[a-z][a-z0-9_]*`. Its recorded
+time is the invocation completion time.
 
 Probe results derive the report verdict exactly:
 
