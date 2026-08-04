@@ -267,6 +267,96 @@ def write_product_state(
     return []
 
 
+def _open_architecture_state_directory(repo_root: Path, *, create: bool) -> int:
+    """Open the architecture state directory without following mutable links."""
+
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = os.open(repo_root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in (".pml", "architecture"):
+            try:
+                child_fd = os.open(part, directory_flags, dir_fd=fd)
+            except FileNotFoundError:
+                if not create:
+                    raise
+                os.mkdir(part, dir_fd=fd)
+                child_fd = os.open(part, directory_flags, dir_fd=fd)
+            os.close(fd)
+            fd = child_fd
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
+def _read_architecture_state(
+    repo_root: Path, state_path: Path
+) -> tuple[bytes | None, list[Diagnostic]]:
+    try:
+        root_fd = _open_architecture_state_directory(repo_root, create=False)
+    except FileNotFoundError:
+        return None, []
+    except OSError as exc:
+        return None, [_product_state_access_diagnostic(state_path, exc)]
+    try:
+        try:
+            state_fd = os.open(
+                state_path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root_fd
+            )
+        except FileNotFoundError:
+            return None, []
+        except OSError as exc:
+            return None, [_product_state_access_diagnostic(state_path, exc)]
+    finally:
+        os.close(root_fd)
+    try:
+        chunks: list[bytes] = []
+        remaining = MAX_STATE_FILE_BYTES + 1
+        while remaining:
+            chunk = os.read(state_fd, min(FINGERPRINT_READ_CHUNK_BYTES, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks), []
+    except OSError as exc:
+        return None, [_product_state_access_diagnostic(state_path, exc)]
+    finally:
+        os.close(state_fd)
+
+
+def write_architecture_state(
+    repo_root: Path, state_path: Path, encoded: bytes
+) -> list[Diagnostic]:
+    """Write architecture state through a pinned, non-following directory."""
+
+    try:
+        root_fd = _open_architecture_state_directory(repo_root, create=True)
+    except OSError as exc:
+        return [_product_state_access_diagnostic(state_path, exc)]
+    try:
+        try:
+            state_fd = os.open(
+                state_path.name,
+                os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
+                0o666,
+                dir_fd=root_fd,
+            )
+        except OSError as exc:
+            return [_product_state_access_diagnostic(state_path, exc)]
+    finally:
+        os.close(root_fd)
+    try:
+        written = 0
+        while written < len(encoded):
+            written += os.write(state_fd, encoded[written:])
+    except OSError as exc:
+        return [_product_state_access_diagnostic(state_path, exc)]
+    finally:
+        os.close(state_fd)
+    return []
+
+
 def _schema(name: str) -> dict[str, Any]:
     return json.loads((ROOT / "schema" / name).read_text())
 
@@ -340,36 +430,96 @@ def _bounded_product_state_paths(
     state_paths: list[Path] = []
     pending = [(root_fd, state_root)]
     scanned_entries = 0
-    while pending:
-        directory_fd, directory = pending.pop()
-        try:
-            with os.scandir(directory_fd) as entries:
-                for entry in entries:
-                    if scanned_entries == MAX_PRODUCT_STATE_SCAN_ENTRIES:
-                        return state_paths, True, []
-                    scanned_entries += 1
-                    path = directory / entry.name
-                    if entry.is_dir(follow_symlinks=False):
-                        try:
-                            child_fd = os.open(
-                                entry.name,
-                                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                                dir_fd=directory_fd,
-                            )
-                        except OSError as exc:
-                            return state_paths, False, [
-                                _product_state_access_diagnostic(path, exc)
-                            ]
-                        pending.append((child_fd, directory / entry.name))
-                    elif entry.name.endswith(".state.yaml"):
-                        if len(state_paths) == max_state_files:
+    try:
+        while pending:
+            directory_fd, directory = pending.pop()
+            try:
+                with os.scandir(directory_fd) as entries:
+                    for entry in entries:
+                        if scanned_entries == MAX_PRODUCT_STATE_SCAN_ENTRIES:
                             return state_paths, True, []
-                        state_paths.append(directory / entry.name)
-        except OSError as exc:
-            return state_paths, False, [
-                _product_state_access_diagnostic(directory, exc)
-            ]
-    return state_paths, False, []
+                        scanned_entries += 1
+                        path = directory / entry.name
+                        if entry.is_dir(follow_symlinks=False):
+                            try:
+                                child_fd = os.open(
+                                    entry.name,
+                                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                    dir_fd=directory_fd,
+                                )
+                            except OSError as exc:
+                                return state_paths, False, [
+                                    _product_state_access_diagnostic(path, exc)
+                                ]
+                            pending.append((child_fd, directory / entry.name))
+                        elif entry.name.endswith(".state.yaml"):
+                            if len(state_paths) == max_state_files:
+                                return state_paths, True, []
+                            state_paths.append(directory / entry.name)
+            except OSError as exc:
+                try:
+                    os.close(directory_fd)
+                except OSError:
+                    pass
+                return state_paths, False, [
+                    _product_state_access_diagnostic(directory, exc)
+                ]
+        return state_paths, False, []
+    finally:
+        for directory_fd, _ in pending:
+            os.close(directory_fd)
+
+
+def _architecture_state_paths(
+    repo_root: Path, max_state_files: int
+) -> tuple[list[Path], list[Diagnostic]]:
+    """Discover flat architecture state through a non-following root handle."""
+
+    root = repo_root / ".pml" / "architecture"
+    try:
+        root_fd = _open_architecture_state_directory(repo_root, create=False)
+    except FileNotFoundError:
+        return [], []
+    except OSError as exc:
+        return [], [_product_state_access_diagnostic(root, exc)]
+    diagnostics: list[Diagnostic] = []
+    state_paths: list[Path] = []
+    try:
+        with os.scandir(root_fd) as entries:
+            for index, entry in enumerate(entries):
+                path = root / entry.name
+                if index == MAX_ARCHITECTURE_STATE_ENTRIES:
+                    diagnostics.append(Diagnostic(
+                        str(root),
+                        "state-limit",
+                        "architecture state contains too many entries",
+                    ))
+                    break
+                if entry.is_symlink() or entry.is_dir(follow_symlinks=False):
+                    diagnostics.append(Diagnostic(
+                        str(path),
+                        "state-path",
+                        f"architecture state must be a direct file at {root}",
+                    ))
+                    continue
+                if not entry.name.endswith(".state.yaml"):
+                    diagnostics.append(Diagnostic(
+                        str(path),
+                        "state-path",
+                        f"architecture state must be a direct file at {root}",
+                    ))
+                    continue
+                if len(state_paths) == max_state_files:
+                    diagnostics.append(Diagnostic(
+                        str(root),
+                        "state-limit",
+                        "architecture state contains more files than approved decisions",
+                    ))
+                    break
+                state_paths.append(path)
+    except OSError as exc:
+        diagnostics.append(_product_state_access_diagnostic(root, exc))
+    return state_paths, diagnostics
 
 
 def outside_repository_paths(
@@ -730,6 +880,17 @@ def load_product_state(
     return _load_state_encoded(state_path, encoded)
 
 
+def load_architecture_state(
+    repo_root: Path, state_path: Path
+) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
+    """Load architecture state through a pinned, non-following directory."""
+
+    encoded, diagnostics = _read_architecture_state(repo_root, state_path)
+    if encoded is None:
+        return None, diagnostics
+    return _load_state_encoded(state_path, encoded)
+
+
 def validate_product_state(
     repo_root: Path,
     definition: dict[str, Any],
@@ -872,41 +1033,12 @@ def validate_architecture_state(
     diagnostics.extend(root_errors)
     if root_errors:
         return diagnostics
-    state_paths: list[Path] = []
-    if architecture_root.exists():
-        max_state_files = max(1, len(decisions)) + 1
-        for index, entry in enumerate(architecture_root.iterdir()):
-            if index == MAX_ARCHITECTURE_STATE_ENTRIES:
-                diagnostics.append(Diagnostic(
-                    str(architecture_root),
-                    "state-limit",
-                    "architecture state contains too many entries",
-                ))
-                break
-            if entry.is_symlink() or entry.is_dir() or not entry.is_file():
-                diagnostics.append(Diagnostic(
-                    str(entry),
-                    "state-path",
-                    f"architecture state must be a direct file at {architecture_root}",
-                ))
-                continue
-            if not entry.name.endswith(".state.yaml"):
-                diagnostics.append(Diagnostic(
-                    str(entry),
-                    "state-path",
-                    f"architecture state must be a direct file at {architecture_root}",
-                ))
-                continue
-            if len(state_paths) == max_state_files:
-                diagnostics.append(Diagnostic(
-                    str(architecture_root),
-                    "state-limit",
-                    "architecture state contains more files than approved decisions",
-                ))
-                break
-            state_paths.append(entry)
+    state_paths, state_path_errors = _architecture_state_paths(
+        repo_root, max(1, len(decisions)) + 1
+    )
+    diagnostics.extend(state_path_errors)
     for state_path in sorted(state_paths):
-        state, errors = load_state(state_path)
+        state, errors = load_architecture_state(repo_root, state_path)
         diagnostics.extend(errors)
         if state is None:
             continue
@@ -930,7 +1062,7 @@ def validate_architecture_state(
 
     for node_id in constrained_decisions:
         state_path = state_path_for(repo_root, node_id)
-        if not state_path.is_file():
+        if state_path not in state_paths:
             diagnostics.append(Diagnostic(
                 str(state_path),
                 "missing-state",
@@ -1045,7 +1177,7 @@ def validate_probe_evidence(
     for node_id, _ in nodes:
         state_path = state_path_for(repo_root, node_id)
         if node_id.startswith("architecture."):
-            state, state_errors = load_state(state_path)
+            state, state_errors = load_architecture_state(repo_root, state_path)
         else:
             state, state_errors = load_product_state(repo_root, state_path)
         diagnostics.extend(state_errors)

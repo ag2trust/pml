@@ -19,6 +19,7 @@ from pml.project_state import (
     canonical_hash,
     input_fingerprint,
     load_bindings,
+    write_architecture_state,
     write_product_state,
     load_state,
     validate_architecture_state,
@@ -1029,6 +1030,71 @@ def test_product_state_write_stays_in_pinned_directory_after_symlink_swap(
     assert (
         original_domains / "notes/features/creation.state.yaml"
     ).read_bytes() == b"pinned state"
+
+
+def test_architecture_state_write_stays_in_pinned_directory_after_symlink_swap(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/architecture/durable_store.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    external = tmp_path / "external"
+    external_state = external / "durable_store.state.yaml"
+    external.mkdir()
+    external_state.write_bytes(b"external state")
+    original_architecture = product / "original-architecture"
+    original_open = os.open
+
+    def swap_before_state_open(path, flags, mode=0o777, *, dir_fd=None):
+        if path == "durable_store.state.yaml" and flags & os.O_CREAT:
+            (product / ".pml/architecture").rename(original_architecture)
+            (product / ".pml/architecture").symlink_to(
+                external, target_is_directory=True
+            )
+        return original_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr("pml.project_state.os.open", swap_before_state_open)
+
+    assert write_architecture_state(product, state_path, b"pinned state") == []
+    assert external_state.read_bytes() == b"external state"
+    assert (
+        original_architecture / "durable_store.state.yaml"
+    ).read_bytes() == b"pinned state"
+
+
+def test_product_state_scan_closes_queued_descriptors_on_limit(
+    tmp_path: Path, monkeypatch
+) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    state_root = product / ".pml" / "state"
+    for index in range(MAX_PRODUCT_STATE_SCAN_ENTRIES):
+        (state_root / f"directory_{index}").mkdir()
+    opened: list[int] = []
+    closed: list[int] = []
+    original_open = os.open
+    original_close = os.close
+
+    def record_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = original_open(path, flags, mode, dir_fd=dir_fd)
+        opened.append(fd)
+        return fd
+
+    def record_close(fd):
+        closed.append(fd)
+        original_close(fd)
+
+    monkeypatch.setattr("pml.project_state.os.open", record_open)
+    monkeypatch.setattr("pml.project_state.os.close", record_close)
+
+    diagnostics = validate_product_state(
+        product, document, definition_source=manifest
+    )
+
+    assert any(item.code == "state-limit" for item in diagnostics)
+    assert all(fd in closed for fd in opened[3:])
 
 
 def test_probe_evidence_rejects_architecture_state_root_symlink(

@@ -14,8 +14,8 @@ from pml.project_state import (
     canonical_hash,
     input_fingerprint,
     load_locked_bindings,
+    load_architecture_state,
     load_product_state,
-    load_state,
     state_path_for,
 )
 from pml.validator import Diagnostic
@@ -223,15 +223,7 @@ def architecture_status(
             continue
         decision_id = node_id.removeprefix("architecture.")
         state_path = state_path_for(repo_root, node_id)
-        if state_path.is_symlink():
-            state = None
-            errors = [Diagnostic(
-                str(state_path),
-                "state-path",
-                "architecture state file must not be a symbolic link",
-            )]
-        else:
-            state, errors = load_state(state_path)
+        state, errors = load_architecture_state(repo_root, state_path)
         if state is not None and state["node"] != node_id:
             errors.append(Diagnostic(
                 f"{state_path}:node",
