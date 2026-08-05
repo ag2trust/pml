@@ -164,6 +164,18 @@ def _output_cases(node: dict[str, Any]) -> Iterable[tuple[str, dict[str, Any]]]:
         yield "output", output
 
 
+def _is_behavior_node(node_id: str) -> bool:
+    """Return whether a semantic ID has the canonical behavior path shape."""
+
+    parts = node_id.split(".")
+    return (
+        len(parts) == 6
+        and parts[0] == "domains"
+        and parts[2] == "features"
+        and parts[4] == "behaviors"
+    )
+
+
 def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
 
@@ -245,7 +257,7 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                 diagnostics.append(Diagnostic(f"{node_id}.related_to", "undefined-reference", f"unknown node '{related}'"))
             elif related == node_id:
                 diagnostics.append(Diagnostic(f"{node_id}.related_to", "self-reference", "a node cannot relate to itself"))
-        if ".behaviors." not in node_id:
+        if not _is_behavior_node(node_id):
             for signal in node.get("emits", []):
                 if signal not in signal_ids:
                     diagnostics.append(Diagnostic(f"{node_id}.emits", "undefined-reference", f"unknown signal '{signal}'"))

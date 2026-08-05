@@ -569,6 +569,26 @@ def test_rejects_unknown_signal_relationship_and_architecture(tmp_path: Path) ->
     assert sum(item.code == "undefined-reference" for item in diagnostics) == 3
 
 
+def test_feature_emits_are_validated_when_domain_id_is_behaviors(
+    tmp_path: Path,
+) -> None:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    document["domains"]["behaviors"] = document["domains"].pop("notes")
+    feature = document["domains"]["behaviors"]["features"]["creation"]
+    feature["emits"] = ["missing_signal"]
+    manifest = tmp_path / "behaviors-domain.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    diagnostics = validate_file(manifest)
+
+    assert any(
+        item.code == "undefined-reference"
+        and item.path == "domains.behaviors.features.creation.emits"
+        and "missing_signal" in item.message
+        for item in diagnostics
+    )
+
+
 def test_architecture_requires_bottom_up_references_and_rejects_implementation_detail(tmp_path: Path) -> None:
     source = (ROOT / "examples" / "minimal.pml.yaml").read_text().replace(
         "domains:\n",

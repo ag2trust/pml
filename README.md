@@ -21,8 +21,10 @@ PML manifest
 
 ## Current status
 
-The 0.1 language MVP is under implementation. The normative design is in
-[`docs/specs/0001-language-design.md`](docs/specs/0001-language-design.md).
+The 0.1 language MVP is under implementation. The approved behavior and output
+design is in
+[`docs/specs/0009-behavior-units-and-outputs.md`](docs/specs/0009-behavior-units-and-outputs.md),
+which supersedes the component model in the original language design.
 
 ## Validate a manifest
 
