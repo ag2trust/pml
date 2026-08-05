@@ -17,9 +17,13 @@ from pml.project_state import (
     architecture_state_root_diagnostics,
     canonical_hash,
     input_fingerprint,
+    load_architecture_state,
     load_locked_bindings,
-    load_state,
+    load_product_state,
+    product_state_paths_diagnostics,
     state_path_for,
+    write_product_state,
+    write_architecture_state,
 )
 from pml.validator import Diagnostic, UniqueKeyLoader, _path
 
@@ -174,10 +178,19 @@ def ingest_report(
         obligations[item["target"]].node_id
         for item in implementation + checks
     }
+    product_state_paths = [
+        state_path_for(repo_root, node_id)
+        for node_id in touched_nodes
+        if not node_id.startswith("architecture.")
+    ]
+    if product_state_paths:
+        diagnostics.extend(product_state_paths_diagnostics(
+            repo_root, product_state_paths
+        ))
     if any(node_id.startswith("architecture.") for node_id in touched_nodes):
         diagnostics.extend(architecture_state_root_diagnostics(repo_root))
-        if diagnostics:
-            return diagnostics
+    if diagnostics:
+        return diagnostics
     states: dict[str, tuple[Path, dict[str, Any], str]] = {}
     for node_id in touched_nodes:
         node = nodes[node_id]
@@ -194,14 +207,10 @@ def ingest_report(
             node_obligations = list(enumerate_obligations(definition, node_id))
         current_input = input_fingerprint(repo_root, paths)
         state_path = state_path_for(repo_root, node_id)
-        if node_id.startswith("architecture.") and state_path.is_symlink():
-            diagnostics.append(Diagnostic(
-                str(state_path),
-                "state-path",
-                "architecture state file must not be a symbolic link",
-            ))
-            continue
-        state, state_errors = load_state(state_path)
+        if node_id.startswith("architecture."):
+            state, state_errors = load_architecture_state(repo_root, state_path)
+        else:
+            state, state_errors = load_product_state(repo_root, state_path)
         if state_errors:
             diagnostics.extend(state_errors)
             continue
@@ -304,6 +313,12 @@ def ingest_report(
         return diagnostics
 
     for state_path, encoded in serialized_states:
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_bytes(encoded)
+        if state_path.is_relative_to(repo_root / ".pml" / "state"):
+            diagnostics.extend(write_product_state(repo_root, state_path, encoded))
+        else:
+            diagnostics.extend(write_architecture_state(
+                repo_root, state_path, encoded
+            ))
+    if diagnostics:
+        return diagnostics
     return []

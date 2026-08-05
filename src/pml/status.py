@@ -10,10 +10,12 @@ from pml.obligations import Obligation, enumerate_architecture_obligations, enum
 from pml.project_state import (
     LockedBindings,
     architecture_state_root_diagnostics,
+    product_state_paths_diagnostics,
     canonical_hash,
     input_fingerprint,
     load_locked_bindings,
-    load_state,
+    load_architecture_state,
+    load_product_state,
     state_path_for,
 )
 from pml.validator import Diagnostic
@@ -121,12 +123,20 @@ def product_status(
     definition_source: Path | None = None,
     state_diagnostics: list[Diagnostic] | None = None,
 ) -> list[NodeStatus]:
-    metadata = repo_root / ".pml"
     if locked_bindings is None:
         locked_bindings, _ = load_locked_bindings(
             repo_root, definition, definition_source
         )
     if locked_bindings is None:
+        return []
+    state_paths = [
+        state_path_for(repo_root, node_id)
+        for node_id, _ in iter_nodes(definition)
+    ]
+    path_errors = product_state_paths_diagnostics(repo_root, state_paths)
+    if path_errors:
+        if state_diagnostics is not None:
+            state_diagnostics.extend(path_errors)
         return []
     bindings = locked_bindings.document
     binding_map = bindings["bindings"]
@@ -135,9 +145,8 @@ def product_status(
     implementation_weight = {"implemented": 1.0, "partial": 0.5, "missing": 0.0, "unknown": 0.0}
 
     for node_id, node in nodes.items():
-        state_path = metadata / "state" / Path(*node_id.split("."))
-        state_path = state_path.with_suffix(".state.yaml")
-        state, errors = load_state(state_path)
+        state_path = state_path_for(repo_root, node_id)
+        state, errors = load_product_state(repo_root, state_path)
         if state_diagnostics is not None:
             state_diagnostics.extend(errors)
         state = state or {"obligations": {}, "related_fingerprints": {}}
@@ -214,15 +223,7 @@ def architecture_status(
             continue
         decision_id = node_id.removeprefix("architecture.")
         state_path = state_path_for(repo_root, node_id)
-        if state_path.is_symlink():
-            state = None
-            errors = [Diagnostic(
-                str(state_path),
-                "state-path",
-                "architecture state file must not be a symbolic link",
-            )]
-        else:
-            state, errors = load_state(state_path)
+        state, errors = load_architecture_state(repo_root, state_path)
         if state is not None and state["node"] != node_id:
             errors.append(Diagnostic(
                 f"{state_path}:node",

@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import shutil
 
 import yaml
@@ -11,11 +12,12 @@ from pml.project_state import (
     bindings_digest,
     canonical_hash,
     input_fingerprint,
+    validate_architecture_state,
     validate_probe_evidence,
     validate_product_state,
 )
 from pml.status import product_status
-from pml.validator import load_document
+from pml.validator import Diagnostic, load_document
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -164,6 +166,144 @@ def test_ingests_current_probe_evidence(tmp_path: Path) -> None:
     assert record["probe_fingerprint"] == probe_fingerprint(
         probes["preserve_content"]
     )
+
+
+def test_ingest_rejects_product_state_root_symlink_outside_repository(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    probes, diagnostics = load_probes(probe_path, definition)
+    assert diagnostics == []
+    external = tmp_path / "external"
+    external.mkdir()
+    state_root = product / ".pml" / "state"
+    shutil.rmtree(state_root)
+    state_root.symlink_to(external, target_is_directory=True)
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert list(external.iterdir()) == []
+
+
+def test_ingest_rejects_hard_linked_product_state_sentinel(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    probes, diagnostics = load_probes(probe_path, definition)
+    assert diagnostics == []
+    state_path = product / ".pml/state/domains/notes/features/creation.state.yaml"
+    sentinel = tmp_path / "product-sentinel.state.yaml"
+    sentinel_bytes = b"external product sentinel"
+    sentinel.write_bytes(sentinel_bytes)
+    state_path.unlink()
+    os.link(sentinel, state_path)
+
+    diagnostics = validate_product_state(
+        product,
+        definition,
+        definition_source=owner_definition_path(product),
+    )
+    assert [item.code for item in diagnostics] == ["state-path"]
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert sentinel.read_bytes() == sentinel_bytes
+
+
+def test_product_state_path_rejects_nested_symlink_outside_repository(
+    tmp_path: Path,
+) -> None:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    report_path = tmp_path / "report.yaml"
+    write_probe(probe_path)
+    write_report(report_path)
+    probes, diagnostics = load_probes(probe_path, definition)
+    assert diagnostics == []
+    assert ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
+    assert validate_probe_evidence(
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
+    state_root = product / ".pml" / "state"
+    external = tmp_path / "external"
+    external.mkdir()
+    shutil.move(state_root / "domains", external / "domains")
+    (state_root / "domains").symlink_to(
+        external / "domains", target_is_directory=True
+    )
+    external_state = (
+        external / "domains/notes/features/creation.state.yaml"
+    )
+    original = external_state.read_bytes()
+
+    diagnostics = validate_product_state(
+        product, definition, definition_source=owner_definition_path(product)
+    )
+    assert [item.code for item in diagnostics] == ["state-path"]
+    status_diagnostics: list[Diagnostic] = []
+    assert product_status(
+        product,
+        definition,
+        definition_source=owner_definition_path(product),
+        state_diagnostics=status_diagnostics,
+    ) == []
+    assert [item.code for item in status_diagnostics] == ["state-path"]
+
+    diagnostics = validate_probe_evidence(
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+    assert [item.code for item in diagnostics] == ["state-path"]
+
+    diagnostics = ingest_report(
+        report_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert external_state.read_bytes() == original
 
 
 def test_report_rejects_duplicate_evidence_lanes_without_writing(
@@ -970,6 +1110,27 @@ def test_ingests_architecture_evidence_with_architecture_bound_paths(tmp_path: P
     )
     assert [item.code for item in oversized_diagnostics] == ["state-size"]
     assert state_path.read_bytes() == oversized
+
+    sentinel = tmp_path / "architecture-sentinel.state.yaml"
+    sentinel_bytes = b"external architecture sentinel"
+    sentinel.write_bytes(sentinel_bytes)
+    state_path.unlink()
+    os.link(sentinel, state_path)
+
+    diagnostics = validate_architecture_state(
+        product, definition, definition_source=manifest
+    )
+    assert [item.code for item in diagnostics] == ["state-path"]
+
+    diagnostics = ingest_report(
+        report,
+        product,
+        definition,
+        {},
+        definition_source=manifest,
+    )
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert sentinel.read_bytes() == sentinel_bytes
 
 
 def test_ingestion_reconciles_added_architecture_constraint(tmp_path: Path) -> None:

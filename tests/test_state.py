@@ -1,10 +1,13 @@
+from collections import Counter
 from pathlib import Path
+import os
 import shutil
 
 import json
 from jsonschema import Draft202012Validator
 import yaml
 
+import pml.project_state as project_state
 from pml.obligations import Obligation, enumerate_architecture_obligations, enumerate_obligations
 from pml.cli import main
 from pml.project_state import (
@@ -18,6 +21,8 @@ from pml.project_state import (
     canonical_hash,
     input_fingerprint,
     load_bindings,
+    write_architecture_state,
+    write_product_state,
     load_state,
     validate_architecture_state,
     validate_probe_evidence,
@@ -477,7 +482,7 @@ def test_product_state_limits_discovered_generated_state_files(
         loaded.append(path)
         return None, []
 
-    monkeypatch.setattr("pml.project_state.load_state", record_load)
+    monkeypatch.setattr("pml.project_state.load_product_state", lambda _, path: record_load(path))
     diagnostics = validate_product_state(
         product, document, definition_source=manifest
     )
@@ -974,6 +979,510 @@ def test_architecture_state_root_rejects_symlink_outside_product_repository(
 
     assert [item.code for item in diagnostics] == ["state-path"]
     assert list(external.iterdir()) == []
+
+
+def test_product_state_root_rejects_symlink_outside_product_repository(
+    tmp_path: Path,
+) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    external = tmp_path / "external"
+    external.mkdir()
+    state_root = product / ".pml" / "state"
+    shutil.rmtree(state_root)
+    state_root.symlink_to(external, target_is_directory=True)
+
+    diagnostics = validate_product_state(
+        product, document, definition_source=manifest
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert list(external.iterdir()) == []
+
+
+def test_product_state_write_stays_in_pinned_directory_after_symlink_swap(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = (
+        product / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    state_path.parent.mkdir(parents=True)
+    external = tmp_path / "external"
+    external_state = external / "notes/features/creation.state.yaml"
+    external_state.parent.mkdir(parents=True)
+    external_state.write_bytes(b"external state")
+    original_domains = product / "original-domains"
+    original_mkdir = os.mkdir
+
+    def swap_before_temp_directory(path, mode=0o777, *, dir_fd=None):
+        if isinstance(path, str) and path.startswith(".creation.state.yaml."):
+            (product / ".pml/state/domains").rename(original_domains)
+            (product / ".pml/state/domains").symlink_to(
+                external, target_is_directory=True
+            )
+        return original_mkdir(path, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr("pml.project_state.os.mkdir", swap_before_temp_directory)
+
+    assert write_product_state(product, state_path, b"pinned state") == []
+    assert external_state.read_bytes() == b"external state"
+    assert (
+        original_domains / "notes/features/creation.state.yaml"
+    ).read_bytes() == b"pinned state"
+
+
+def test_architecture_state_write_stays_in_pinned_directory_after_symlink_swap(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/architecture/durable_store.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    external = tmp_path / "external"
+    external_state = external / "durable_store.state.yaml"
+    external.mkdir()
+    external_state.write_bytes(b"external state")
+    original_architecture = product / "original-architecture"
+    original_mkdir = os.mkdir
+
+    def swap_before_temp_directory(path, mode=0o777, *, dir_fd=None):
+        if isinstance(path, str) and path.startswith(".durable_store.state.yaml."):
+            (product / ".pml/architecture").rename(original_architecture)
+            (product / ".pml/architecture").symlink_to(
+                external, target_is_directory=True
+            )
+        return original_mkdir(path, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr("pml.project_state.os.mkdir", swap_before_temp_directory)
+
+    assert write_architecture_state(product, state_path, b"pinned state") == []
+    assert external_state.read_bytes() == b"external state"
+    assert (
+        original_architecture / "durable_store.state.yaml"
+    ).read_bytes() == b"pinned state"
+
+
+def test_product_state_rejects_hard_linked_external_sentinel(tmp_path: Path) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    state_path = product / ".pml/state/domains/notes/features/creation.state.yaml"
+    sentinel = tmp_path / "product-sentinel.state.yaml"
+    sentinel_bytes = b"external product sentinel"
+    sentinel.write_bytes(sentinel_bytes)
+    state_path.unlink()
+    os.link(sentinel, state_path)
+
+    diagnostics = validate_product_state(
+        product, document, definition_source=manifest
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    write_diagnostics = write_product_state(product, state_path, b"replacement")
+    assert [item.code for item in write_diagnostics] == ["state-path"]
+    assert sentinel.read_bytes() == sentinel_bytes
+
+
+def test_architecture_state_rejects_hard_linked_external_sentinel(
+    tmp_path: Path,
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    state_path = product / ".pml/architecture/durable_store.state.yaml"
+    state_path.parent.mkdir()
+    sentinel = tmp_path / "architecture-sentinel.state.yaml"
+    sentinel_bytes = b"external architecture sentinel"
+    sentinel.write_bytes(sentinel_bytes)
+    os.link(sentinel, state_path)
+
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    write_diagnostics = write_architecture_state(
+        product, state_path, b"replacement"
+    )
+    assert [item.code for item in write_diagnostics] == ["state-path"]
+    assert sentinel.read_bytes() == sentinel_bytes
+
+
+def test_product_state_replaces_hard_link_created_after_validation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/state/domains/notes/features/creation.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_bytes(b"previous state")
+    sentinel = tmp_path / "product-sentinel.state.yaml"
+    sentinel_bytes = b"external product sentinel"
+    sentinel.write_bytes(sentinel_bytes)
+    original_diagnostic = project_state._unsafe_state_file_diagnostic
+    linked = False
+
+    def link_after_validation(path, metadata):
+        nonlocal linked
+        diagnostic = original_diagnostic(path, metadata)
+        if path == state_path and not linked:
+            state_path.unlink()
+            os.link(sentinel, state_path)
+            linked = True
+        return diagnostic
+
+    monkeypatch.setattr(
+        "pml.project_state._unsafe_state_file_diagnostic", link_after_validation
+    )
+
+    assert write_product_state(product, state_path, b"replacement") == []
+    assert sentinel.read_bytes() == sentinel_bytes
+    assert state_path.read_bytes() == b"replacement"
+
+
+def test_architecture_state_replaces_hard_link_created_after_validation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/architecture/durable_store.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_bytes(b"previous state")
+    sentinel = tmp_path / "architecture-sentinel.state.yaml"
+    sentinel_bytes = b"external architecture sentinel"
+    sentinel.write_bytes(sentinel_bytes)
+    original_diagnostic = project_state._unsafe_state_file_diagnostic
+    linked = False
+
+    def link_after_validation(path, metadata):
+        nonlocal linked
+        diagnostic = original_diagnostic(path, metadata)
+        if path == state_path and not linked:
+            state_path.unlink()
+            os.link(sentinel, state_path)
+            linked = True
+        return diagnostic
+
+    monkeypatch.setattr(
+        "pml.project_state._unsafe_state_file_diagnostic", link_after_validation
+    )
+
+    assert write_architecture_state(product, state_path, b"replacement") == []
+    assert sentinel.read_bytes() == sentinel_bytes
+    assert state_path.read_bytes() == b"replacement"
+
+
+def test_product_state_replace_uses_pinned_temporary_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/state/domains/notes/features/creation.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    original_mkdir = os.mkdir
+    original_replace = os.replace
+    temp_directory_name: str | None = None
+    moved_source = tmp_path / "moved-temporary-source"
+
+    def record_temp_directory(path, mode=0o777, *, dir_fd=None):
+        nonlocal temp_directory_name
+        result = original_mkdir(path, mode, dir_fd=dir_fd)
+        if isinstance(path, str) and path.startswith(".creation.state.yaml."):
+            temp_directory_name = path
+        return result
+
+    def swap_temporary_source(source, destination, *, src_dir_fd=None, dst_dir_fd=None):
+        if src_dir_fd == dst_dir_fd:
+            source_path = state_path.parent / source
+            source_path.rename(moved_source)
+            source_path.write_bytes(b"attacker state")
+        else:
+            assert temp_directory_name is not None
+            temp_directory = state_path.parent / temp_directory_name
+            temp_directory.rename(moved_source)
+            temp_directory.mkdir()
+        return original_replace(
+            source,
+            destination,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+        )
+
+    monkeypatch.setattr("pml.project_state.os.mkdir", record_temp_directory)
+    monkeypatch.setattr("pml.project_state.os.replace", swap_temporary_source)
+
+    assert write_product_state(product, state_path, b"replacement") == []
+    assert state_path.read_bytes() == b"replacement"
+    moved_source.rmdir()
+
+
+def test_product_state_rejects_substituted_inner_temporary_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/state/domains/notes/features/creation.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    original_replace = os.replace
+
+    def substitute_inner_source(
+        source, destination, *, src_dir_fd=None, dst_dir_fd=None
+    ):
+        assert src_dir_fd is not None
+        assert src_dir_fd != dst_dir_fd
+        os.unlink(source, dir_fd=src_dir_fd)
+        attacker_fd = os.open(
+            source,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+            dir_fd=src_dir_fd,
+        )
+        try:
+            os.write(attacker_fd, b"attacker state")
+        finally:
+            os.close(attacker_fd)
+        return original_replace(
+            source,
+            destination,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+        )
+
+    monkeypatch.setattr("pml.project_state.os.replace", substitute_inner_source)
+
+    diagnostics = write_product_state(product, state_path, b"verified state")
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert not state_path.exists()
+
+
+def test_architecture_state_rejects_substituted_inner_temporary_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/architecture/durable_store.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    original_replace = os.replace
+
+    def substitute_inner_source(
+        source, destination, *, src_dir_fd=None, dst_dir_fd=None
+    ):
+        assert src_dir_fd is not None
+        assert src_dir_fd != dst_dir_fd
+        os.unlink(source, dir_fd=src_dir_fd)
+        attacker_fd = os.open(
+            source,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+            dir_fd=src_dir_fd,
+        )
+        try:
+            os.write(attacker_fd, b"attacker state")
+        finally:
+            os.close(attacker_fd)
+        return original_replace(
+            source,
+            destination,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+        )
+
+    monkeypatch.setattr("pml.project_state.os.replace", substitute_inner_source)
+
+    diagnostics = write_architecture_state(product, state_path, b"verified state")
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert not state_path.exists()
+
+
+def test_architecture_state_rejects_fifo_without_opening_it(tmp_path: Path) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    architecture = product / ".pml" / "architecture"
+    architecture.mkdir()
+    os.mkfifo(architecture / "durable_store.state.yaml")
+
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
+
+    assert any(item.code == "state-path" for item in diagnostics)
+
+
+def test_product_state_scan_closes_queued_descriptors_on_limit(
+    tmp_path: Path, monkeypatch
+) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    state_root = product / ".pml" / "state"
+    for index in range(MAX_PRODUCT_STATE_SCAN_ENTRIES):
+        (state_root / f"directory_{index}").mkdir()
+    opened: list[int] = []
+    closed: list[int] = []
+    original_open = os.open
+    original_close = os.close
+
+    def record_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = original_open(path, flags, mode, dir_fd=dir_fd)
+        opened.append(fd)
+        return fd
+
+    def record_close(fd):
+        closed.append(fd)
+        original_close(fd)
+
+    monkeypatch.setattr("pml.project_state.os.open", record_open)
+    monkeypatch.setattr("pml.project_state.os.close", record_close)
+
+    diagnostics = validate_product_state(
+        product, document, definition_source=manifest
+    )
+
+    assert any(item.code == "state-limit" for item in diagnostics)
+    assert all(fd in closed for fd in opened[3:])
+
+
+def test_product_state_scan_closes_processed_descriptors_on_success(
+    tmp_path: Path, monkeypatch
+) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    opened: list[int] = []
+    closed: list[int] = []
+    original_open = os.open
+    original_close = os.close
+    original_scandir = os.scandir
+    sentinel = tmp_path / "reused-descriptor-sentinel"
+    sentinel.write_text("sentinel")
+    replacement_fds: list[int] = []
+
+    def record_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = original_open(path, flags, mode, dir_fd=dir_fd)
+        opened.append(fd)
+        return fd
+
+    def record_close(fd):
+        closed.append(fd)
+        original_close(fd)
+
+    def closing_scandir(path):
+        entries = original_scandir(path)
+        if not isinstance(path, int):
+            return entries
+
+        class ClosingScandir:
+            def __enter__(self):
+                return entries
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                entries.close()
+                original_close(path)
+                replacement_fds.append(original_open(sentinel, os.O_RDONLY))
+
+        return ClosingScandir()
+
+    monkeypatch.setattr("pml.project_state.os.open", record_open)
+    monkeypatch.setattr("pml.project_state.os.close", record_close)
+    monkeypatch.setattr("pml.project_state.os.scandir", closing_scandir)
+
+    assert validate_product_state(
+        product, document, definition_source=manifest
+    ) == []
+    assert Counter(opened) == Counter(closed)
+    for fd in replacement_fds:
+        os.fstat(fd)
+        original_close(fd)
+
+
+def test_architecture_state_scan_closes_root_descriptor_on_success(
+    tmp_path: Path, monkeypatch
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    (product / ".pml/architecture").mkdir()
+    opened: list[int] = []
+    closed: list[int] = []
+    original_open = os.open
+    original_close = os.close
+
+    def record_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = original_open(path, flags, mode, dir_fd=dir_fd)
+        opened.append(fd)
+        return fd
+
+    def record_close(fd):
+        closed.append(fd)
+        original_close(fd)
+
+    monkeypatch.setattr("pml.project_state.os.open", record_open)
+    monkeypatch.setattr("pml.project_state.os.close", record_close)
+
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
+
+    assert [item.code for item in diagnostics] == ["missing-state"]
+    assert Counter(opened) == Counter(closed)
+
+
+def test_probe_evidence_rejects_architecture_state_root_symlink(
+    tmp_path: Path,
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    external = tmp_path / "external"
+    external.mkdir()
+    (product / ".pml" / "architecture").symlink_to(
+        external, target_is_directory=True
+    )
+
+    diagnostics = validate_probe_evidence(
+        product, document, {}, definition_source=manifest
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
 
 
 def test_architecture_state_and_status_ignore_product_local_bindings(
