@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import secrets
 import stat
 from typing import Any
 
@@ -223,6 +224,79 @@ def _unsafe_state_file_diagnostic(path: Path, metadata: os.stat_result) -> Diagn
     return None
 
 
+def _open_state_temp_file(parent_fd: int, state_name: str) -> tuple[str, int]:
+    """Create a private temporary state file beneath a pinned directory."""
+
+    for _ in range(16):
+        temp_name = f".{state_name}.{secrets.token_hex(16)}.tmp"
+        try:
+            return temp_name, os.open(
+                temp_name,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o600,
+                dir_fd=parent_fd,
+            )
+        except FileExistsError:
+            continue
+    raise FileExistsError("could not allocate a private generated state file")
+
+
+def _write_state(
+    parent_fd: int, state_path: Path, state_name: str, encoded: bytes
+) -> list[Diagnostic]:
+    """Replace state atomically without mutating an existing inode."""
+
+    temp_name: str | None = None
+    temp_fd: int | None = None
+    try:
+        try:
+            state_fd = os.open(
+                state_name,
+                os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                dir_fd=parent_fd,
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            try:
+                diagnostic = _unsafe_state_file_diagnostic(
+                    state_path, os.fstat(state_fd)
+                )
+                if diagnostic:
+                    return [diagnostic]
+            finally:
+                os.close(state_fd)
+        temp_name, temp_fd = _open_state_temp_file(parent_fd, state_name)
+        diagnostic = _unsafe_state_file_diagnostic(
+            state_path, os.fstat(temp_fd)
+        )
+        if diagnostic:
+            return [diagnostic]
+        written = 0
+        while written < len(encoded):
+            written += os.write(temp_fd, encoded[written:])
+        os.close(temp_fd)
+        temp_fd = None
+        os.replace(
+            temp_name,
+            state_name,
+            src_dir_fd=parent_fd,
+            dst_dir_fd=parent_fd,
+        )
+        temp_name = None
+    except OSError as exc:
+        return [_product_state_access_diagnostic(state_path, exc)]
+    finally:
+        if temp_fd is not None:
+            os.close(temp_fd)
+        if temp_name is not None:
+            try:
+                os.unlink(temp_name, dir_fd=parent_fd)
+            except OSError:
+                pass
+    return []
+
+
 def _read_product_state(
     repo_root: Path, state_path: Path
 ) -> tuple[bytes | None, list[Diagnostic]]:
@@ -282,30 +356,9 @@ def write_product_state(
     except (OSError, ValueError) as exc:
         return [_product_state_access_diagnostic(state_path, exc)]
     try:
-        try:
-            state_fd = os.open(
-                parts[-1],
-                os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
-                0o666,
-                dir_fd=parent_fd,
-            )
-        except OSError as exc:
-            return [_product_state_access_diagnostic(state_path, exc)]
+        return _write_state(parent_fd, state_path, parts[-1], encoded)
     finally:
         os.close(parent_fd)
-    try:
-        diagnostic = _unsafe_state_file_diagnostic(state_path, os.fstat(state_fd))
-        if diagnostic:
-            return [diagnostic]
-        os.ftruncate(state_fd, 0)
-        written = 0
-        while written < len(encoded):
-            written += os.write(state_fd, encoded[written:])
-    except OSError as exc:
-        return [_product_state_access_diagnostic(state_path, exc)]
-    finally:
-        os.close(state_fd)
-    return []
 
 
 def _open_architecture_state_directory(repo_root: Path, *, create: bool) -> int:
@@ -381,30 +434,9 @@ def write_architecture_state(
     except OSError as exc:
         return [_product_state_access_diagnostic(state_path, exc)]
     try:
-        try:
-            state_fd = os.open(
-                state_path.name,
-                os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
-                0o666,
-                dir_fd=root_fd,
-            )
-        except OSError as exc:
-            return [_product_state_access_diagnostic(state_path, exc)]
+        return _write_state(root_fd, state_path, state_path.name, encoded)
     finally:
         os.close(root_fd)
-    try:
-        diagnostic = _unsafe_state_file_diagnostic(state_path, os.fstat(state_fd))
-        if diagnostic:
-            return [diagnostic]
-        os.ftruncate(state_fd, 0)
-        written = 0
-        while written < len(encoded):
-            written += os.write(state_fd, encoded[written:])
-    except OSError as exc:
-        return [_product_state_access_diagnostic(state_path, exc)]
-    finally:
-        os.close(state_fd)
-    return []
 
 
 def _schema(name: str) -> dict[str, Any]:

@@ -7,6 +7,7 @@ import json
 from jsonschema import Draft202012Validator
 import yaml
 
+import pml.project_state as project_state
 from pml.obligations import Obligation, enumerate_architecture_obligations, enumerate_obligations
 from pml.cli import main
 from pml.project_state import (
@@ -1017,7 +1018,11 @@ def test_product_state_write_stays_in_pinned_directory_after_symlink_swap(
     original_open = os.open
 
     def swap_before_state_open(path, flags, mode=0o777, *, dir_fd=None):
-        if path == "creation.state.yaml" and flags & os.O_CREAT:
+        if (
+            isinstance(path, str)
+            and path.startswith(".creation.state.yaml.")
+            and flags & os.O_EXCL
+        ):
             (product / ".pml/state/domains").rename(original_domains)
             (product / ".pml/state/domains").symlink_to(
                 external, target_is_directory=True
@@ -1047,7 +1052,11 @@ def test_architecture_state_write_stays_in_pinned_directory_after_symlink_swap(
     original_open = os.open
 
     def swap_before_state_open(path, flags, mode=0o777, *, dir_fd=None):
-        if path == "durable_store.state.yaml" and flags & os.O_CREAT:
+        if (
+            isinstance(path, str)
+            and path.startswith(".durable_store.state.yaml.")
+            and flags & os.O_EXCL
+        ):
             (product / ".pml/architecture").rename(original_architecture)
             (product / ".pml/architecture").symlink_to(
                 external, target_is_directory=True
@@ -1117,6 +1126,68 @@ def test_architecture_state_rejects_hard_linked_external_sentinel(
     )
     assert [item.code for item in write_diagnostics] == ["state-path"]
     assert sentinel.read_bytes() == sentinel_bytes
+
+
+def test_product_state_replaces_hard_link_created_after_validation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/state/domains/notes/features/creation.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_bytes(b"previous state")
+    sentinel = tmp_path / "product-sentinel.state.yaml"
+    sentinel_bytes = b"external product sentinel"
+    sentinel.write_bytes(sentinel_bytes)
+    original_diagnostic = project_state._unsafe_state_file_diagnostic
+    linked = False
+
+    def link_after_validation(path, metadata):
+        nonlocal linked
+        diagnostic = original_diagnostic(path, metadata)
+        if path == state_path and not linked:
+            state_path.unlink()
+            os.link(sentinel, state_path)
+            linked = True
+        return diagnostic
+
+    monkeypatch.setattr(
+        "pml.project_state._unsafe_state_file_diagnostic", link_after_validation
+    )
+
+    assert write_product_state(product, state_path, b"replacement") == []
+    assert sentinel.read_bytes() == sentinel_bytes
+    assert state_path.read_bytes() == b"replacement"
+
+
+def test_architecture_state_replaces_hard_link_created_after_validation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/architecture/durable_store.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_bytes(b"previous state")
+    sentinel = tmp_path / "architecture-sentinel.state.yaml"
+    sentinel_bytes = b"external architecture sentinel"
+    sentinel.write_bytes(sentinel_bytes)
+    original_diagnostic = project_state._unsafe_state_file_diagnostic
+    linked = False
+
+    def link_after_validation(path, metadata):
+        nonlocal linked
+        diagnostic = original_diagnostic(path, metadata)
+        if path == state_path and not linked:
+            state_path.unlink()
+            os.link(sentinel, state_path)
+            linked = True
+        return diagnostic
+
+    monkeypatch.setattr(
+        "pml.project_state._unsafe_state_file_diagnostic", link_after_validation
+    )
+
+    assert write_architecture_state(product, state_path, b"replacement") == []
+    assert sentinel.read_bytes() == sentinel_bytes
+    assert state_path.read_bytes() == b"replacement"
 
 
 def test_architecture_state_rejects_fifo_without_opening_it(tmp_path: Path) -> None:
