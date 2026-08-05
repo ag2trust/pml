@@ -198,6 +198,17 @@ def _non_regular_state_diagnostic(path: Path) -> Diagnostic:
     )
 
 
+def _scandir_with_owned_descriptor(directory_fd: int):
+    """Start a directory scan that owns a duplicate of ``directory_fd``."""
+
+    scan_fd = os.dup(directory_fd)
+    try:
+        return os.scandir(scan_fd)
+    except BaseException:
+        os.close(scan_fd)
+        raise
+
+
 def _unsafe_state_file_diagnostic(path: Path, metadata: os.stat_result) -> Diagnostic | None:
     """Reject state files whose opened inode is unsafe to read or update."""
 
@@ -473,7 +484,7 @@ def _bounded_product_state_paths(
         while pending:
             directory_fd, directory = pending.pop()
             try:
-                with os.scandir(directory_fd) as entries:
+                with _scandir_with_owned_descriptor(directory_fd) as entries:
                     for entry in entries:
                         if scanned_entries == MAX_PRODUCT_STATE_SCAN_ENTRIES:
                             return state_paths, True, []
@@ -522,7 +533,7 @@ def _architecture_state_paths(
     diagnostics: list[Diagnostic] = []
     state_paths: list[Path] = []
     try:
-        with os.scandir(root_fd) as entries:
+        with _scandir_with_owned_descriptor(root_fd) as entries:
             for index, entry in enumerate(entries):
                 path = root / entry.name
                 if index == MAX_ARCHITECTURE_STATE_ENTRIES:

@@ -1189,6 +1189,10 @@ def test_product_state_scan_closes_processed_descriptors_on_success(
     closed: list[int] = []
     original_open = os.open
     original_close = os.close
+    original_scandir = os.scandir
+    sentinel = tmp_path / "reused-descriptor-sentinel"
+    sentinel.write_text("sentinel")
+    replacement_fds: list[int] = []
 
     def record_open(path, flags, mode=0o777, *, dir_fd=None):
         fd = original_open(path, flags, mode, dir_fd=dir_fd)
@@ -1199,13 +1203,33 @@ def test_product_state_scan_closes_processed_descriptors_on_success(
         closed.append(fd)
         original_close(fd)
 
+    def closing_scandir(path):
+        entries = original_scandir(path)
+        if not isinstance(path, int):
+            return entries
+
+        class ClosingScandir:
+            def __enter__(self):
+                return entries
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                entries.close()
+                original_close(path)
+                replacement_fds.append(original_open(sentinel, os.O_RDONLY))
+
+        return ClosingScandir()
+
     monkeypatch.setattr("pml.project_state.os.open", record_open)
     monkeypatch.setattr("pml.project_state.os.close", record_close)
+    monkeypatch.setattr("pml.project_state.os.scandir", closing_scandir)
 
     assert validate_product_state(
         product, document, definition_source=manifest
     ) == []
     assert Counter(opened) == Counter(closed)
+    for fd in replacement_fds:
+        os.fstat(fd)
+        original_close(fd)
 
 
 def test_architecture_state_scan_closes_root_descriptor_on_success(
