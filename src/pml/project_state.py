@@ -496,13 +496,11 @@ def _bounded_product_state_paths(
                                 return state_paths, True, []
                             state_paths.append(directory / entry.name)
             except OSError as exc:
-                try:
-                    os.close(directory_fd)
-                except OSError:
-                    pass
                 return state_paths, False, [
                     _product_state_access_diagnostic(directory, exc)
                 ]
+            finally:
+                os.close(directory_fd)
         return state_paths, False, []
     finally:
         for directory_fd, _ in pending:
@@ -558,6 +556,8 @@ def _architecture_state_paths(
                 state_paths.append(path)
     except OSError as exc:
         diagnostics.append(_product_state_access_diagnostic(root, exc))
+    finally:
+        os.close(root_fd)
     return state_paths, diagnostics
 
 

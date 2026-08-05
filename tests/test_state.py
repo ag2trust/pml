@@ -1,3 +1,4 @@
+from collections import Counter
 from pathlib import Path
 import os
 import shutil
@@ -1175,6 +1176,77 @@ def test_product_state_scan_closes_queued_descriptors_on_limit(
 
     assert any(item.code == "state-limit" for item in diagnostics)
     assert all(fd in closed for fd in opened[3:])
+
+
+def test_product_state_scan_closes_processed_descriptors_on_success(
+    tmp_path: Path, monkeypatch
+) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    opened: list[int] = []
+    closed: list[int] = []
+    original_open = os.open
+    original_close = os.close
+
+    def record_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = original_open(path, flags, mode, dir_fd=dir_fd)
+        opened.append(fd)
+        return fd
+
+    def record_close(fd):
+        closed.append(fd)
+        original_close(fd)
+
+    monkeypatch.setattr("pml.project_state.os.open", record_open)
+    monkeypatch.setattr("pml.project_state.os.close", record_close)
+
+    assert validate_product_state(
+        product, document, definition_source=manifest
+    ) == []
+    assert Counter(opened) == Counter(closed)
+
+
+def test_architecture_state_scan_closes_root_descriptor_on_success(
+    tmp_path: Path, monkeypatch
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    (product / ".pml/architecture").mkdir()
+    opened: list[int] = []
+    closed: list[int] = []
+    original_open = os.open
+    original_close = os.close
+
+    def record_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = original_open(path, flags, mode, dir_fd=dir_fd)
+        opened.append(fd)
+        return fd
+
+    def record_close(fd):
+        closed.append(fd)
+        original_close(fd)
+
+    monkeypatch.setattr("pml.project_state.os.open", record_open)
+    monkeypatch.setattr("pml.project_state.os.close", record_close)
+
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
+
+    assert [item.code for item in diagnostics] == ["missing-state"]
+    assert Counter(opened) == Counter(closed)
 
 
 def test_probe_evidence_rejects_architecture_state_root_symlink(
