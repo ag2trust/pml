@@ -218,6 +218,36 @@ domains:
     assert any(item.code == "schema" and "behaviors" in item.message for item in diagnostics)
 
 
+@pytest.mark.parametrize(
+    "behaviors",
+    [
+        None,
+        [],
+        "not a behavior map",
+        {"note_decision": None},
+        {"note_decision": []},
+        {"note_decision": "not a behavior definition"},
+    ],
+)
+def test_malformed_behavior_values_return_schema_diagnostics(
+    tmp_path: Path,
+    behaviors: object,
+) -> None:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    feature = document["domains"]["notes"]["features"]["creation"]
+    feature["behaviors"] = behaviors
+    manifest = tmp_path / "malformed-behaviors.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    diagnostics = validate_file(manifest)
+
+    assert any(
+        item.code == "schema"
+        and item.path.startswith("domains.notes.features.creation.behaviors")
+        for item in diagnostics
+    )
+
+
 @pytest.mark.parametrize("legacy_key", ["purpose", "inputs", "outputs", "emits"])
 def test_rejects_legacy_behavior_keys(tmp_path: Path, legacy_key: str) -> None:
     values = {

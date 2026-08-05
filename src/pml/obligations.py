@@ -63,8 +63,12 @@ def iter_nodes(document: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]
         for feature_id, feature in domain.get("features", {}).items():
             semantic_id = f"domains.{domain_id}.features.{feature_id}"
             yield semantic_id, feature
-            for behavior_id, behavior in feature.get("behaviors", {}).items():
-                yield f"{semantic_id}.behaviors.{behavior_id}", behavior
+            behaviors = feature.get("behaviors", {})
+            if not isinstance(behaviors, dict):
+                continue
+            for behavior_id, behavior in behaviors.items():
+                if isinstance(behavior, dict):
+                    yield f"{semantic_id}.behaviors.{behavior_id}", behavior
 
 
 def enumerate_obligations(
