@@ -449,6 +449,17 @@ def test_output_statement_rejects_implementation_detail(tmp_path: Path) -> None:
     assert "non-normative" not in {item.code for item in diagnostics}
 
 
+def test_output_statement_rejects_rest_api(tmp_path: Path) -> None:
+    behavior = {
+        "output": {"statement": "The REST API returns the classified email."}
+    }
+
+    diagnostics = validate_file(_behavior_manifest(tmp_path, behavior, "rest-api"))
+
+    assert "implementation-detail" in {item.code for item in diagnostics}
+    assert "non-normative" not in {item.code for item in diagnostics}
+
+
 @pytest.mark.parametrize(
     "implementation_detail",
     [
