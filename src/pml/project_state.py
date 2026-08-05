@@ -198,6 +198,20 @@ def _non_regular_state_diagnostic(path: Path) -> Diagnostic:
     )
 
 
+def _unsafe_state_file_diagnostic(path: Path, metadata: os.stat_result) -> Diagnostic | None:
+    """Reject state files whose opened inode is unsafe to read or update."""
+
+    if not stat.S_ISREG(metadata.st_mode):
+        return _non_regular_state_diagnostic(path)
+    if metadata.st_nlink > 1:
+        return Diagnostic(
+            str(path),
+            "state-path",
+            "generated state must not have multiple hard links",
+        )
+    return None
+
+
 def _read_product_state(
     repo_root: Path, state_path: Path
 ) -> tuple[bytes | None, list[Diagnostic]]:
@@ -226,8 +240,9 @@ def _read_product_state(
     finally:
         os.close(parent_fd)
     try:
-        if not stat.S_ISREG(os.fstat(state_fd).st_mode):
-            return None, [_non_regular_state_diagnostic(state_path)]
+        diagnostic = _unsafe_state_file_diagnostic(state_path, os.fstat(state_fd))
+        if diagnostic:
+            return None, [diagnostic]
         chunks: list[bytes] = []
         remaining = MAX_STATE_FILE_BYTES + 1
         while remaining:
@@ -268,8 +283,9 @@ def write_product_state(
     finally:
         os.close(parent_fd)
     try:
-        if not stat.S_ISREG(os.fstat(state_fd).st_mode):
-            return [_non_regular_state_diagnostic(state_path)]
+        diagnostic = _unsafe_state_file_diagnostic(state_path, os.fstat(state_fd))
+        if diagnostic:
+            return [diagnostic]
         os.ftruncate(state_fd, 0)
         written = 0
         while written < len(encoded):
@@ -326,8 +342,9 @@ def _read_architecture_state(
     finally:
         os.close(root_fd)
     try:
-        if not stat.S_ISREG(os.fstat(state_fd).st_mode):
-            return None, [_non_regular_state_diagnostic(state_path)]
+        diagnostic = _unsafe_state_file_diagnostic(state_path, os.fstat(state_fd))
+        if diagnostic:
+            return None, [diagnostic]
         chunks: list[bytes] = []
         remaining = MAX_STATE_FILE_BYTES + 1
         while remaining:
@@ -365,8 +382,9 @@ def write_architecture_state(
     finally:
         os.close(root_fd)
     try:
-        if not stat.S_ISREG(os.fstat(state_fd).st_mode):
-            return [_non_regular_state_diagnostic(state_path)]
+        diagnostic = _unsafe_state_file_diagnostic(state_path, os.fstat(state_fd))
+        if diagnostic:
+            return [diagnostic]
         os.ftruncate(state_fd, 0)
         written = 0
         while written < len(encoded):

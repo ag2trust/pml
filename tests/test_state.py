@@ -1062,6 +1062,62 @@ def test_architecture_state_write_stays_in_pinned_directory_after_symlink_swap(
     ).read_bytes() == b"pinned state"
 
 
+def test_product_state_rejects_hard_linked_external_sentinel(tmp_path: Path) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    document, diagnostics = load_document(manifest)
+    assert diagnostics == []
+    assert document is not None
+    state_path = product / ".pml/state/domains/notes/features/creation.state.yaml"
+    sentinel = tmp_path / "product-sentinel.state.yaml"
+    sentinel_bytes = b"external product sentinel"
+    sentinel.write_bytes(sentinel_bytes)
+    state_path.unlink()
+    os.link(sentinel, state_path)
+
+    diagnostics = validate_product_state(
+        product, document, definition_source=manifest
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    write_diagnostics = write_product_state(product, state_path, b"replacement")
+    assert [item.code for item in write_diagnostics] == ["state-path"]
+    assert sentinel.read_bytes() == sentinel_bytes
+
+
+def test_architecture_state_rejects_hard_linked_external_sentinel(
+    tmp_path: Path,
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "architecture-decisions.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    obligation = next(enumerate_architecture_obligations(document))
+    product, manifest, _ = write_architecture_layout(tmp_path, document, {
+        "durable_store": {
+            "paths": ["runtime"],
+            "verification": {obligation.id: {"agent_judgment": 1.0}},
+        }
+    })
+    state_path = product / ".pml/architecture/durable_store.state.yaml"
+    state_path.parent.mkdir()
+    sentinel = tmp_path / "architecture-sentinel.state.yaml"
+    sentinel_bytes = b"external architecture sentinel"
+    sentinel.write_bytes(sentinel_bytes)
+    os.link(sentinel, state_path)
+
+    diagnostics = validate_architecture_state(
+        product, document, definition_source=manifest
+    )
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    write_diagnostics = write_architecture_state(
+        product, state_path, b"replacement"
+    )
+    assert [item.code for item in write_diagnostics] == ["state-path"]
+    assert sentinel.read_bytes() == sentinel_bytes
+
+
 def test_architecture_state_rejects_fifo_without_opening_it(tmp_path: Path) -> None:
     document, diagnostics = load_document(
         ROOT / "examples" / "architecture-decisions.pml.yaml"
