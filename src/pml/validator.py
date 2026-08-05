@@ -252,20 +252,30 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                     diagnostics.append(Diagnostic(f"{prefix}.use_cases.{use_case_id}.actor", "undefined-reference", f"unknown actor '{actor}'"))
     node_ids = {node_id for node_id, _ in iter_nodes(document)}
     for node_id, node in iter_nodes(document):
-        for related in node.get("related_to", []):
-            if related not in node_ids:
-                diagnostics.append(Diagnostic(f"{node_id}.related_to", "undefined-reference", f"unknown node '{related}'"))
-            elif related == node_id:
-                diagnostics.append(Diagnostic(f"{node_id}.related_to", "self-reference", "a node cannot relate to itself"))
+        related_nodes = node.get("related_to", [])
+        if isinstance(related_nodes, list):
+            for related in related_nodes:
+                if not isinstance(related, str):
+                    continue
+                if related not in node_ids:
+                    diagnostics.append(Diagnostic(f"{node_id}.related_to", "undefined-reference", f"unknown node '{related}'"))
+                elif related == node_id:
+                    diagnostics.append(Diagnostic(f"{node_id}.related_to", "self-reference", "a node cannot relate to itself"))
         if not _is_behavior_node(node_id):
-            for signal in node.get("emits", []):
-                if signal not in signal_ids:
-                    diagnostics.append(Diagnostic(f"{node_id}.emits", "undefined-reference", f"unknown signal '{signal}'"))
+            emitted_signals = node.get("emits", [])
+            if isinstance(emitted_signals, list):
+                for signal in emitted_signals:
+                    if not isinstance(signal, str):
+                        continue
+                    if signal not in signal_ids:
+                        diagnostics.append(Diagnostic(f"{node_id}.emits", "undefined-reference", f"unknown signal '{signal}'"))
         for output_path, output_case in _output_cases(node):
             emitted_signals = output_case.get("emits", [])
             if not isinstance(emitted_signals, list):
                 continue
             for signal in emitted_signals:
+                if not isinstance(signal, str):
+                    continue
                 if signal not in signal_ids:
                     diagnostics.append(
                         Diagnostic(
@@ -275,18 +285,23 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                         )
                     )
         node_architecture = node.get("architecture", [])
-        if not isinstance(node_architecture, (list, dict)):
-            node_architecture = []
-        for decision in node_architecture:
-            if not isinstance(decision, str):
-                continue
-            referenced_architecture.add(decision)
-            if decision not in architecture_ids:
-                diagnostics.append(Diagnostic(f"{node_id}.architecture", "undefined-reference", f"unknown architecture decision '{decision}'"))
-        for reaction_id, reaction in node.get("reactions", {}).items():
-            signal = reaction.get("on")
-            if signal not in signal_ids:
-                diagnostics.append(Diagnostic(f"{node_id}.reactions.{reaction_id}.on", "undefined-reference", f"unknown signal '{signal}'"))
+        if isinstance(node_architecture, list):
+            for decision in node_architecture:
+                if not isinstance(decision, str):
+                    continue
+                referenced_architecture.add(decision)
+                if decision not in architecture_ids:
+                    diagnostics.append(Diagnostic(f"{node_id}.architecture", "undefined-reference", f"unknown architecture decision '{decision}'"))
+        reactions = node.get("reactions", {})
+        if isinstance(reactions, dict):
+            for reaction_id, reaction in reactions.items():
+                if not isinstance(reaction, dict):
+                    continue
+                signal = reaction.get("on")
+                if not isinstance(signal, str):
+                    continue
+                if signal not in signal_ids:
+                    diagnostics.append(Diagnostic(f"{node_id}.reactions.{reaction_id}.on", "undefined-reference", f"unknown signal '{signal}'"))
     for decision_id, decision in architecture_map.items():
         if not isinstance(decision, dict):
             continue

@@ -248,6 +248,47 @@ def test_malformed_behavior_values_return_schema_diagnostics(
     )
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("reactions", []),
+        ("reactions.invalid", []),
+        ("reactions.invalid.on", []),
+        ("rules", []),
+        ("related_to", [{"invalid": "relationship"}]),
+        ("architecture", {"invalid": "decision"}),
+        ("context", {"invalid": "context"}),
+        ("output", []),
+        ("output.one_of", []),
+        ("output.emits", [{"invalid": "signal"}]),
+    ],
+)
+def test_malformed_behavior_subfields_return_only_schema_diagnostics(
+    tmp_path: Path,
+    field: str,
+    value: object,
+) -> None:
+    behavior: dict[str, object] = {
+        "output": {"statement": "One visible Note result."}
+    }
+    target = behavior
+    field_parts = field.split(".")
+    for part in field_parts[:-1]:
+        nested = target.get(part)
+        if not isinstance(nested, dict):
+            nested = {}
+            target[part] = nested
+        target = nested
+    target[field_parts[-1]] = value
+
+    diagnostics = validate_file(
+        _behavior_manifest(tmp_path, behavior, field.replace(".", "-"))
+    )
+
+    assert diagnostics
+    assert all(item.code == "schema" for item in diagnostics)
+
+
 @pytest.mark.parametrize("legacy_key", ["purpose", "inputs", "outputs", "emits"])
 def test_rejects_legacy_behavior_keys(tmp_path: Path, legacy_key: str) -> None:
     values = {
@@ -710,8 +751,12 @@ def test_architecture_rejects_inline_definitions_and_unknown_categories(tmp_path
     )
     manifest = tmp_path / "inline.pml.yaml"
     manifest.write_text(source)
-    messages = "\n".join(item.message for item in validate_file(manifest))
-    assert "architecture" in messages
+    diagnostics = validate_file(manifest)
+    assert any(
+        item.code == "schema"
+        and item.path == "domains.notes.features.creation.architecture"
+        for item in diagnostics
+    )
 
 
 def test_verification_report_matches_schema() -> None:
