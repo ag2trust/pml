@@ -11,7 +11,7 @@
       "type": "object",
       "minProperties": 0,
       "propertyNames": {
-        "pattern": "^(?:project|domains\\.[a-z][a-z0-9_]*(?:\\.features\\.[a-z][a-z0-9_]*(?:\\.components\\.[a-z][a-z0-9_]*)?)?)$"
+        "pattern": "^(?:project|domains\\.[a-z][a-z0-9_]*(?:\\.features\\.[a-z][a-z0-9_]*(?:\\.behaviors\\.[a-z][a-z0-9_]*)?)?)$"
       },
       "additionalProperties": {"$ref": "#/$defs/nodeBinding"}
     },
@@ -61,7 +61,7 @@
         "verification": {
           "type": "object",
           "propertyNames": {
-            "pattern": "^(?:project\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.components\\.[a-z][a-z0-9_]*)?\\.(?:rules|use_cases|reactions)\\.[a-z][a-z0-9_]*)$"
+            "pattern": "^(?:project\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.(?:rules|use_cases|reactions)\\.[a-z][a-z0-9_]*|\\.behaviors\\.[a-z][a-z0-9_]*\\.(?:(?:rules|reactions)\\.[a-z][a-z0-9_]*|output(?:\\.[a-z][a-z0-9_]*)?)))$"
           },
           "additionalProperties": {"$ref": "#/$defs/verificationPlan"}
         }

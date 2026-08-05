@@ -138,6 +138,49 @@ def test_one_of_output_has_exact_fully_qualified_obligation_ids() -> None:
     assert obligations[2].definition["emits"] == ["email_processing_failed"]
 
 
+def test_behavior_output_obligations_are_accepted_by_bindings_schema(
+    tmp_path: Path,
+) -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "behavior-one-of-output.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+    feature_id = "domains.email.features.triage"
+    behavior_id = f"{feature_id}.behaviors.importance_decision"
+    obligation_ids = [
+        item.id for item in enumerate_obligations(document, behavior_id)
+    ]
+    bindings_document = {
+        "pml_bindings": "0.1",
+        "bindings": {
+            feature_id: {"paths": ["src"], "verification": {}},
+            behavior_id: {
+                "paths": ["src"],
+                "verification": {
+                    obligation_id: {"agent_judgment": 1.0}
+                    for obligation_id in obligation_ids
+                },
+            },
+        },
+    }
+    bindings_path = tmp_path / "bindings.yaml"
+    bindings_path.write_text(yaml.safe_dump(bindings_document, sort_keys=False))
+
+    bindings, binding_diagnostics = load_bindings(bindings_path, document)
+
+    assert bindings == bindings_document
+    assert binding_diagnostics == []
+
+    legacy = yaml.safe_dump(bindings_document, sort_keys=False).replace(
+        ".behaviors.", ".components."
+    )
+    bindings_path.write_text(legacy)
+    legacy_bindings, legacy_diagnostics = load_bindings(bindings_path, document)
+    assert legacy_bindings is None
+    assert {item.code for item in legacy_diagnostics} == {"schema"}
+
+
 def test_cli_lists_independently_addressable_architecture_obligations(
     capsys,
 ) -> None:

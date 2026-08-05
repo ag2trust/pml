@@ -132,16 +132,19 @@ def _is_output_statement(parts: tuple[Any, ...]) -> bool:
     """Return whether a statement occupies a direct or alternative output case."""
 
     return (
-        len(parts) >= 2
-        and parts[-1] == "statement"
-        and (
-            parts[-2] == "output"
-            or (
-                len(parts) >= 4
-                and parts[-4] == "output"
-                and parts[-3] == "one_of"
-            )
-        )
+        len(parts) == 8
+        and parts[0] == "domains"
+        and parts[2] == "features"
+        and parts[4] == "behaviors"
+        and parts[6:] == ("output", "statement")
+    ) or (
+        len(parts) == 10
+        and parts[0] == "domains"
+        and parts[2] == "features"
+        and parts[4] == "behaviors"
+        and parts[6] == "output"
+        and parts[7] == "one_of"
+        and parts[9] == "statement"
     )
 
 

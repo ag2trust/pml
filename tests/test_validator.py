@@ -332,6 +332,65 @@ def test_output_statement_rejects_implementation_detail(tmp_path: Path) -> None:
     assert "non-normative" not in {item.code for item in diagnostics}
 
 
+def test_output_alternative_named_output_is_normative_by_position(
+    tmp_path: Path,
+) -> None:
+    behavior = {
+        "output": {
+            "one_of": {
+                "output": {"statement": "One visible Note result."},
+                "failure": {"statement": "One visible failure result."},
+            }
+        }
+    }
+
+    diagnostics = validate_file(
+        _behavior_manifest(tmp_path, behavior, "output-alternative")
+    )
+
+    assert diagnostics == []
+
+
+def test_non_output_statements_named_output_still_require_normative_markers(
+    tmp_path: Path,
+) -> None:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    feature = document["domains"]["notes"]["features"]["creation"]
+    feature["rules"]["output"] = {"statement": "A visible rule result."}
+    document["signals"] = {
+        "note_changed": {"meaning": "A Note has visibly changed."}
+    }
+    feature["reactions"] = {
+        "output": {
+            "on": "note_changed",
+            "statement": "A visible reaction result.",
+        }
+    }
+    document["architecture"] = {
+        "approved_runtime": {
+            "category": "runtime",
+            "selection": "Approved runtime.",
+            "rationale": "Owner approval is required to replace this runtime.",
+            "constraints": {
+                "output": {"statement": "A visible architecture result."}
+            },
+        }
+    }
+    feature["architecture"] = ["approved_runtime"]
+    manifest = tmp_path / "non-output-statements.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    diagnostics = validate_file(manifest)
+
+    assert {
+        item.path for item in diagnostics if item.code == "non-normative"
+    } == {
+        "domains.notes.features.creation.rules.output.statement",
+        "domains.notes.features.creation.reactions.output.statement",
+        "architecture.approved_runtime.constraints.output.statement",
+    }
+
+
 def test_rejects_overloaded_rule_map(tmp_path: Path) -> None:
     rules = "\n".join(
         f"""\
