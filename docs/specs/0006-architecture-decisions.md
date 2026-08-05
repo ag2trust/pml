@@ -18,7 +18,7 @@ non-empty statements of the approved choice and why it requires owner approval.
 `constraints` is optional and is an ID-keyed map of rules using the established
 `statement` form.
 
-Features and components reference decisions only with `architecture: [decision_id]`.
+Features and behaviors reference decisions only with `architecture: [decision_id]`.
 This is bottom-up: `applies_to`, `supports`, inline definitions, and decision-to-
 decision references are not language constructs. Every declared decision must have
 at least one such reference.
