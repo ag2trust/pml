@@ -291,14 +291,44 @@ def _write_state(
         written = 0
         while written < len(encoded):
             written += os.write(temp_fd, encoded[written:])
-        os.close(temp_fd)
-        temp_fd = None
+        temp_metadata = os.fstat(temp_fd)
         os.replace(
             "state",
             state_name,
             src_dir_fd=temp_directory_fd,
             dst_dir_fd=parent_fd,
         )
+        installed_fd = os.open(
+            state_name,
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+            dir_fd=parent_fd,
+        )
+        try:
+            installed_metadata = os.fstat(installed_fd)
+            installed_diagnostic = _unsafe_state_file_diagnostic(
+                state_path, installed_metadata
+            )
+            if installed_diagnostic:
+                try:
+                    os.unlink(state_name, dir_fd=parent_fd)
+                except OSError:
+                    pass
+                return [installed_diagnostic]
+            if (
+                installed_metadata.st_dev != temp_metadata.st_dev
+                or installed_metadata.st_ino != temp_metadata.st_ino
+            ):
+                try:
+                    os.unlink(state_name, dir_fd=parent_fd)
+                except OSError:
+                    pass
+                return [Diagnostic(
+                    str(state_path),
+                    "state-path",
+                    "generated state replacement source changed before installation",
+                )]
+        finally:
+            os.close(installed_fd)
     except OSError as exc:
         return [_product_state_access_diagnostic(state_path, exc)]
     finally:

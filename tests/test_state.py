@@ -1225,6 +1225,84 @@ def test_product_state_replace_uses_pinned_temporary_source(
     moved_source.rmdir()
 
 
+def test_product_state_rejects_substituted_inner_temporary_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/state/domains/notes/features/creation.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    original_replace = os.replace
+
+    def substitute_inner_source(
+        source, destination, *, src_dir_fd=None, dst_dir_fd=None
+    ):
+        assert src_dir_fd is not None
+        assert src_dir_fd != dst_dir_fd
+        os.unlink(source, dir_fd=src_dir_fd)
+        attacker_fd = os.open(
+            source,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+            dir_fd=src_dir_fd,
+        )
+        try:
+            os.write(attacker_fd, b"attacker state")
+        finally:
+            os.close(attacker_fd)
+        return original_replace(
+            source,
+            destination,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+        )
+
+    monkeypatch.setattr("pml.project_state.os.replace", substitute_inner_source)
+
+    diagnostics = write_product_state(product, state_path, b"verified state")
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert not state_path.exists()
+
+
+def test_architecture_state_rejects_substituted_inner_temporary_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/architecture/durable_store.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    original_replace = os.replace
+
+    def substitute_inner_source(
+        source, destination, *, src_dir_fd=None, dst_dir_fd=None
+    ):
+        assert src_dir_fd is not None
+        assert src_dir_fd != dst_dir_fd
+        os.unlink(source, dir_fd=src_dir_fd)
+        attacker_fd = os.open(
+            source,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+            dir_fd=src_dir_fd,
+        )
+        try:
+            os.write(attacker_fd, b"attacker state")
+        finally:
+            os.close(attacker_fd)
+        return original_replace(
+            source,
+            destination,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+        )
+
+    monkeypatch.setattr("pml.project_state.os.replace", substitute_inner_source)
+
+    diagnostics = write_architecture_state(product, state_path, b"verified state")
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert not state_path.exists()
+
+
 def test_architecture_state_rejects_fifo_without_opening_it(tmp_path: Path) -> None:
     document, diagnostics = load_document(
         ROOT / "examples" / "architecture-decisions.pml.yaml"
