@@ -53,7 +53,7 @@ def verification_plan(
     )
 
 def iter_nodes(document: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
-    """Yield every state-bearing rule scope, feature, and direct component."""
+    """Yield every state-bearing rule scope, feature, and direct behavior."""
 
     if document.get("rules"):
         yield "project", {"rules": document["rules"]}
@@ -63,8 +63,8 @@ def iter_nodes(document: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]
         for feature_id, feature in domain.get("features", {}).items():
             semantic_id = f"domains.{domain_id}.features.{feature_id}"
             yield semantic_id, feature
-            for component_id, component in feature.get("components", {}).items():
-                yield f"{semantic_id}.components.{component_id}", component
+            for behavior_id, behavior in feature.get("behaviors", {}).items():
+                yield f"{semantic_id}.behaviors.{behavior_id}", behavior
 
 
 def enumerate_obligations(
@@ -73,6 +73,33 @@ def enumerate_obligations(
     for semantic_id, node in iter_nodes(document):
         if node_id is not None and semantic_id != node_id:
             continue
+        output = node.get("output")
+        if isinstance(output, dict):
+            alternatives = output.get("one_of")
+            if isinstance(alternatives, dict):
+                yield Obligation(
+                    id=f"{semantic_id}.output",
+                    node_id=semantic_id,
+                    section="output",
+                    local_id="output",
+                    definition={"one_of": list(alternatives)},
+                )
+                for alternative_id, definition in alternatives.items():
+                    yield Obligation(
+                        id=f"{semantic_id}.output.{alternative_id}",
+                        node_id=semantic_id,
+                        section="output",
+                        local_id=alternative_id,
+                        definition=definition,
+                    )
+            else:
+                yield Obligation(
+                    id=f"{semantic_id}.output",
+                    node_id=semantic_id,
+                    section="output",
+                    local_id="output",
+                    definition=output,
+                )
         for section in OBLIGATION_SECTIONS:
             for local_id, definition in node.get(section, {}).items():
                 yield Obligation(

@@ -104,6 +104,40 @@ def test_obligations_have_stable_ids() -> None:
     ]
 
 
+def test_direct_output_has_exact_fully_qualified_obligation_id() -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "behavior-direct-output.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+
+    obligations = list(enumerate_obligations(document))
+    assert [item.id for item in obligations] == [
+        "domains.email.features.triage.behaviors.importance_decision.output"
+    ]
+    assert obligations[0].definition["emits"] == ["email_processed"]
+
+
+def test_one_of_output_has_exact_fully_qualified_obligation_ids() -> None:
+    document, diagnostics = load_document(
+        ROOT / "examples" / "behavior-one-of-output.pml.yaml"
+    )
+    assert diagnostics == []
+    assert document is not None
+
+    obligations = list(enumerate_obligations(document))
+    assert [item.id for item in obligations] == [
+        "domains.email.features.triage.behaviors.importance_decision.output",
+        "domains.email.features.triage.behaviors.importance_decision.output.decision",
+        "domains.email.features.triage.behaviors.importance_decision.output.processing_failure",
+    ]
+    assert obligations[0].definition == {
+        "one_of": ["decision", "processing_failure"]
+    }
+    assert obligations[1].definition["emits"] == ["email_processed"]
+    assert obligations[2].definition["emits"] == ["email_processing_failed"]
+
+
 def test_cli_lists_independently_addressable_architecture_obligations(
     capsys,
 ) -> None:

@@ -1,0 +1,25 @@
+pml: "0.1-draft"
+
+project:
+  id: direct_output_sample
+  name: Direct Output Sample
+  purpose: Demonstrate one complete behavior output.
+
+signals:
+  email_processed:
+    meaning: An inbound email has received a complete importance decision.
+
+domains:
+  email:
+    purpose: Manage inbound email.
+    features:
+      triage:
+        purpose: Classify inbound email by importance.
+        behaviors:
+          importance_decision:
+            context:
+              - The inbound email content and sender.
+            output:
+              statement: One complete importance decision classifying the inbound email as important or ordinary.
+              emits:
+                - email_processed

@@ -3,7 +3,7 @@
 Product Manifest Language (PML) is a small, opinionated, declarative language for
 describing what a software product is and what it must do.
 
-PML captures product concepts, actors, features, components, rules, use cases,
+PML captures product concepts, actors, features, behaviors, outputs, rules, use cases,
 signals, reactions, relationships, experiences, and selected owner-mandated
 architecture without prescribing code organization, APIs, database schemas, or tests.
 
@@ -37,7 +37,7 @@ definition with path-derived mounting: each `*.pml.yaml` file's relative path is
 mount point in the document tree (`domains/billing/features/checkout.pml.yaml`
 defines `domains.billing.features.checkout`), and `index.pml.yaml` mounts at its
 directory itself. Fragments contain only their body. Defining the same field in two
-fragments is a `conflict` diagnostic. Components are direct children of features and
+fragments is a `conflict` diagnostic. Behaviors are direct children of features and
 do not nest.
 
 Closed schemas prevent ad hoc sections. Product registries and behavioral maps have
@@ -51,7 +51,7 @@ see [`docs/verification.md`](docs/verification.md).
 
 Approved definitions remain in an owner-controlled PML repository. An implementing
 product repository carries `.pml/pml.lock` and one state file per feature or
-component under `.pml/state/`. The owner-controlled source identified by
+behavior under `.pml/state/`. The owner-controlled source identified by
 `definition.source` carries both the definition and `bindings.yaml`. The lock pins
 their digests independently. Validate that boundary, including definition,
 bindings, and relevant-input fingerprints, with:

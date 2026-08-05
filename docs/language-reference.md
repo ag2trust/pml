@@ -10,11 +10,11 @@ must begin with a letter.
 The only containment hierarchy is:
 
 ```text
-Project → Domain → Feature → Component
+Project → Domain → Feature → Behavior
 ```
 
 A domain groups product responsibilities. A feature is a complete user or business
-capability. A component is a non-nested behavioral part of one feature. Components
+capability. A behavior is a non-nested unit of observable conduct in one feature. Behaviors
 must not mirror code, framework, repository, service, or infrastructure structure.
 
 ## Top level
@@ -67,27 +67,29 @@ A domain requires `purpose` and one or more `features`. It may contain scoped
 ### `features.<id>`
 
 A feature requires `purpose` and at least one of `rules`, `use_cases`, or
-`components`. It may contain:
+`behaviors`. It may contain:
 
 ```text
-purpose, actors, rules, use_cases, components, experience, reactions,
+purpose, actors, rules, use_cases, behaviors, experience, reactions,
 related_to, emits, architecture
 ```
 
 Features do not have generic inputs or outputs: those fields tend to restate use
 cases or drift into API design.
 
-### `components.<id>`
+### `behaviors.<id>`
 
-A component requires `purpose` and may contain:
+A behavior requires `output` and may contain:
 
 ```text
-purpose, inputs, outputs, rules, reactions, related_to, emits, architecture
+context, output, rules, reactions, related_to, architecture
 ```
 
-Components cannot contain components. Their inputs and outputs describe behavioral
-boundaries, not function arguments, endpoints, payload schemas, or implementation
-interfaces.
+Behaviors cannot contain behaviors. `context` is a unique list of one through seven
+descriptive product facts. `output` is either one direct `statement` with optional
+signal `emits`, or a closed `one_of` map with two through seven ID-keyed cases of
+that same shape. Output statements describe observable results and are normative by
+position, so they do not require `MUST` or `MUST NOT`.
 
 ### `rules.<id>`
 
@@ -95,7 +97,7 @@ A rule contains one `statement` with `MUST` or `MUST NOT`. Rules express invaria
 that apply across scenarios. Security requirements are ordinary rules rather than a
 separate language section.
 
-The location of a rule determines its scope: top-level, domain, feature, or component.
+The location of a rule determines its scope: top-level, domain, feature, or behavior.
 
 ### `use_cases.<id>`
 
@@ -120,15 +122,15 @@ ID-keyed reactions referring to the same signal.
 ### `related_to`
 
 `related_to` is an untyped list of unique semantic paths resolving to features or
-components. It establishes a symmetric behavioral relationship without declaring a
+behaviors. It establishes a symmetric behavioral relationship without declaring a
 dependency direction. Tooling treats changes to either node as relevant to the
 other node's verification freshness.
 
 ### `emits`
 
-`emits` lists declared signal IDs established by a feature or component. It differs
-from component `outputs`: outputs describe a boundary result, while signals connect
-behavior across nodes.
+Feature-level `emits` lists declared signal IDs established by a feature. Within a
+behavior, `emits` exists only on its direct output or individual output alternative.
+Those signals are required effects whenever that output completes.
 
 ### `experience`
 
@@ -147,7 +149,7 @@ category, selection, rationale, constraints
 ```
 
 Allowed categories are `database`, `framework`, `gateway`, `provider`,
-`payment_processor`, and `runtime`. Features and components may reference decisions
+`payment_processor`, and `runtime`. Features and behaviors may reference decisions
 bottom-up using `architecture: [decision_id]`.
 
 A choice belongs here only when replacing it would require explicit owner approval
@@ -160,14 +162,16 @@ Technology existence never proves behavioral conformance.
 `architecture.<decision_id>.constraints.<constraint_id>`. Their bindings belong in
 the `architecture` map of the owner-controlled bindings resolved by `pml.lock`, and
 their generated state belongs under `.pml/architecture/`; they never contribute to
-product status. Each decision must be referenced by a feature or component. There
+product status. Each decision must be referenced by a feature or behavior. There
 are no `applies_to`, `supports`, inline, or recursive architecture constructs.
 
 ## Obligations and verification
 
 An **obligation** is the tooling term for one resolved, independently verifiable
-product constraint. It is not an authored PML section. Rules, reactions, and
-use-case outcomes resolve into stable obligation paths.
+product constraint. It is not an authored PML section. Rules, reactions, use-case
+outcomes, and behavior outputs resolve into stable obligation paths. A direct
+output resolves at `<behavior-id>.output`; a `one_of` output also resolves one
+alternative obligation at `<behavior-id>.output.<alternative-id>` for each case.
 
 Definitions state behavior. External bindings select deterministic probes, agentic
 verification, or human attestation and assign their coverage. Generated state records

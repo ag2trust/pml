@@ -42,9 +42,9 @@ Validate it with:
 pml validate my-product.pml.yaml
 ```
 
-Use components for direct behavioral parts of a feature, signals and reactions for
-cross-node consequences, and architecture only for independently owner-mandated
-technical choices. Components do not nest.
+Use behaviors for direct units of observable feature conduct, signals and reactions
+for cross-node consequences, and architecture only for independently owner-mandated
+technical choices. Every behavior has one output, and behaviors do not nest.
 
 ## Bind an implementation
 
