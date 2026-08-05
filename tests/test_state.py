@@ -1015,21 +1015,17 @@ def test_product_state_write_stays_in_pinned_directory_after_symlink_swap(
     external_state.parent.mkdir(parents=True)
     external_state.write_bytes(b"external state")
     original_domains = product / "original-domains"
-    original_open = os.open
+    original_mkdir = os.mkdir
 
-    def swap_before_state_open(path, flags, mode=0o777, *, dir_fd=None):
-        if (
-            isinstance(path, str)
-            and path.startswith(".creation.state.yaml.")
-            and flags & os.O_EXCL
-        ):
+    def swap_before_temp_directory(path, mode=0o777, *, dir_fd=None):
+        if isinstance(path, str) and path.startswith(".creation.state.yaml."):
             (product / ".pml/state/domains").rename(original_domains)
             (product / ".pml/state/domains").symlink_to(
                 external, target_is_directory=True
             )
-        return original_open(path, flags, mode, dir_fd=dir_fd)
+        return original_mkdir(path, mode, dir_fd=dir_fd)
 
-    monkeypatch.setattr("pml.project_state.os.open", swap_before_state_open)
+    monkeypatch.setattr("pml.project_state.os.mkdir", swap_before_temp_directory)
 
     assert write_product_state(product, state_path, b"pinned state") == []
     assert external_state.read_bytes() == b"external state"
@@ -1049,21 +1045,17 @@ def test_architecture_state_write_stays_in_pinned_directory_after_symlink_swap(
     external.mkdir()
     external_state.write_bytes(b"external state")
     original_architecture = product / "original-architecture"
-    original_open = os.open
+    original_mkdir = os.mkdir
 
-    def swap_before_state_open(path, flags, mode=0o777, *, dir_fd=None):
-        if (
-            isinstance(path, str)
-            and path.startswith(".durable_store.state.yaml.")
-            and flags & os.O_EXCL
-        ):
+    def swap_before_temp_directory(path, mode=0o777, *, dir_fd=None):
+        if isinstance(path, str) and path.startswith(".durable_store.state.yaml."):
             (product / ".pml/architecture").rename(original_architecture)
             (product / ".pml/architecture").symlink_to(
                 external, target_is_directory=True
             )
-        return original_open(path, flags, mode, dir_fd=dir_fd)
+        return original_mkdir(path, mode, dir_fd=dir_fd)
 
-    monkeypatch.setattr("pml.project_state.os.open", swap_before_state_open)
+    monkeypatch.setattr("pml.project_state.os.mkdir", swap_before_temp_directory)
 
     assert write_architecture_state(product, state_path, b"pinned state") == []
     assert external_state.read_bytes() == b"external state"
@@ -1188,6 +1180,49 @@ def test_architecture_state_replaces_hard_link_created_after_validation(
     assert write_architecture_state(product, state_path, b"replacement") == []
     assert sentinel.read_bytes() == sentinel_bytes
     assert state_path.read_bytes() == b"replacement"
+
+
+def test_product_state_replace_uses_pinned_temporary_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/state/domains/notes/features/creation.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    original_mkdir = os.mkdir
+    original_replace = os.replace
+    temp_directory_name: str | None = None
+    moved_source = tmp_path / "moved-temporary-source"
+
+    def record_temp_directory(path, mode=0o777, *, dir_fd=None):
+        nonlocal temp_directory_name
+        result = original_mkdir(path, mode, dir_fd=dir_fd)
+        if isinstance(path, str) and path.startswith(".creation.state.yaml."):
+            temp_directory_name = path
+        return result
+
+    def swap_temporary_source(source, destination, *, src_dir_fd=None, dst_dir_fd=None):
+        if src_dir_fd == dst_dir_fd:
+            source_path = state_path.parent / source
+            source_path.rename(moved_source)
+            source_path.write_bytes(b"attacker state")
+        else:
+            assert temp_directory_name is not None
+            temp_directory = state_path.parent / temp_directory_name
+            temp_directory.rename(moved_source)
+            temp_directory.mkdir()
+        return original_replace(
+            source,
+            destination,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+        )
+
+    monkeypatch.setattr("pml.project_state.os.mkdir", record_temp_directory)
+    monkeypatch.setattr("pml.project_state.os.replace", swap_temporary_source)
+
+    assert write_product_state(product, state_path, b"replacement") == []
+    assert state_path.read_bytes() == b"replacement"
+    moved_source.rmdir()
 
 
 def test_architecture_state_rejects_fifo_without_opening_it(tmp_path: Path) -> None:

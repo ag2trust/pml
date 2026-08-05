@@ -224,21 +224,28 @@ def _unsafe_state_file_diagnostic(path: Path, metadata: os.stat_result) -> Diagn
     return None
 
 
-def _open_state_temp_file(parent_fd: int, state_name: str) -> tuple[str, int]:
-    """Create a private temporary state file beneath a pinned directory."""
+def _open_state_temp_directory(parent_fd: int, state_name: str) -> tuple[str, int]:
+    """Create and open a private state directory beneath a pinned parent."""
 
     for _ in range(16):
         temp_name = f".{state_name}.{secrets.token_hex(16)}.tmp"
         try:
-            return temp_name, os.open(
-                temp_name,
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                0o600,
-                dir_fd=parent_fd,
-            )
+            os.mkdir(temp_name, 0o700, dir_fd=parent_fd)
         except FileExistsError:
             continue
-    raise FileExistsError("could not allocate a private generated state file")
+        try:
+            return temp_name, os.open(
+                temp_name,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=parent_fd,
+            )
+        except BaseException:
+            try:
+                os.rmdir(temp_name, dir_fd=parent_fd)
+            except OSError:
+                pass
+            raise
+    raise FileExistsError("could not allocate a private generated state directory")
 
 
 def _write_state(
@@ -246,7 +253,8 @@ def _write_state(
 ) -> list[Diagnostic]:
     """Replace state atomically without mutating an existing inode."""
 
-    temp_name: str | None = None
+    temp_directory_name: str | None = None
+    temp_directory_fd: int | None = None
     temp_fd: int | None = None
     try:
         try:
@@ -266,7 +274,15 @@ def _write_state(
                     return [diagnostic]
             finally:
                 os.close(state_fd)
-        temp_name, temp_fd = _open_state_temp_file(parent_fd, state_name)
+        temp_directory_name, temp_directory_fd = _open_state_temp_directory(
+            parent_fd, state_name
+        )
+        temp_fd = os.open(
+            "state",
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=temp_directory_fd,
+        )
         diagnostic = _unsafe_state_file_diagnostic(
             state_path, os.fstat(temp_fd)
         )
@@ -278,20 +294,21 @@ def _write_state(
         os.close(temp_fd)
         temp_fd = None
         os.replace(
-            temp_name,
+            "state",
             state_name,
-            src_dir_fd=parent_fd,
+            src_dir_fd=temp_directory_fd,
             dst_dir_fd=parent_fd,
         )
-        temp_name = None
     except OSError as exc:
         return [_product_state_access_diagnostic(state_path, exc)]
     finally:
         if temp_fd is not None:
             os.close(temp_fd)
-        if temp_name is not None:
+        if temp_directory_fd is not None:
+            os.close(temp_directory_fd)
+        if temp_directory_name is not None:
             try:
-                os.unlink(temp_name, dir_fd=parent_fd)
+                os.rmdir(temp_directory_name, dir_fd=parent_fd)
             except OSError:
                 pass
     return []
