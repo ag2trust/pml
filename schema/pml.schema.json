@@ -39,25 +39,10 @@
       "uniqueItems": true,
       "items": {"$ref": "#/$defs/id"}
     },
-    "nonEmptyIdList": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": {"$ref": "#/$defs/id"}
-    },
     "pathList": {
       "type": "array",
       "minItems": 1,
       "maxItems": 7,
-      "uniqueItems": true,
-      "items": {
-        "type": "string",
-        "pattern": "^domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.behaviors\\.[a-z][a-z0-9_]*)?$"
-      }
-    },
-    "behaviorPathList": {
-      "type": "array",
-      "minItems": 1,
       "uniqueItems": true,
       "items": {
         "type": "string",
@@ -237,8 +222,8 @@
         "output": {"$ref": "#/$defs/output"},
         "rules": {"$ref": "#/$defs/ruleMap"},
         "reactions": {"$ref": "#/$defs/reactionMap"},
-        "related_to": {"$ref": "#/$defs/behaviorPathList"},
-        "architecture": {"$ref": "#/$defs/nonEmptyIdList"}
+        "related_to": {"$ref": "#/$defs/pathList"},
+        "architecture": {"$ref": "#/$defs/idList"}
       }
     },
     "output": {
@@ -267,7 +252,7 @@
       "required": ["statement"],
       "properties": {
         "statement": {"$ref": "#/$defs/nonEmpty"},
-        "emits": {"$ref": "#/$defs/nonEmptyIdList"}
+        "emits": {"$ref": "#/$defs/idList"}
       }
     },
     "useCaseMap": {

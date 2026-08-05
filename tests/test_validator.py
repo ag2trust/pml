@@ -312,6 +312,52 @@ def test_rejects_unresolved_output_signal(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("behavior", "path_suffix"),
+    [
+        (
+            {
+                "output": {"statement": "One visible Note result."},
+                "related_to": [
+                    f"domains.notes.features.related_{index}" for index in range(8)
+                ],
+            },
+            ".related_to",
+        ),
+        (
+            {
+                "output": {"statement": "One visible Note result."},
+                "architecture": [f"decision_{index}" for index in range(8)],
+            },
+            ".architecture",
+        ),
+        (
+            {
+                "output": {
+                    "statement": "One visible Note result.",
+                    "emits": [f"signal_{index}" for index in range(8)],
+                }
+            },
+            ".output",
+        ),
+    ],
+)
+def test_behavior_lists_are_bounded(
+    tmp_path: Path,
+    behavior: dict,
+    path_suffix: str,
+) -> None:
+    diagnostics = validate_file(
+        _behavior_manifest(tmp_path, behavior, "oversized-behavior-list")
+    )
+
+    assert any(
+        item.code == "schema"
+        and item.path.endswith(path_suffix)
+        for item in diagnostics
+    )
+
+
 def test_output_statement_rejects_ambiguity_without_requiring_must(tmp_path: Path) -> None:
     behavior = {"output": {"statement": "One properly visible Note result."}}
 
