@@ -34,8 +34,9 @@ ARCHITECTURE_IMPLEMENTATION_DETAIL = re.compile(
     re.IGNORECASE,
 )
 OUTPUT_IMPLEMENTATION_DETAIL = re.compile(
-    r"(?:\b(?:file|filename|function|class|component|table|database|endpoint|framework|"
-    r"hook|library|method|module|service|job|queue|test|payload\s+schema)\b|"
+    r"(?:\b(?:files?|filenames?|functions?|class(?:es)?|components?|tables?|databases?|"
+    r"endpoints?|framework(?:s|\s+elements?)?|hooks?|librar(?:y|ies)|methods?|modules?|"
+    r"services?|jobs?|queues?|tests?|payload\s+schemas?)\b|"
     r"\b(?:get|post|put|patch|delete)\s+/|"
     r"(?-i:\b[a-z0-9_-]+\.(?:py|js|ts|java|go|rb|sql|ya?ml|json)\b)|"
     r"(?-i:\b[a-z][A-Za-z0-9_]*\([^)]*\))|"

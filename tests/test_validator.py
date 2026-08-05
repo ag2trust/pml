@@ -332,6 +332,37 @@ def test_output_statement_rejects_implementation_detail(tmp_path: Path) -> None:
     assert "non-normative" not in {item.code for item in diagnostics}
 
 
+@pytest.mark.parametrize(
+    "implementation_detail",
+    [
+        "filenames",
+        "functions",
+        "classes",
+        "endpoints",
+        "framework elements",
+        "libraries",
+        "tests",
+        "payload schemas",
+    ],
+)
+def test_output_statement_rejects_plural_implementation_details(
+    tmp_path: Path,
+    implementation_detail: str,
+) -> None:
+    behavior = {
+        "output": {
+            "statement": f"One result produced through prescribed {implementation_detail}."
+        }
+    }
+
+    diagnostics = validate_file(
+        _behavior_manifest(tmp_path, behavior, f"plural-{implementation_detail.split()[0]}")
+    )
+
+    assert "implementation-detail" in {item.code for item in diagnostics}
+    assert "non-normative" not in {item.code for item in diagnostics}
+
+
 def test_output_alternative_named_output_is_normative_by_position(
     tmp_path: Path,
 ) -> None:
