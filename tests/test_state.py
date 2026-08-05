@@ -1261,7 +1261,7 @@ def test_product_state_rejects_substituted_inner_temporary_source(
     diagnostics = write_product_state(product, state_path, b"verified state")
 
     assert [item.code for item in diagnostics] == ["state-path"]
-    assert not state_path.exists()
+    assert state_path.read_bytes() == b"attacker state"
 
 
 def test_architecture_state_rejects_substituted_inner_temporary_source(
@@ -1300,7 +1300,35 @@ def test_architecture_state_rejects_substituted_inner_temporary_source(
     diagnostics = write_architecture_state(product, state_path, b"verified state")
 
     assert [item.code for item in diagnostics] == ["state-path"]
-    assert not state_path.exists()
+    assert state_path.read_bytes() == b"attacker state"
+
+
+def test_product_state_does_not_remove_concurrent_successful_install(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    state_path = product / ".pml/state/domains/notes/features/creation.state.yaml"
+    state_path.parent.mkdir(parents=True)
+    competing_state = tmp_path / "competing.state.yaml"
+    competing_state.write_bytes(b"concurrent state")
+    original_open = os.open
+    original_replace = os.replace
+    read_opens = 0
+
+    def install_concurrent_state(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal read_opens
+        if path == state_path.name and (flags & os.O_ACCMODE) == os.O_RDONLY:
+            read_opens += 1
+            if read_opens == 2:
+                original_replace(competing_state, state_path)
+        return original_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr("pml.project_state.os.open", install_concurrent_state)
+
+    diagnostics = write_product_state(product, state_path, b"first state")
+
+    assert [item.code for item in diagnostics] == ["state-path"]
+    assert state_path.read_bytes() == b"concurrent state"
 
 
 def test_architecture_state_rejects_fifo_without_opening_it(tmp_path: Path) -> None:

@@ -309,19 +309,11 @@ def _write_state(
                 state_path, installed_metadata
             )
             if installed_diagnostic:
-                try:
-                    os.unlink(state_name, dir_fd=parent_fd)
-                except OSError:
-                    pass
                 return [installed_diagnostic]
             if (
                 installed_metadata.st_dev != temp_metadata.st_dev
                 or installed_metadata.st_ino != temp_metadata.st_ino
             ):
-                try:
-                    os.unlink(state_name, dir_fd=parent_fd)
-                except OSError:
-                    pass
                 return [Diagnostic(
                     str(state_path),
                     "state-path",
