@@ -60,7 +60,7 @@ domains:
           independent_evidence:
             statement: A Verification Agent MUST derive conformance from observable evidence.
           stale_verification:
-            statement: A change to a referenced product component MUST invalidate that component's verification state.
+            statement: A change to a referenced product behavior MUST invalidate that behavior's verification state.
           no_self_redefinition:
             statement: Failed conformance MUST NOT be resolved by automatically weakening the approved definition.
           protected_probes:

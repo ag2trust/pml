@@ -1,0 +1,33 @@
+pml: "0.1-draft"
+
+project:
+  id: alternative_output_sample
+  name: Alternative Output Sample
+  purpose: Demonstrate mutually exclusive behavior output alternatives.
+
+signals:
+  email_processed:
+    meaning: An inbound email has received a complete importance decision.
+  email_processing_failed:
+    meaning: An inbound email could not receive a supported importance decision.
+
+domains:
+  email:
+    purpose: Manage inbound email.
+    features:
+      triage:
+        purpose: Classify inbound email by importance.
+        behaviors:
+          importance_decision:
+            context:
+              - The inbound email content and sender.
+            output:
+              one_of:
+                decision:
+                  statement: One complete importance decision classifying the inbound email as important or ordinary.
+                  emits:
+                    - email_processed
+                processing_failure:
+                  statement: A visible failure indicating that a complete importance decision could not be supported.
+                  emits:
+                    - email_processing_failed

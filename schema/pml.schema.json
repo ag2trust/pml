@@ -46,7 +46,7 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "pattern": "^domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.components\\.[a-z][a-z0-9_]*)?$"
+        "pattern": "^domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.behaviors\\.[a-z][a-z0-9_]*)?$"
       }
     },
     "project": {
@@ -191,14 +191,14 @@
       "anyOf": [
         {"required": ["rules"]},
         {"required": ["use_cases"]},
-        {"required": ["components"]}
+        {"required": ["behaviors"]}
       ],
       "properties": {
         "purpose": {"$ref": "#/$defs/nonEmpty"},
         "actors": {"$ref": "#/$defs/idList"},
         "rules": {"$ref": "#/$defs/ruleMap"},
         "use_cases": {"$ref": "#/$defs/useCaseMap"},
-        "components": {"$ref": "#/$defs/componentMap"},
+        "behaviors": {"$ref": "#/$defs/behaviorMap"},
         "experience": {"$ref": "#/$defs/experience"},
         "reactions": {"$ref": "#/$defs/reactionMap"},
         "related_to": {"$ref": "#/$defs/pathList"},
@@ -206,26 +206,53 @@
         "architecture": {"$ref": "#/$defs/idList"}
       }
     },
-    "componentMap": {
+    "behaviorMap": {
       "type": "object",
       "minProperties": 1,
       "maxProperties": 25,
       "propertyNames": {"$ref": "#/$defs/id"},
-      "additionalProperties": {"$ref": "#/$defs/component"}
+      "additionalProperties": {"$ref": "#/$defs/behavior"}
     },
-    "component": {
+    "behavior": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["purpose"],
+      "required": ["output"],
       "properties": {
-        "purpose": {"$ref": "#/$defs/nonEmpty"},
-        "inputs": {"$ref": "#/$defs/stringList"},
-        "outputs": {"$ref": "#/$defs/stringList"},
+        "context": {"$ref": "#/$defs/stringList"},
+        "output": {"$ref": "#/$defs/output"},
         "rules": {"$ref": "#/$defs/ruleMap"},
         "reactions": {"$ref": "#/$defs/reactionMap"},
         "related_to": {"$ref": "#/$defs/pathList"},
-        "emits": {"$ref": "#/$defs/idList"},
         "architecture": {"$ref": "#/$defs/idList"}
+      }
+    },
+    "output": {
+      "oneOf": [
+        {"$ref": "#/$defs/outputCase"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["one_of"],
+          "properties": {
+            "one_of": {"$ref": "#/$defs/outputCaseMap"}
+          }
+        }
+      ]
+    },
+    "outputCaseMap": {
+      "type": "object",
+      "minProperties": 2,
+      "maxProperties": 7,
+      "propertyNames": {"$ref": "#/$defs/id"},
+      "additionalProperties": {"$ref": "#/$defs/outputCase"}
+    },
+    "outputCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement"],
+      "properties": {
+        "statement": {"$ref": "#/$defs/nonEmpty"},
+        "emits": {"$ref": "#/$defs/idList"}
       }
     },
     "useCaseMap": {

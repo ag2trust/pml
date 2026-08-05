@@ -86,6 +86,50 @@ steps:
     assert missing_probe_diagnostics(probes, definition, bindings) == []
 
 
+def test_probes_can_target_behavior_output_obligations(tmp_path: Path) -> None:
+    definition, diagnostics = load_document(
+        ROOT / "examples" / "behavior-one-of-output.pml.yaml"
+    )
+    assert diagnostics == []
+    assert definition is not None
+    behavior_id = (
+        "domains.email.features.triage.behaviors.importance_decision"
+    )
+    targets = [
+        f"{behavior_id}.output",
+        f"{behavior_id}.output.processing_failure",
+    ]
+
+    for index, target in enumerate(targets):
+        probe_path = tmp_path / f"output-{index}.probe.yaml"
+        probe_path.write_text(
+            f"""\
+pml_probe: "0.1"
+probe: output_{index}
+verifies: {target}
+env: staging
+steps:
+  - cli: [email, verify-output]
+    expect: {{exit: 0}}
+"""
+        )
+
+        probes, probe_diagnostics = load_probes(probe_path, definition)
+
+        assert list(probes) == [f"output_{index}"]
+        assert probe_diagnostics == []
+
+    legacy_path = tmp_path / "legacy-component.probe.yaml"
+    legacy_path.write_text(
+        (tmp_path / "output-0.probe.yaml").read_text().replace(
+            ".behaviors.", ".components."
+        )
+    )
+    legacy_probes, legacy_diagnostics = load_probes(legacy_path, definition)
+    assert legacy_probes == {}
+    assert {item.code for item in legacy_diagnostics} == {"schema"}
+
+
 def test_probe_rejects_unknown_actor_and_forward_variable(tmp_path: Path) -> None:
     definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
     assert definition is not None

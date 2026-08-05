@@ -3,6 +3,7 @@ from pathlib import Path
 import copy
 import json
 from jsonschema import Draft202012Validator
+import pytest
 import yaml
 
 from pml.formats import FORMAT_CHECKER
@@ -22,6 +23,14 @@ def test_assistant_creation_example_is_valid() -> None:
 
 def test_minimal_example_is_valid() -> None:
     assert validate_file(ROOT / "examples" / "minimal.pml.yaml") == []
+
+
+@pytest.mark.parametrize(
+    "example",
+    ["behavior-direct-output.pml.yaml", "behavior-one-of-output.pml.yaml"],
+)
+def test_behavior_output_examples_are_valid(example: str) -> None:
+    assert validate_file(ROOT / "examples" / example) == []
 
 
 def test_architecture_decisions_example_is_valid() -> None:
@@ -161,7 +170,16 @@ def test_rejects_conflicting_fragments(tmp_path: Path) -> None:
     assert any(item.code == "conflict" and "project.purpose" in item.message for item in diagnostics)
 
 
-def test_rejects_component_nesting(tmp_path: Path) -> None:
+def _behavior_manifest(tmp_path: Path, behavior: dict, name: str = "behavior") -> Path:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    feature = document["domains"]["notes"]["features"]["creation"]
+    feature["behaviors"] = {"note_decision": behavior}
+    manifest = tmp_path / f"{name}.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+    return manifest
+
+
+def test_rejects_behavior_nesting(tmp_path: Path) -> None:
     manifest = tmp_path / "deep.pml.yaml"
     manifest.write_text(
         """\
@@ -186,19 +204,350 @@ domains:
             given: [Ready.]
             when: [Runs.]
             then: [Done.]
-        components:
+        behaviors:
           level_one:
-            purpose: Level one.
-            components:
+            output:
+              statement: One visible level-one result.
+            behaviors:
               level_two:
-                purpose: Level two.
-                components:
-                  level_three:
-                    purpose: Too deep.
+                output:
+                  statement: One visible level-two result.
 """
     )
     diagnostics = validate_file(manifest)
-    assert any(item.code == "schema" and "components" in item.message for item in diagnostics)
+    assert any(item.code == "schema" and "behaviors" in item.message for item in diagnostics)
+
+
+@pytest.mark.parametrize(
+    "behaviors",
+    [
+        None,
+        [],
+        "not a behavior map",
+        {"note_decision": None},
+        {"note_decision": []},
+        {"note_decision": "not a behavior definition"},
+    ],
+)
+def test_malformed_behavior_values_return_schema_diagnostics(
+    tmp_path: Path,
+    behaviors: object,
+) -> None:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    feature = document["domains"]["notes"]["features"]["creation"]
+    feature["behaviors"] = behaviors
+    manifest = tmp_path / "malformed-behaviors.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    diagnostics = validate_file(manifest)
+
+    assert any(
+        item.code == "schema"
+        and item.path.startswith("domains.notes.features.creation.behaviors")
+        for item in diagnostics
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("reactions", []),
+        ("reactions.invalid", []),
+        ("reactions.invalid.on", []),
+        ("rules", []),
+        ("related_to", [{"invalid": "relationship"}]),
+        ("architecture", {"invalid": "decision"}),
+        ("context", {"invalid": "context"}),
+        ("output", []),
+        ("output.one_of", []),
+        ("output.emits", [{"invalid": "signal"}]),
+    ],
+)
+def test_malformed_behavior_subfields_return_only_schema_diagnostics(
+    tmp_path: Path,
+    field: str,
+    value: object,
+) -> None:
+    behavior: dict[str, object] = {
+        "output": {"statement": "One visible Note result."}
+    }
+    target = behavior
+    field_parts = field.split(".")
+    for part in field_parts[:-1]:
+        nested = target.get(part)
+        if not isinstance(nested, dict):
+            nested = {}
+            target[part] = nested
+        target = nested
+    target[field_parts[-1]] = value
+
+    diagnostics = validate_file(
+        _behavior_manifest(tmp_path, behavior, field.replace(".", "-"))
+    )
+
+    assert diagnostics
+    assert all(item.code == "schema" for item in diagnostics)
+
+
+@pytest.mark.parametrize("legacy_key", ["purpose", "inputs", "outputs", "emits"])
+def test_rejects_legacy_behavior_keys(tmp_path: Path, legacy_key: str) -> None:
+    values = {
+        "purpose": "Legacy purpose.",
+        "inputs": ["Legacy input."],
+        "outputs": ["Legacy output."],
+        "emits": ["legacy_signal"],
+    }
+    behavior = {
+        "output": {"statement": "One visible Note result."},
+        legacy_key: values[legacy_key],
+    }
+
+    diagnostics = validate_file(_behavior_manifest(tmp_path, behavior, legacy_key))
+
+    assert any(
+        item.code == "schema" and legacy_key in item.message for item in diagnostics
+    )
+
+
+def test_rejects_legacy_components_key(tmp_path: Path) -> None:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    feature = document["domains"]["notes"]["features"]["creation"]
+    feature["components"] = {
+        "legacy": {"purpose": "Legacy component.", "outputs": ["Legacy result."]}
+    }
+    manifest = tmp_path / "components.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    diagnostics = validate_file(manifest)
+
+    assert any(
+        item.code == "schema" and "components" in item.message
+        for item in diagnostics
+    )
+
+
+def test_behavior_requires_output(tmp_path: Path) -> None:
+    diagnostics = validate_file(_behavior_manifest(tmp_path, {}, "missing-output"))
+
+    assert any(
+        item.code == "schema" and "'output' is a required property" in item.message
+        for item in diagnostics
+    )
+
+
+def test_rejects_mixed_direct_and_one_of_output(tmp_path: Path) -> None:
+    behavior = {
+        "output": {
+            "statement": "One direct result.",
+            "one_of": {
+                "accepted": {"statement": "One accepted result."},
+                "rejected": {"statement": "One rejected result."},
+            },
+        }
+    }
+
+    diagnostics = validate_file(_behavior_manifest(tmp_path, behavior, "mixed-output"))
+
+    assert any(item.code == "schema" and item.path.endswith(".output") for item in diagnostics)
+
+
+def test_rejects_one_case_one_of_output(tmp_path: Path) -> None:
+    behavior = {
+        "output": {
+            "one_of": {"accepted": {"statement": "One accepted result."}}
+        }
+    }
+
+    diagnostics = validate_file(_behavior_manifest(tmp_path, behavior, "one-case"))
+
+    assert any(
+        item.code == "schema" and item.path.endswith(".output")
+        for item in diagnostics
+    )
+
+
+def test_rejects_unresolved_output_signal(tmp_path: Path) -> None:
+    behavior = {
+        "output": {
+            "statement": "One visible Note result.",
+            "emits": ["missing_signal"],
+        }
+    }
+
+    diagnostics = validate_file(_behavior_manifest(tmp_path, behavior, "missing-signal"))
+
+    assert any(
+        item.code == "undefined-reference"
+        and item.path.endswith(".behaviors.note_decision.output.emits")
+        for item in diagnostics
+    )
+
+
+@pytest.mark.parametrize(
+    ("behavior", "path_suffix"),
+    [
+        (
+            {
+                "output": {"statement": "One visible Note result."},
+                "related_to": [
+                    f"domains.notes.features.related_{index}" for index in range(8)
+                ],
+            },
+            ".related_to",
+        ),
+        (
+            {
+                "output": {"statement": "One visible Note result."},
+                "architecture": [f"decision_{index}" for index in range(8)],
+            },
+            ".architecture",
+        ),
+        (
+            {
+                "output": {
+                    "statement": "One visible Note result.",
+                    "emits": [f"signal_{index}" for index in range(8)],
+                }
+            },
+            ".output",
+        ),
+    ],
+)
+def test_behavior_lists_are_bounded(
+    tmp_path: Path,
+    behavior: dict,
+    path_suffix: str,
+) -> None:
+    diagnostics = validate_file(
+        _behavior_manifest(tmp_path, behavior, "oversized-behavior-list")
+    )
+
+    assert any(
+        item.code == "schema"
+        and item.path.endswith(path_suffix)
+        for item in diagnostics
+    )
+
+
+def test_output_statement_rejects_ambiguity_without_requiring_must(tmp_path: Path) -> None:
+    behavior = {"output": {"statement": "One properly visible Note result."}}
+
+    diagnostics = validate_file(_behavior_manifest(tmp_path, behavior, "ambiguous-output"))
+
+    assert "ambiguous-language" in {item.code for item in diagnostics}
+    assert "non-normative" not in {item.code for item in diagnostics}
+
+
+def test_output_statement_rejects_implementation_detail(tmp_path: Path) -> None:
+    behavior = {
+        "output": {"statement": "The save_note() function returns one Note result."}
+    }
+
+    diagnostics = validate_file(_behavior_manifest(tmp_path, behavior, "implementation-output"))
+
+    assert "implementation-detail" in {item.code for item in diagnostics}
+    assert "non-normative" not in {item.code for item in diagnostics}
+
+
+def test_output_statement_rejects_rest_api(tmp_path: Path) -> None:
+    behavior = {
+        "output": {"statement": "The REST API returns the classified email."}
+    }
+
+    diagnostics = validate_file(_behavior_manifest(tmp_path, behavior, "rest-api"))
+
+    assert "implementation-detail" in {item.code for item in diagnostics}
+    assert "non-normative" not in {item.code for item in diagnostics}
+
+
+@pytest.mark.parametrize(
+    "implementation_detail",
+    [
+        "filenames",
+        "functions",
+        "classes",
+        "endpoints",
+        "framework elements",
+        "libraries",
+        "tests",
+        "payload schemas",
+    ],
+)
+def test_output_statement_rejects_plural_implementation_details(
+    tmp_path: Path,
+    implementation_detail: str,
+) -> None:
+    behavior = {
+        "output": {
+            "statement": f"One result produced through prescribed {implementation_detail}."
+        }
+    }
+
+    diagnostics = validate_file(
+        _behavior_manifest(tmp_path, behavior, f"plural-{implementation_detail.split()[0]}")
+    )
+
+    assert "implementation-detail" in {item.code for item in diagnostics}
+    assert "non-normative" not in {item.code for item in diagnostics}
+
+
+def test_output_alternative_named_output_is_normative_by_position(
+    tmp_path: Path,
+) -> None:
+    behavior = {
+        "output": {
+            "one_of": {
+                "output": {"statement": "One visible Note result."},
+                "failure": {"statement": "One visible failure result."},
+            }
+        }
+    }
+
+    diagnostics = validate_file(
+        _behavior_manifest(tmp_path, behavior, "output-alternative")
+    )
+
+    assert diagnostics == []
+
+
+def test_non_output_statements_named_output_still_require_normative_markers(
+    tmp_path: Path,
+) -> None:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    feature = document["domains"]["notes"]["features"]["creation"]
+    feature["rules"]["output"] = {"statement": "A visible rule result."}
+    document["signals"] = {
+        "note_changed": {"meaning": "A Note has visibly changed."}
+    }
+    feature["reactions"] = {
+        "output": {
+            "on": "note_changed",
+            "statement": "A visible reaction result.",
+        }
+    }
+    document["architecture"] = {
+        "approved_runtime": {
+            "category": "runtime",
+            "selection": "Approved runtime.",
+            "rationale": "Owner approval is required to replace this runtime.",
+            "constraints": {
+                "output": {"statement": "A visible architecture result."}
+            },
+        }
+    }
+    feature["architecture"] = ["approved_runtime"]
+    manifest = tmp_path / "non-output-statements.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    diagnostics = validate_file(manifest)
+
+    assert {
+        item.path for item in diagnostics if item.code == "non-normative"
+    } == {
+        "domains.notes.features.creation.rules.output.statement",
+        "domains.notes.features.creation.reactions.output.statement",
+        "architecture.approved_runtime.constraints.output.statement",
+    }
 
 
 def test_rejects_overloaded_rule_map(tmp_path: Path) -> None:
@@ -240,7 +589,7 @@ domains:
     assert any(item.code == "schema" and "too many properties" in item.message for item in diagnostics)
 
 
-def test_validates_signals_relationships_components_and_architecture(tmp_path: Path) -> None:
+def test_validates_signals_relationships_behaviors_and_architecture(tmp_path: Path) -> None:
     manifest = tmp_path / "connected.pml.yaml"
     manifest.write_text(
         """\
@@ -266,15 +615,17 @@ domains:
     features:
       purchase:
         purpose: Purchase credits.
-        components:
+        related_to: [domains.billing.features.purchase.behaviors.payment]
+        behaviors:
           payment:
-            purpose: Determine the payment result.
-            inputs: [A payment authorization.]
-            outputs: [A payment result.]
-            emits: [payment_failed]
-            related_to: [domains.billing.features.purchase.components.balance]
+            context: [A payment authorization.]
+            output:
+              statement: One complete payment result.
+              emits: [payment_failed]
+            related_to: [domains.billing.features.purchase.behaviors.balance]
           balance:
-            purpose: Maintain available credits.
+            output:
+              statement: One current available-credit balance.
             architecture: [durable_store]
             reactions:
               preserve_balance:
@@ -298,6 +649,26 @@ def test_rejects_unknown_signal_relationship_and_architecture(tmp_path: Path) ->
     manifest.write_text(source)
     diagnostics = validate_file(manifest)
     assert sum(item.code == "undefined-reference" for item in diagnostics) == 3
+
+
+def test_feature_emits_are_validated_when_domain_id_is_behaviors(
+    tmp_path: Path,
+) -> None:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    document["domains"]["behaviors"] = document["domains"].pop("notes")
+    feature = document["domains"]["behaviors"]["features"]["creation"]
+    feature["emits"] = ["missing_signal"]
+    manifest = tmp_path / "behaviors-domain.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    diagnostics = validate_file(manifest)
+
+    assert any(
+        item.code == "undefined-reference"
+        and item.path == "domains.behaviors.features.creation.emits"
+        and "missing_signal" in item.message
+        for item in diagnostics
+    )
 
 
 def test_architecture_requires_bottom_up_references_and_rejects_implementation_detail(tmp_path: Path) -> None:
@@ -391,8 +762,12 @@ def test_architecture_rejects_inline_definitions_and_unknown_categories(tmp_path
     )
     manifest = tmp_path / "inline.pml.yaml"
     manifest.write_text(source)
-    messages = "\n".join(item.message for item in validate_file(manifest))
-    assert "architecture" in messages
+    diagnostics = validate_file(manifest)
+    assert any(
+        item.code == "schema"
+        and item.path == "domains.notes.features.creation.architecture"
+        for item in diagnostics
+    )
 
 
 def test_verification_report_matches_schema() -> None:

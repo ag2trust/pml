@@ -33,6 +33,17 @@ ARCHITECTURE_IMPLEMENTATION_DETAIL = re.compile(
     r"\b[A-Za-z_][A-Za-z0-9_.-]*\s*=\s*\S+|\{\s*\"(?:[^\"\\\\]|\\\\.)+\"\s*:)",
     re.IGNORECASE,
 )
+OUTPUT_IMPLEMENTATION_DETAIL = re.compile(
+    r"(?:\b(?:files?|filenames?|functions?|class(?:es)?|components?|tables?|databases?|"
+    r"endpoints?|(?:REST\s+)?APIs?|framework(?:s|\s+elements?)?|hooks?|librar(?:y|ies)|methods?|modules?|"
+    r"services?|jobs?|queues?|tests?|payload\s+schemas?)\b|"
+    r"\b(?:get|post|put|patch|delete)\s+/|"
+    r"(?-i:\b[a-z0-9_-]+\.(?:py|js|ts|java|go|rb|sql|ya?ml|json)\b)|"
+    r"(?-i:\b[a-z][A-Za-z0-9_]*\([^)]*\))|"
+    r"\b[A-Za-z_][A-Za-z0-9_.-]*\s*=\s*\S+|"
+    r"\{\s*\"(?:[^\"\\\\]|\\\\.)+\"\s*:)",
+    re.IGNORECASE,
+)
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
@@ -118,6 +129,53 @@ def _walk(value: Any, path: tuple[Any, ...] = ()) -> Iterable[tuple[tuple[Any, .
             yield from _walk(child, path + (index,))
 
 
+def _is_output_statement(parts: tuple[Any, ...]) -> bool:
+    """Return whether a statement occupies a direct or alternative output case."""
+
+    return (
+        len(parts) == 8
+        and parts[0] == "domains"
+        and parts[2] == "features"
+        and parts[4] == "behaviors"
+        and parts[6:] == ("output", "statement")
+    ) or (
+        len(parts) == 10
+        and parts[0] == "domains"
+        and parts[2] == "features"
+        and parts[4] == "behaviors"
+        and parts[6] == "output"
+        and parts[7] == "one_of"
+        and parts[9] == "statement"
+    )
+
+
+def _output_cases(node: dict[str, Any]) -> Iterable[tuple[str, dict[str, Any]]]:
+    """Yield authored output-case paths and definitions from a behavior node."""
+
+    output = node.get("output")
+    if not isinstance(output, dict):
+        return
+    alternatives = output.get("one_of")
+    if isinstance(alternatives, dict):
+        for alternative_id, definition in alternatives.items():
+            if isinstance(definition, dict):
+                yield f"output.one_of.{alternative_id}", definition
+    elif "statement" in output:
+        yield "output", output
+
+
+def _is_behavior_node(node_id: str) -> bool:
+    """Return whether a semantic ID has the canonical behavior path shape."""
+
+    parts = node_id.split(".")
+    return (
+        len(parts) == 6
+        and parts[0] == "domains"
+        and parts[2] == "features"
+        and parts[4] == "behaviors"
+    )
+
+
 def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
 
@@ -147,11 +205,10 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                             f"use canonical term '{canonical}' instead of '{synonym}'",
                         )
                     )
-        is_normative = bool(parts) and (
-            parts[-1] in normative_fields
-        )
+        is_normative = bool(parts) and parts[-1] in normative_fields
         if is_normative:
-            if not NORMATIVE_MARKER.search(value):
+            output_statement = _is_output_statement(parts)
+            if not output_statement and not NORMATIVE_MARKER.search(value):
                 diagnostics.append(
                     Diagnostic(
                         _path(parts),
@@ -168,6 +225,14 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                             f"replace ambiguous term '{word}' with an observable obligation",
                         )
                     )
+            if output_statement and OUTPUT_IMPLEMENTATION_DETAIL.search(value):
+                diagnostics.append(
+                    Diagnostic(
+                        _path(parts),
+                        "implementation-detail",
+                        "output statements must describe observable product results, not implementation details",
+                    )
+                )
 
     actor_ids = set(document.get("actors", {}))
     signal_ids = set(document.get("signals", {}))
@@ -187,33 +252,62 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                     diagnostics.append(Diagnostic(f"{prefix}.use_cases.{use_case_id}.actor", "undefined-reference", f"unknown actor '{actor}'"))
     node_ids = {node_id for node_id, _ in iter_nodes(document)}
     for node_id, node in iter_nodes(document):
-        for related in node.get("related_to", []):
-            if related not in node_ids:
-                diagnostics.append(Diagnostic(f"{node_id}.related_to", "undefined-reference", f"unknown node '{related}'"))
-            elif related == node_id:
-                diagnostics.append(Diagnostic(f"{node_id}.related_to", "self-reference", "a node cannot relate to itself"))
-        for signal in node.get("emits", []):
-            if signal not in signal_ids:
-                diagnostics.append(Diagnostic(f"{node_id}.emits", "undefined-reference", f"unknown signal '{signal}'"))
-        node_architecture = node.get("architecture", [])
-        if not isinstance(node_architecture, (list, dict)):
-            node_architecture = []
-        for decision in node_architecture:
-            if not isinstance(decision, str):
+        related_nodes = node.get("related_to", [])
+        if isinstance(related_nodes, list):
+            for related in related_nodes:
+                if not isinstance(related, str):
+                    continue
+                if related not in node_ids:
+                    diagnostics.append(Diagnostic(f"{node_id}.related_to", "undefined-reference", f"unknown node '{related}'"))
+                elif related == node_id:
+                    diagnostics.append(Diagnostic(f"{node_id}.related_to", "self-reference", "a node cannot relate to itself"))
+        if not _is_behavior_node(node_id):
+            emitted_signals = node.get("emits", [])
+            if isinstance(emitted_signals, list):
+                for signal in emitted_signals:
+                    if not isinstance(signal, str):
+                        continue
+                    if signal not in signal_ids:
+                        diagnostics.append(Diagnostic(f"{node_id}.emits", "undefined-reference", f"unknown signal '{signal}'"))
+        for output_path, output_case in _output_cases(node):
+            emitted_signals = output_case.get("emits", [])
+            if not isinstance(emitted_signals, list):
                 continue
-            referenced_architecture.add(decision)
-            if decision not in architecture_ids:
-                diagnostics.append(Diagnostic(f"{node_id}.architecture", "undefined-reference", f"unknown architecture decision '{decision}'"))
-        for reaction_id, reaction in node.get("reactions", {}).items():
-            signal = reaction.get("on")
-            if signal not in signal_ids:
-                diagnostics.append(Diagnostic(f"{node_id}.reactions.{reaction_id}.on", "undefined-reference", f"unknown signal '{signal}'"))
+            for signal in emitted_signals:
+                if not isinstance(signal, str):
+                    continue
+                if signal not in signal_ids:
+                    diagnostics.append(
+                        Diagnostic(
+                            f"{node_id}.{output_path}.emits",
+                            "undefined-reference",
+                            f"unknown signal '{signal}'",
+                        )
+                    )
+        node_architecture = node.get("architecture", [])
+        if isinstance(node_architecture, list):
+            for decision in node_architecture:
+                if not isinstance(decision, str):
+                    continue
+                referenced_architecture.add(decision)
+                if decision not in architecture_ids:
+                    diagnostics.append(Diagnostic(f"{node_id}.architecture", "undefined-reference", f"unknown architecture decision '{decision}'"))
+        reactions = node.get("reactions", {})
+        if isinstance(reactions, dict):
+            for reaction_id, reaction in reactions.items():
+                if not isinstance(reaction, dict):
+                    continue
+                signal = reaction.get("on")
+                if not isinstance(signal, str):
+                    continue
+                if signal not in signal_ids:
+                    diagnostics.append(Diagnostic(f"{node_id}.reactions.{reaction_id}.on", "undefined-reference", f"unknown signal '{signal}'"))
     for decision_id, decision in architecture_map.items():
         if not isinstance(decision, dict):
             continue
         prefix = f"architecture.{decision_id}"
         if decision_id not in referenced_architecture:
-            diagnostics.append(Diagnostic(prefix, "unreferenced-architecture", "architecture decision is not referenced by a feature or component"))
+            diagnostics.append(Diagnostic(prefix, "unreferenced-architecture", "architecture decision is not referenced by a feature or behavior"))
         for field in ("selection", "rationale"):
             value = decision.get(field, "")
             if isinstance(value, str) and ARCHITECTURE_IMPLEMENTATION_DETAIL.search(value):

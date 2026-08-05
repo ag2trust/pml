@@ -33,11 +33,11 @@ ledger:
 ```
 
 Review metadata remains separate from the normative definition. For a feature,
-component, or obligation, the optional `reviews.yaml` declares an authoring origin
+behavior, or obligation, the optional `reviews.yaml` declares an authoring origin
 of agent or human and records whether its current content is pending, approved, or
 rejected. The origin is repository-controlled metadata, not a claim that PML
 independently verifies. An absent review record is treated as pending. Each review
-target is a feature, component, or obligation ID and must resolve in the validated
+target is a feature, behavior, or obligation ID and must resolve in the validated
 definition; an unknown target rejects the review metadata.
 
 An approval is bound to the digest of the reviewed target. When that content
@@ -162,7 +162,7 @@ Developer-managed agents and human workflows produce verification reports outsid
 PML. `pml ingest-report <report>` is their only supported state mutation boundary;
 external producers MUST NOT directly edit generated state.
 
-One report may cover one obligation, several features or components, or an entire
+One report may cover one obligation, several features or behaviors, or an entire
 project that fits the limits below. It uses flat lists of fully qualified obligation
 IDs rather than duplicating the PML hierarchy. A report is bounded before parsing:
 its UTF-8 representation is at most 1 MiB, it contains at most 64 declared targets,
