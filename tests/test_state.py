@@ -1,4 +1,3 @@
-from collections import Counter
 from pathlib import Path
 import os
 import shutil
@@ -1186,26 +1185,47 @@ def test_product_state_scan_closes_processed_descriptors_on_success(
     assert diagnostics == []
     assert document is not None
     opened: list[int] = []
-    closed: list[int] = []
     original_open = os.open
-    original_close = os.close
+    original_dup = os.dup
+    original_scandir = os.scandir
 
     def record_open(path, flags, mode=0o777, *, dir_fd=None):
         fd = original_open(path, flags, mode, dir_fd=dir_fd)
         opened.append(fd)
         return fd
 
-    def record_close(fd):
-        closed.append(fd)
-        original_close(fd)
+    def record_dup(fd):
+        duplicate = original_dup(fd)
+        opened.append(duplicate)
+        return duplicate
+
+    def closing_scandir(fd):
+        entries = original_scandir(fd)
+
+        class ClosingScandir:
+            def __enter__(self):
+                return entries
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                entries.close()
+                if isinstance(fd, int):
+                    os.close(fd)
+
+        return ClosingScandir()
 
     monkeypatch.setattr("pml.project_state.os.open", record_open)
-    monkeypatch.setattr("pml.project_state.os.close", record_close)
+    monkeypatch.setattr("pml.project_state.os.dup", record_dup)
+    monkeypatch.setattr("pml.project_state.os.scandir", closing_scandir)
 
     assert validate_product_state(
         product, document, definition_source=manifest
     ) == []
-    assert Counter(opened) == Counter(closed)
+    for fd in opened:
+        try:
+            os.fstat(fd)
+        except OSError:
+            continue
+        raise AssertionError(f"descriptor {fd} remains open")
 
 
 def test_architecture_state_scan_closes_root_descriptor_on_success(
@@ -1225,28 +1245,49 @@ def test_architecture_state_scan_closes_root_descriptor_on_success(
     })
     (product / ".pml/architecture").mkdir()
     opened: list[int] = []
-    closed: list[int] = []
     original_open = os.open
-    original_close = os.close
+    original_dup = os.dup
+    original_scandir = os.scandir
 
     def record_open(path, flags, mode=0o777, *, dir_fd=None):
         fd = original_open(path, flags, mode, dir_fd=dir_fd)
         opened.append(fd)
         return fd
 
-    def record_close(fd):
-        closed.append(fd)
-        original_close(fd)
+    def record_dup(fd):
+        duplicate = original_dup(fd)
+        opened.append(duplicate)
+        return duplicate
+
+    def closing_scandir(fd):
+        entries = original_scandir(fd)
+
+        class ClosingScandir:
+            def __enter__(self):
+                return entries
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                entries.close()
+                if isinstance(fd, int):
+                    os.close(fd)
+
+        return ClosingScandir()
 
     monkeypatch.setattr("pml.project_state.os.open", record_open)
-    monkeypatch.setattr("pml.project_state.os.close", record_close)
+    monkeypatch.setattr("pml.project_state.os.dup", record_dup)
+    monkeypatch.setattr("pml.project_state.os.scandir", closing_scandir)
 
     diagnostics = validate_architecture_state(
         product, document, definition_source=manifest
     )
 
     assert [item.code for item in diagnostics] == ["missing-state"]
-    assert Counter(opened) == Counter(closed)
+    for fd in opened:
+        try:
+            os.fstat(fd)
+        except OSError:
+            continue
+        raise AssertionError(f"descriptor {fd} remains open")
 
 
 def test_probe_evidence_rejects_architecture_state_root_symlink(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import errno
 import hashlib
 import json
 import os
@@ -196,6 +197,18 @@ def _non_regular_state_diagnostic(path: Path) -> Diagnostic:
     return Diagnostic(
         str(path), "state-path", "generated state must be a regular file"
     )
+
+
+def _close_descriptor_if_open(fd: int) -> None:
+    """Close a descriptor that may have been consumed by ``os.scandir``."""
+
+    try:
+        os.fstat(fd)
+    except OSError as exc:
+        if exc.errno != errno.EBADF:
+            raise
+    else:
+        os.close(fd)
 
 
 def _unsafe_state_file_diagnostic(path: Path, metadata: os.stat_result) -> Diagnostic | None:
@@ -473,28 +486,32 @@ def _bounded_product_state_paths(
         while pending:
             directory_fd, directory = pending.pop()
             try:
-                with os.scandir(directory_fd) as entries:
-                    for entry in entries:
-                        if scanned_entries == MAX_PRODUCT_STATE_SCAN_ENTRIES:
-                            return state_paths, True, []
-                        scanned_entries += 1
-                        path = directory / entry.name
-                        if entry.is_dir(follow_symlinks=False):
-                            try:
-                                child_fd = os.open(
-                                    entry.name,
-                                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                                    dir_fd=directory_fd,
-                                )
-                            except OSError as exc:
-                                return state_paths, False, [
-                                    _product_state_access_diagnostic(path, exc)
-                                ]
-                            pending.append((child_fd, directory / entry.name))
-                        elif entry.name.endswith(".state.yaml"):
-                            if len(state_paths) == max_state_files:
+                scan_fd = os.dup(directory_fd)
+                try:
+                    with os.scandir(scan_fd) as entries:
+                        for entry in entries:
+                            if scanned_entries == MAX_PRODUCT_STATE_SCAN_ENTRIES:
                                 return state_paths, True, []
-                            state_paths.append(directory / entry.name)
+                            scanned_entries += 1
+                            path = directory / entry.name
+                            if entry.is_dir(follow_symlinks=False):
+                                try:
+                                    child_fd = os.open(
+                                        entry.name,
+                                        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                        dir_fd=directory_fd,
+                                    )
+                                except OSError as exc:
+                                    return state_paths, False, [
+                                        _product_state_access_diagnostic(path, exc)
+                                    ]
+                                pending.append((child_fd, directory / entry.name))
+                            elif entry.name.endswith(".state.yaml"):
+                                if len(state_paths) == max_state_files:
+                                    return state_paths, True, []
+                                state_paths.append(directory / entry.name)
+                finally:
+                    _close_descriptor_if_open(scan_fd)
             except OSError as exc:
                 return state_paths, False, [
                     _product_state_access_diagnostic(directory, exc)
@@ -522,38 +539,42 @@ def _architecture_state_paths(
     diagnostics: list[Diagnostic] = []
     state_paths: list[Path] = []
     try:
-        with os.scandir(root_fd) as entries:
-            for index, entry in enumerate(entries):
-                path = root / entry.name
-                if index == MAX_ARCHITECTURE_STATE_ENTRIES:
-                    diagnostics.append(Diagnostic(
-                        str(root),
-                        "state-limit",
-                        "architecture state contains too many entries",
-                    ))
-                    break
-                if not entry.is_file(follow_symlinks=False):
-                    diagnostics.append(Diagnostic(
-                        str(path),
-                        "state-path",
-                        f"architecture state must be a direct file at {root}",
-                    ))
-                    continue
-                if not entry.name.endswith(".state.yaml"):
-                    diagnostics.append(Diagnostic(
-                        str(path),
-                        "state-path",
-                        f"architecture state must be a direct file at {root}",
-                    ))
-                    continue
-                if len(state_paths) == max_state_files:
-                    diagnostics.append(Diagnostic(
-                        str(root),
-                        "state-limit",
-                        "architecture state contains more files than approved decisions",
-                    ))
-                    break
-                state_paths.append(path)
+        scan_fd = os.dup(root_fd)
+        try:
+            with os.scandir(scan_fd) as entries:
+                for index, entry in enumerate(entries):
+                    path = root / entry.name
+                    if index == MAX_ARCHITECTURE_STATE_ENTRIES:
+                        diagnostics.append(Diagnostic(
+                            str(root),
+                            "state-limit",
+                            "architecture state contains too many entries",
+                        ))
+                        break
+                    if not entry.is_file(follow_symlinks=False):
+                        diagnostics.append(Diagnostic(
+                            str(path),
+                            "state-path",
+                            f"architecture state must be a direct file at {root}",
+                        ))
+                        continue
+                    if not entry.name.endswith(".state.yaml"):
+                        diagnostics.append(Diagnostic(
+                            str(path),
+                            "state-path",
+                            f"architecture state must be a direct file at {root}",
+                        ))
+                        continue
+                    if len(state_paths) == max_state_files:
+                        diagnostics.append(Diagnostic(
+                            str(root),
+                            "state-limit",
+                            "architecture state contains more files than approved decisions",
+                        ))
+                        break
+                    state_paths.append(path)
+        finally:
+            _close_descriptor_if_open(scan_fd)
     except OSError as exc:
         diagnostics.append(_product_state_access_diagnostic(root, exc))
     finally:
