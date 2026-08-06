@@ -73,6 +73,21 @@ def test_init_rejects_every_destination_collision_without_writes(tmp_path: Path)
         assert all(not path.exists() or path == collision for path in targets)
 
 
+def test_init_rejects_dangling_source_symlink_without_writes(tmp_path: Path) -> None:
+    product = tmp_path / "product"
+    product.mkdir()
+    source = tmp_path / "product-pml"
+    external_target = tmp_path / "external-source"
+    source.symlink_to(external_target)
+
+    error = initialize_project(product, "product", "Product")
+
+    assert error == f"destination already exists: {source}"
+    assert source.is_symlink()
+    assert not external_target.exists()
+    assert not (product / ".pml").exists()
+
+
 def test_init_rejects_invalid_identity_without_writes(tmp_path: Path) -> None:
     product = tmp_path / "product"
     product.mkdir()

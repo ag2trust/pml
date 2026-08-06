@@ -31,18 +31,20 @@ def initialize_project(
         (product_root.parent / f"{product_root.name}-pml")
         if source is None
         else (product_root / source if not source.is_absolute() else source)
-    ).resolve()
+    )
     state_path = product_root / ".pml"
     targets = (source_path, state_path)
-    if any(
-        left == right or left in right.parents or right in left.parents
-        for index, left in enumerate(targets)
-        for right in targets[index + 1 :]
-    ):
-        return "initialization destinations must not overlap"
     collisions = [str(path) for path in targets if path.exists() or path.is_symlink()]
     if collisions:
         return f"destination already exists: {collisions[0]}"
+
+    resolved_targets = tuple(path.resolve() for path in targets)
+    if any(
+        left == right or left in right.parents or right in left.parents
+        for index, left in enumerate(resolved_targets)
+        for right in resolved_targets[index + 1 :]
+    ):
+        return "initialization destinations must not overlap"
 
     staged: list[tuple[Path, Path]] = []
     committed: list[Path] = []
