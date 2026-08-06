@@ -1,0 +1,169 @@
+# PML handoff
+
+Updated: 2026-08-06
+
+## Current focus
+
+The active work is language-design brainstorming for a revised behavior model.
+The discussion was prompted by real definitions in `ag2trust-pml` PR #2, especially
+an `attention_lifecycle` behavior whose `context` and `output` fields obscured the
+initial state, initiating action, intended result, and downstream consequences.
+
+The decisions are captured in
+[`docs/specs/0010-behavior-transition-model.md`](docs/specs/0010-behavior-transition-model.md).
+That file is intentionally marked **Discussion draft; not owner approved**. No
+schema, validator, compiler, formatter, examples, bindings, probes, or approved
+language specification has been changed for this design.
+
+## Agreed discussion direction
+
+The proposed closed behavior shape is:
+
+```text
+behavior = {
+  conditions?: conditions,
+  trigger: trigger,
+  outcome: outcome,
+  failures?: failure-map,
+  rules?: rule-map
+}
+```
+
+Current decisions:
+
+- A behavior is one bounded, independently addressable product transition.
+- Behaviors have no descriptive, `purpose`, or `intent` field; their semantic
+  fields must be sufficient without a redundant summary.
+- Replace behavior `context` with optional `conditions`.
+- All conditions must hold when the trigger occurs. Otherwise the behavior does
+  not apply and no evaluation begins; any required response is another behavior.
+- `trigger` is required and contains either one direct trigger or an ID-keyed
+  `one_of` map of alternative triggers.
+- A direct trigger is either a `statement` or a reference to a declared signal.
+- Replace `output` with required `outcome`. `outcome` means successful completion
+  and requires a local statement. It may use `one_of` for multiple successful
+  alternatives.
+- Add optional `failures`, an ID-keyed map of unsuccessful completions. Each
+  failure requires a local statement. A correctly produced authored failure is
+  conformant.
+- Every initiated evaluation completes exactly one successful outcome or one
+  authored failure. None or multiple is nonconformant.
+- Replace plural `emits` with at most one inline singular `signal` definition per
+  outcome or failure.
+- A signal is defined by exactly one authoritative producing outcome or failure.
+  It contains `id`, optional product `subject`, and `meaning`; the separate global
+  signal registry would be removed.
+- A signal's optional subject preserves one product-instance identity between
+  producer and consumers without prescribing a technical payload or transport.
+- Completing a signal-bearing outcome or failure creates one occurrence. Each
+  consuming behavior is considered once for that occurrence, and its conditions
+  are evaluated then. Failed conditions do not cause later re-evaluation.
+- One signal may have multiple consumers. Alternative causes of the same signal
+  belong in the producer's `trigger.one_of`, not in multiple producers.
+- Remove `reactions`; a signal consequence becomes an ordinary behavior triggered
+  by that signal.
+- Remove behavior-level `related_to` and `architecture`; both remain feature-level
+  concerns. Signals express precise directed behavior causality.
+- Keep `experience` at feature scope because persistent surfaces commonly span
+  several behaviors. Behavior-specific visible changes belong in outcomes/rules.
+- Simplify feature use cases to `actor`, `goal`, and a unique non-empty list of
+  behavior references. The list expresses contributing membership, not ordering.
+- Use-case goals remain independently verifiable end-to-end; conforming referenced
+  behaviors alone does not prove goal conformance.
+- Do not add structured lifecycle transition fields; they duplicate conditions and
+  outcomes.
+- Do not add a general workflow/order construct; signal-to-trigger edges express
+  causal order.
+- Keep precise time and quantity requirements in authored statements/rules until
+  real definitions demonstrate a need for structured scalar types.
+
+## Remaining design questions
+
+Only foundational or delivery-blocking questions should be pursued now; defer
+nice-to-have normalization.
+
+- Exact syntax and resolution rules for local and cross-feature behavior references
+  in use cases.
+- Whether signal `subject` may reference only declared concepts or another existing
+  canonical product-object category.
+- Whether any retry or concurrency requirement cannot be expressed adequately as a
+  rule in real definitions.
+- Exact list/map bounds and closed-schema grammar for conditions, triggers,
+  outcomes, failures, signals, and use-case behavior references.
+- Required migration effects on semantic paths, obligations, bindings, probes,
+  locks, and generated state after owner approval.
+
+## Planned post-approval improvement
+
+After the behavior-transition semantics are owner approved, design a canonical
+semantic intermediate representation compiled from validated PML. It should
+resolve behavior identities, triggers, outcomes, failures, signals, consumers,
+and obligations into one model used consistently by semantic validation and
+downstream commands. PML YAML remains the authored language; the representation
+is derived and MUST NOT alter approved intent.
+
+Potential read-only interfaces include `pml compile --json`, `pml explain`, and
+`pml graph`. The exact representation must follow the approved language design,
+not precede or constrain it.
+
+A later visual component should provide a web page for exploring PML artifacts
+and their relationships. It should consume the same compiled semantic model and
+offer navigable project/domain/feature/behavior views, causal signal graphs,
+artifact details, and validation findings. Graph rendering should use a free
+option such as Graphviz. The visual component is a derived, read-only projection;
+it is not an authored PML format and MUST NOT modify or reinterpret approved
+definitions.
+
+## Required workflow
+
+PML is a closed language. The discussion draft is not authority and must not be
+implemented opportunistically. Continue in this order:
+
+1. Finish the language semantics and obtain explicit owner approval.
+2. Amend/supersede the approved language design.
+3. Update schema and semantic validation.
+4. Add positive and negative conformance examples/tests.
+5. Update obligation resolution, bindings/probes, formatter/compiler, lock/state,
+   and command behavior only after validation behavior is defined.
+
+Do not introduce compatibility aliases unless separately approved. Generated state
+and evidence must never alter approved intent.
+
+## Repository state
+
+- Working directory: `/Users/michelperez/dev/pml`
+- Branch: `design/behavior-transition-model`
+- HEAD and `origin/master`: `c7b8689` (`Merge pull request #18 from
+  ag2trust/daemon/anvil-3yoj-t36`)
+- The behavior-transition discussion draft and this handoff are preserved on a
+  dedicated design branch and remain explicitly unapproved.
+- The independent `pml init` and packaged-skill implementation is preserved in
+  commit `96d624a` and PR #19.
+- `git diff --check` passes.
+- The init slice passed 167 tests, skill validation, and wheel-content inspection.
+
+The remaining local artifacts are unrelated to this design branch:
+
+```text
+?? .claude/
+?? 2026-07-31-132205-hi-keep-answers-short-check-handoff-handoffmd.txt
+?? HANDOFF-2026-08-06-pml-init-skill.md
+?? uv.lock
+```
+
+Preserve those artifacts. `.claude/` is represented by open PR #5; the others
+were not included in either focused change.
+
+## Pickup
+
+Start with:
+
+```sh
+cd /Users/michelperez/dev/pml
+git status --short
+sed -n '1,320p' docs/specs/0010-behavior-transition-model.md
+```
+
+The next conversation should either review the few remaining foundational questions
+or refine the draft into an exact owner-approval proposal. Do not begin schema or
+implementation work without that approval.
