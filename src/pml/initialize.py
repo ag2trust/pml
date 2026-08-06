@@ -45,12 +45,18 @@ def initialize_project(
         for right in resolved_targets[index + 1 :]
     ):
         return "initialization destinations must not overlap"
+    try:
+        resolved_targets[0].relative_to(product_root)
+    except ValueError:
+        pass
+    else:
+        return "--source must be outside the implementing product repository"
 
-    staged: list[tuple[Path, Path]] = []
-    committed: list[Path] = []
+    staged: list[Path] = []
+    destination_fds: list[int] = []
     try:
         staged_source = Path(tempfile.mkdtemp(prefix=".pml-init-", dir=source_path.parent))
-        staged.append((staged_source, source_path))
+        staged.append(staged_source)
         (staged_source / "probes").mkdir()
         _write_yaml(
             staged_source / "index.pml.yaml",
@@ -60,21 +66,58 @@ def initialize_project(
             staged_source / "bindings.yaml",
             {"pml_bindings": "0.1", "bindings": {}},
         )
-        staged_state = Path(tempfile.mkdtemp(prefix=".pml-state-", dir=product_root))
-        staged.append((staged_state, state_path))
+        source_fd = _reserve_directory(source_path)
+        destination_fds.append(source_fd)
+        state_fd = _reserve_directory(state_path)
+        destination_fds.append(state_fd)
 
-        for temporary, target in staged:
-            os.replace(temporary, target)
-            committed.append(target)
+        staged_source_fd = os.open(
+            staged_source, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        )
+        try:
+            for name in ("index.pml.yaml", "bindings.yaml"):
+                os.link(
+                    name,
+                    name,
+                    src_dir_fd=staged_source_fd,
+                    dst_dir_fd=source_fd,
+                    follow_symlinks=False,
+                )
+                os.unlink(name, dir_fd=staged_source_fd)
+            os.mkdir("probes", 0o700, dir_fd=source_fd)
+            os.rmdir("probes", dir_fd=staged_source_fd)
+        finally:
+            os.close(staged_source_fd)
+        if not all(
+            _matches_directory(path, fd)
+            for path, fd in zip(targets, destination_fds, strict=True)
+        ):
+            return "destination changed during initialization"
         return None
+    except FileExistsError as exc:
+        return f"destination already exists: {exc.filename}"
     except OSError as exc:
-        for target in reversed(committed):
-            shutil.rmtree(target, ignore_errors=True)
         return str(exc)
     finally:
-        for temporary, _ in staged:
+        for fd in destination_fds:
+            os.close(fd)
+        for temporary in staged:
             shutil.rmtree(temporary, ignore_errors=True)
 
 
 def _write_yaml(path: Path, document: dict[str, object]) -> None:
     path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+
+
+def _reserve_directory(path: Path) -> int:
+    os.mkdir(path, 0o700)
+    return os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+
+
+def _matches_directory(path: Path, fd: int) -> bool:
+    try:
+        metadata = path.stat(follow_symlinks=False)
+    except OSError:
+        return False
+    expected = os.fstat(fd)
+    return metadata.st_dev == expected.st_dev and metadata.st_ino == expected.st_ino

@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 
 import yaml
 
@@ -44,12 +45,24 @@ def test_init_does_not_modify_existing_agent_configuration(tmp_path: Path) -> No
     assert not (product / ".agents" / "skills" / "pml").exists()
 
 
-def test_init_accepts_product_relative_source(tmp_path: Path) -> None:
+def test_init_accepts_explicit_external_source(tmp_path: Path) -> None:
+    product = tmp_path / "product"
+    product.mkdir()
+    source = tmp_path / "custom-pml"
+
+    assert initialize_project(product, "product", "Product", source) is None
+    assert (source / "index.pml.yaml").is_file()
+
+
+def test_init_rejects_product_relative_source(tmp_path: Path) -> None:
     product = tmp_path / "product"
     product.mkdir()
 
-    assert initialize_project(product, "product", "Product", Path("policy")) is None
-    assert (product / "policy/index.pml.yaml").is_file()
+    error = initialize_project(product, "product", "Product", Path("policy"))
+
+    assert error == "--source must be outside the implementing product repository"
+    assert not (product / "policy").exists()
+    assert not (product / ".pml").exists()
 
 
 def test_init_rejects_every_destination_collision_without_writes(tmp_path: Path) -> None:
@@ -108,26 +121,55 @@ def test_init_rejects_overlapping_destinations(tmp_path: Path) -> None:
     assert not (product / ".pml").exists()
 
 
-def test_init_rolls_back_after_commit_failure(tmp_path: Path, monkeypatch) -> None:
+def test_init_rejects_destination_created_during_commit(tmp_path: Path, monkeypatch) -> None:
     product = tmp_path / "product"
     product.mkdir()
-    real_replace = initialize_module.os.replace
-    calls = 0
+    source = tmp_path / "product-pml"
+    original_reserve = initialize_module._reserve_directory
 
-    def fail_second_replace(source: Path, target: Path) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == 2:
-            raise OSError("simulated rename failure")
-        real_replace(source, target)
+    def reserve_with_concurrent_source(path: Path) -> int:
+        if path == source:
+            path.mkdir()
+            (path / "concurrent.txt").write_text("preserve", encoding="utf-8")
+        return original_reserve(path)
 
-    monkeypatch.setattr(initialize_module.os, "replace", fail_second_replace)
+    monkeypatch.setattr(
+        initialize_module, "_reserve_directory", reserve_with_concurrent_source
+    )
 
     error = initialize_project(product, "product", "Product")
 
-    assert error == "simulated rename failure"
-    assert not (tmp_path / "product-pml").exists()
+    assert error == f"destination already exists: {source}"
+    assert (source / "concurrent.txt").read_text(encoding="utf-8") == "preserve"
     assert not (product / ".pml").exists()
+
+
+def test_init_does_not_remove_destination_replaced_during_commit(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    product.mkdir()
+    source = tmp_path / "product-pml"
+    original_matches = initialize_module._matches_directory
+    replaced = False
+
+    def replace_source_before_check(path: Path, fd: int) -> bool:
+        nonlocal replaced
+        if path == source and not replaced:
+            replaced = True
+            shutil.rmtree(path)
+            path.mkdir()
+            (path / "concurrent.txt").write_text("preserve", encoding="utf-8")
+        return original_matches(path, fd)
+
+    monkeypatch.setattr(
+        initialize_module, "_matches_directory", replace_source_before_check
+    )
+
+    error = initialize_project(product, "product", "Product")
+
+    assert error == "destination changed during initialization"
+    assert (source / "concurrent.txt").read_text(encoding="utf-8") == "preserve"
 
 
 def test_init_cleans_staging_directory_after_source_write_failure(
