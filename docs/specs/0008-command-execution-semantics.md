@@ -22,15 +22,22 @@ The command creates:
 - source `bindings.yaml` containing `pml_bindings: "0.1"` and an empty `bindings`
   map;
 - source `probes/`; and
-- product-local `.pml/`.
+- product-local `.pml/`; and
+- the PML release's repository-scoped agent skill at
+  `.agents/skills/pml/` in the implementing product.
 
 The definition boilerplate is intentionally incomplete and MUST fail ordinary PML
 validation until its owner supplies product intent. Initialization MUST NOT invent
 placeholder intent merely to satisfy the definition schema. It creates no state,
 environment configuration, review metadata, or lock.
 
-Before writing, initialization checks that neither the selected source nor product
-`.pml/` exists. A collision rejects the operation without merging or overwriting.
+The installed skill is copied from the running PML release, so its guidance matches
+the CLI version that performed initialization. Initialization does not install or
+modify a user-global skill.
+
+Before writing, initialization checks that the selected source, product `.pml/`,
+and product `.agents/skills/pml/` do not exist. A collision rejects the operation
+without merging or overwriting.
 The command prepares temporary sibling paths and renames them into place only after
 all boilerplate is ready. A runtime failure triggers best-effort cleanup; PML does
 not claim transactional crash atomicity across filesystems.

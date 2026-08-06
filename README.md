@@ -34,6 +34,16 @@ python3 -m venv .venv
 .venv/bin/pml validate pml.yaml
 ```
 
+Initialize PML from an implementing product repository with:
+
+```bash
+pml init --id sample_product --name "Sample Product"
+```
+
+This creates the sibling PML source, product-local `.pml/`, and the
+repository-scoped PML agent skill at `.agents/skills/pml/`. The generated
+definition is intentionally incomplete until its owner authors product intent.
+
 `pml validate` accepts a single file or a directory. A directory is one modular
 definition with path-derived mounting: each `*.pml.yaml` file's relative path is its
 mount point in the document tree (`domains/billing/features/checkout.pml.yaml`
