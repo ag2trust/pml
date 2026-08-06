@@ -170,6 +170,54 @@ def test_init_does_not_remove_destination_replaced_during_commit(
 
     assert error == "destination changed during initialization"
     assert (source / "concurrent.txt").read_text(encoding="utf-8") == "preserve"
+    assert not (product / ".pml").exists()
+
+
+def test_init_cleans_owned_reservations_after_install_failure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    product.mkdir()
+
+    def fail_link(*args, **kwargs) -> None:
+        raise OSError("simulated install failure")
+
+    monkeypatch.setattr(initialize_module.os, "link", fail_link)
+
+    assert initialize_project(product, "product", "Product") == "simulated install failure"
+    assert not (tmp_path / "product-pml").exists()
+    assert not (product / ".pml").exists()
+
+    monkeypatch.undo()
+    assert initialize_project(product, "product", "Product") is None
+
+
+def test_init_does_not_remove_substituted_staging_directory(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    product.mkdir()
+    moved_staging = tmp_path / "moved-staging"
+    substitute: Path | None = None
+
+    def replace_staging_then_fail(path: Path, document: dict[str, object]) -> None:
+        nonlocal substitute
+        staging = path.parent
+        staging.rename(moved_staging)
+        staging.mkdir()
+        (staging / "concurrent.txt").write_text("preserve", encoding="utf-8")
+        substitute = staging
+        raise OSError("simulated source write failure")
+
+    monkeypatch.setattr(initialize_module, "_write_yaml", replace_staging_then_fail)
+
+    error = initialize_project(product, "product", "Product")
+
+    assert error == "simulated source write failure"
+    assert substitute is not None
+    assert (substitute / "concurrent.txt").read_text(encoding="utf-8") == "preserve"
+    assert not (tmp_path / "product-pml").exists()
+    assert not (product / ".pml").exists()
 
 
 def test_init_cleans_staging_directory_after_source_write_failure(
