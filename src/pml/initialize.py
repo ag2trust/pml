@@ -50,6 +50,7 @@ def initialize_project(
     committed: list[Path] = []
     try:
         staged_source = Path(tempfile.mkdtemp(prefix=".pml-init-", dir=source_path.parent))
+        staged.append((staged_source, source_path))
         (staged_source / "probes").mkdir()
         _write_yaml(
             staged_source / "index.pml.yaml",
@@ -59,8 +60,6 @@ def initialize_project(
             staged_source / "bindings.yaml",
             {"pml_bindings": "0.1", "bindings": {}},
         )
-        staged.append((staged_source, source_path))
-
         staged_state = Path(tempfile.mkdtemp(prefix=".pml-state-", dir=product_root))
         staged.append((staged_state, state_path))
 

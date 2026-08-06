@@ -128,3 +128,22 @@ def test_init_rolls_back_after_commit_failure(tmp_path: Path, monkeypatch) -> No
     assert error == "simulated rename failure"
     assert not (tmp_path / "product-pml").exists()
     assert not (product / ".pml").exists()
+
+
+def test_init_cleans_staging_directory_after_source_write_failure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    product.mkdir()
+
+    def fail_write(path: Path, document: dict[str, object]) -> None:
+        raise OSError("simulated source write failure")
+
+    monkeypatch.setattr(initialize_module, "_write_yaml", fail_write)
+
+    error = initialize_project(product, "product", "Product")
+
+    assert error == "simulated source write failure"
+    assert not (tmp_path / "product-pml").exists()
+    assert not (product / ".pml").exists()
+    assert list(tmp_path.glob(".pml-init-*")) == []
