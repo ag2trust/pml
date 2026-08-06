@@ -7,7 +7,7 @@ from pml.cli import main
 from pml.initialize import initialize_project
 
 
-def test_init_creates_source_state_and_repository_skill(
+def test_init_creates_only_source_and_product_state(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
     product = tmp_path / "mailroom"
@@ -28,8 +28,20 @@ def test_init_creates_source_state_and_repository_skill(
     }
     assert (source / "probes").is_dir()
     assert (product / ".pml").is_dir()
-    assert (product / ".agents/skills/pml/SKILL.md").is_file()
+    assert not (product / ".agents").exists()
     assert "PML INITIALIZED" in capsys.readouterr().out
+
+
+def test_init_does_not_modify_existing_agent_configuration(tmp_path: Path) -> None:
+    product = tmp_path / "product"
+    agent_file = product / ".agents" / "skills" / "existing" / "SKILL.md"
+    agent_file.parent.mkdir(parents=True)
+    agent_file.write_text("existing guidance", encoding="utf-8")
+
+    assert initialize_project(product, "product", "Product") is None
+
+    assert agent_file.read_text(encoding="utf-8") == "existing guidance"
+    assert not (product / ".agents" / "skills" / "pml").exists()
 
 
 def test_init_accepts_product_relative_source(tmp_path: Path) -> None:
@@ -44,7 +56,6 @@ def test_init_rejects_every_destination_collision_without_writes(tmp_path: Path)
     for label, relative_collision in (
         ("source", "../product-pml"),
         ("state", ".pml"),
-        ("skill", ".agents/skills/pml"),
     ):
         product = tmp_path / label / "product"
         product.mkdir(parents=True)
@@ -58,7 +69,6 @@ def test_init_rejects_every_destination_collision_without_writes(tmp_path: Path)
         targets = {
             (product.parent / "product-pml").resolve(),
             product / ".pml",
-            product / ".agents/skills/pml",
         }
         assert all(not path.exists() or path == collision for path in targets)
 
@@ -103,4 +113,3 @@ def test_init_rolls_back_after_commit_failure(tmp_path: Path, monkeypatch) -> No
     assert error == "simulated rename failure"
     assert not (tmp_path / "product-pml").exists()
     assert not (product / ".pml").exists()
-    assert not (product / ".agents").exists()

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from importlib.resources import files
 import os
 from pathlib import Path
 import re
@@ -21,7 +20,7 @@ def initialize_project(
     project_name: str,
     source: Path | None = None,
 ) -> str | None:
-    """Initialize source, product state, and the repository-scoped PML skill."""
+    """Initialize the owner-controlled source and product-local PML state."""
     product_root = product_root.resolve()
     if not PROJECT_ID.fullmatch(project_id):
         return "--id must match ^[a-z][a-z0-9_]*$"
@@ -34,8 +33,7 @@ def initialize_project(
         else (product_root / source if not source.is_absolute() else source)
     ).resolve()
     state_path = product_root / ".pml"
-    skill_path = product_root / ".agents" / "skills" / "pml"
-    targets = (source_path, state_path, skill_path)
+    targets = (source_path, state_path)
     if any(
         left == right or left in right.parents or right in left.parents
         for index, left in enumerate(targets)
@@ -48,7 +46,6 @@ def initialize_project(
 
     staged: list[tuple[Path, Path]] = []
     committed: list[Path] = []
-    created_parents: list[Path] = []
     try:
         staged_source = Path(tempfile.mkdtemp(prefix=".pml-init-", dir=source_path.parent))
         (staged_source / "probes").mkdir()
@@ -65,17 +62,6 @@ def initialize_project(
         staged_state = Path(tempfile.mkdtemp(prefix=".pml-state-", dir=product_root))
         staged.append((staged_state, state_path))
 
-        staged_skill = Path(tempfile.mkdtemp(prefix=".pml-skill-", dir=product_root))
-        shutil.rmtree(staged_skill)
-        staged.append((staged_skill, skill_path))
-        shutil.copytree(files("pml").joinpath("resources", "skills", "pml"), staged_skill)
-
-        skill_parent = skill_path.parent
-        for parent in (product_root / ".agents", skill_parent):
-            if not parent.exists():
-                parent.mkdir()
-                created_parents.append(parent)
-
         for temporary, target in staged:
             os.replace(temporary, target)
             committed.append(target)
@@ -87,11 +73,6 @@ def initialize_project(
     finally:
         for temporary, _ in staged:
             shutil.rmtree(temporary, ignore_errors=True)
-        for parent in reversed(created_parents):
-            try:
-                parent.rmdir()
-            except OSError:
-                pass
 
 
 def _write_yaml(path: Path, document: dict[str, object]) -> None:

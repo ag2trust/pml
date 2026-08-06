@@ -1,4 +1,0 @@
-interface:
-  display_name: "PML"
-  short_description: "Author and maintain valid PML definitions"
-  default_prompt: "Use $pml to define or update this product in PML."
