@@ -226,7 +226,7 @@ def test_init_does_not_remove_destination_replaced_during_initialization(
     assert not (product / ".agents").exists()
 
 
-def test_failure_cleanup_removes_only_owned_bounded_entries(
+def test_failure_cleanup_quarantines_only_owned_bounded_entries(
     tmp_path: Path, monkeypatch
 ) -> None:
     product = tmp_path / "product"
@@ -252,8 +252,9 @@ def test_failure_cleanup_removes_only_owned_bounded_entries(
     error = initialize_project(product, "product", "Product")
 
     assert error == "simulated install failure"
-    assert (source / "concurrent/nested/content/preserve.txt").read_text() == "preserve"
-    assert not (source / "index.pml.yaml").exists()
+    preserved = list(tmp_path.rglob("preserve.txt"))
+    assert [path.read_text() for path in preserved] == ["preserve"]
+    assert not source.exists()
     assert not (product / ".pml").exists()
     assert not (product / ".agents/skills/pml").exists()
 
@@ -278,7 +279,13 @@ def test_failure_cleanup_preserves_concurrently_replaced_owned_file(
     error = initialize_project(product, "product", "Product")
 
     assert error == "simulated install failure"
-    assert (source / "index.pml.yaml").read_text(encoding="utf-8") == "concurrent"
+    preserved = [
+        path
+        for path in tmp_path.rglob("index.pml.yaml")
+        if path.read_text(encoding="utf-8") == "concurrent"
+    ]
+    assert len(preserved) == 1
+    assert not source.exists()
     assert not (product / ".pml").exists()
     assert not (product / ".agents").exists()
 
@@ -305,7 +312,9 @@ def test_concurrent_content_causes_failure_and_is_not_traversed(
     error = initialize_project(product, "product", "Product")
 
     assert error == "destination changed during initialization"
-    assert (state / "concurrent/nested/preserve.txt").read_text() == "preserve"
+    preserved = list(product.rglob("preserve.txt"))
+    assert [path.read_text() for path in preserved] == ["preserve"]
+    assert not state.exists()
     assert not (tmp_path / "product-pml").exists()
     assert not (product / ".agents").exists()
 
@@ -395,14 +404,14 @@ def test_init_cleans_reservation_when_handle_open_fails(
     assert initialize_project(product, "product", "Product") is None
 
 
-def test_cleanup_preserves_file_replaced_after_detached_validation(
+def test_cleanup_preserves_file_replaced_after_recovery_detachment(
     tmp_path: Path, monkeypatch
 ) -> None:
     product = tmp_path / "product"
     product.mkdir()
     source = tmp_path / "product-pml"
     original_write = initialize_module._write_file
-    original_unlink = os.unlink
+    original_rename = os.rename
     replaced = False
 
     def fail_after_first_source_file(parent, name, content, owned_files):
@@ -410,49 +419,69 @@ def test_cleanup_preserves_file_replaced_after_detached_validation(
             raise OSError("simulated install failure")
         original_write(parent, name, content, owned_files)
 
-    def replace_file_before_detached_unlink(name, *, dir_fd=None):
+    def replace_detached_file(
+        source_name, destination_name, *, src_dir_fd=None, dst_dir_fd=None
+    ):
         nonlocal replaced
+        result = original_rename(
+            source_name,
+            destination_name,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+        )
         if (
-            isinstance(name, str)
-            and name.startswith(".pml-cleanup-")
+            source_name == "index.pml.yaml"
+            and destination_name.startswith(".pml-cleanup-")
             and not replaced
         ):
             replaced = True
+            original_rename(
+                destination_name,
+                f"{destination_name}.owned",
+                src_dir_fd=dst_dir_fd,
+                dst_dir_fd=dst_dir_fd,
+            )
             replacement_fd = os.open(
-                "index.pml.yaml",
+                destination_name,
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL,
                 0o600,
-                dir_fd=dir_fd,
+                dir_fd=dst_dir_fd,
             )
             try:
                 os.write(replacement_fd, b"concurrent")
             finally:
                 os.close(replacement_fd)
-        return original_unlink(name, dir_fd=dir_fd)
+        return result
 
     monkeypatch.setattr(
         initialize_module, "_write_file", fail_after_first_source_file
     )
     monkeypatch.setattr(
-        initialize_module.os, "unlink", replace_file_before_detached_unlink
+        initialize_module.os, "rename", replace_detached_file
     )
 
     assert (
         initialize_project(product, "product", "Product")
         == "simulated install failure"
     )
-    assert (source / "index.pml.yaml").read_text(encoding="utf-8") == "concurrent"
+    preserved = [
+        path
+        for path in tmp_path.rglob(".pml-cleanup-*")
+        if path.is_file() and path.read_bytes() == b"concurrent"
+    ]
+    assert len(preserved) == 1
+    assert not source.exists()
     assert not (product / ".pml").exists()
 
 
-def test_cleanup_preserves_directory_replaced_after_detached_validation(
+def test_cleanup_preserves_directory_replaced_after_recovery_detachment(
     tmp_path: Path, monkeypatch
 ) -> None:
     product = tmp_path / "product"
     product.mkdir()
     source = tmp_path / "product-pml"
     original_write = initialize_module._write_file
-    original_rmdir = os.rmdir
+    original_rename = os.rename
     replaced = False
 
     def fail_after_probes_creation(parent, name, content, owned_files):
@@ -460,31 +489,44 @@ def test_cleanup_preserves_directory_replaced_after_detached_validation(
             raise OSError("simulated install failure")
         original_write(parent, name, content, owned_files)
 
-    def replace_directory_before_detached_rmdir(name, *, dir_fd=None):
+    def replace_detached_directory(
+        source_name, destination_name, *, src_dir_fd=None, dst_dir_fd=None
+    ):
         nonlocal replaced
+        result = original_rename(
+            source_name,
+            destination_name,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+        )
         if (
-            isinstance(name, str)
-            and name.startswith(".pml-cleanup-")
-            and not (source / "probes").exists()
+            source_name == "probes"
+            and destination_name.startswith(".pml-cleanup-")
             and not replaced
         ):
             replaced = True
-            os.mkdir("probes", 0o700, dir_fd=dir_fd)
-            (source / "probes/concurrent.txt").write_text(
+            original_rename(
+                destination_name,
+                f"{destination_name}.owned",
+                src_dir_fd=dst_dir_fd,
+                dst_dir_fd=dst_dir_fd,
+            )
+            os.mkdir(destination_name, 0o700, dir_fd=dst_dir_fd)
+            (source / destination_name / "concurrent.txt").write_text(
                 "preserve", encoding="utf-8"
             )
-        return original_rmdir(name, dir_fd=dir_fd)
+        return result
 
     monkeypatch.setattr(initialize_module, "_write_file", fail_after_probes_creation)
     monkeypatch.setattr(
-        initialize_module.os, "rmdir", replace_directory_before_detached_rmdir
+        initialize_module.os, "rename", replace_detached_directory
     )
 
     assert (
         initialize_project(product, "product", "Product")
         == "simulated install failure"
     )
-    assert (
-        source / "probes/concurrent.txt"
-    ).read_text(encoding="utf-8") == "preserve"
+    preserved = list(tmp_path.rglob("concurrent.txt"))
+    assert [path.read_text(encoding="utf-8") for path in preserved] == ["preserve"]
+    assert not source.exists()
     assert not (product / ".pml").exists()

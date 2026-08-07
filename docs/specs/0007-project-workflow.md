@@ -90,10 +90,12 @@ Before writing, initialization rejects an existing source, `.pml/`, or PML skill
 destination without merging or overwriting. It reserves each destination
 exclusively and rejects symbolic agent-configuration path components. On failure,
 cleanup considers only the fixed set of entries created by that invocation and
-removes an entry only while its filesystem identity remains unchanged. Cleanup
-MUST NOT recursively enumerate a reservation or process concurrently added or
-replaced content. Concurrent content may therefore leave a failed reservation in
-place for its owner to inspect rather than being deleted.
+atomically detaches an entry only while its public name identifies the recorded
+filesystem object. Cleanup MUST NOT unlink or recursively enumerate detached
+content because portable filesystem operations cannot conditionally delete a name
+by inode identity. Detached recovery content remains under a
+`.pml-cleanup-*` name, while canonical destinations are freed for retry. A
+concurrent replacement detected before detachment remains at its public name.
 
 ## Validation and locking
 

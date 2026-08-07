@@ -39,9 +39,11 @@ install or modify a user-global skill.
 Before writing, initialization checks that the source, product `.pml/`, and product
 `.agents/skills/pml/` do not exist. A collision rejects the operation without
 merging or overwriting. Destinations are reserved exclusively. A runtime failure
-triggers bounded best-effort cleanup of unchanged entries created by the
-invocation; cleanup does not enumerate or remove concurrently added or replaced
-content. PML does not claim transactional crash atomicity across filesystems.
+triggers bounded best-effort quarantine of unchanged entries created by the
+invocation. Quarantine does not recursively enumerate or delete detached content;
+it retains recovery artifacts under `.pml-cleanup-*` names while freeing
+canonical destinations for retry. PML does not claim transactional crash atomicity
+across filesystems.
 
 ## Lock creation and source identity
 
