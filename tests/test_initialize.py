@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 import pytest
 import yaml
@@ -32,6 +33,49 @@ def test_init_creates_source_state_and_repository_skill(
     assert (product / ".agents/skills/pml/SKILL.md").is_file()
     assert (product / ".agents/skills/pml/agents/openai.yaml").is_file()
     assert "PML INITIALIZED" in capsys.readouterr().out
+
+
+def test_initialize_project_unmocked_success_path(tmp_path: Path) -> None:
+    product = tmp_path / "product"
+    product.mkdir()
+
+    assert initialize_project(product, "product", "Product") is None
+
+    assert (tmp_path / "product-pml/index.pml.yaml").is_file()
+    assert (tmp_path / "product-pml/probes").is_dir()
+    assert (product / ".pml").is_dir()
+    assert (product / ".agents/skills/pml/SKILL.md").is_file()
+
+
+def test_init_scan_may_close_only_its_owned_descriptor(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    product.mkdir()
+    original_scandir = os.scandir
+    original_close = os.close
+
+    def closing_scandir(path):
+        entries = original_scandir(path)
+        if not isinstance(path, int):
+            return entries
+
+        class ClosingScandir:
+            def __enter__(self):
+                return entries
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                entries.close()
+                original_close(path)
+
+        return ClosingScandir()
+
+    monkeypatch.setattr(initialize_module.os, "scandir", closing_scandir)
+
+    assert initialize_project(product, "product", "Product") is None
+    assert (tmp_path / "product-pml/index.pml.yaml").is_file()
+    assert (product / ".pml").is_dir()
+    assert (product / ".agents/skills/pml/SKILL.md").is_file()
 
 
 def test_init_preserves_existing_agent_configuration(tmp_path: Path) -> None:
