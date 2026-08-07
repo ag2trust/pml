@@ -40,8 +40,10 @@ Initialize PML from an implementing product repository with:
 pml init --id sample_product --name "Sample Product"
 ```
 
-This creates the sibling PML source and product-local `.pml/`. The generated
-definition is intentionally incomplete until its owner authors product intent.
+This creates the deterministic sibling PML source, product-local `.pml/`, and the
+repository-scoped PML agent skill at `.agents/skills/pml/`. The source location is
+not configurable. The generated definition is intentionally incomplete until its
+owner authors product intent.
 
 `pml validate` accepts a single file or a directory. A directory is one modular
 definition with path-derived mounting: each `*.pml.yaml` file's relative path is its

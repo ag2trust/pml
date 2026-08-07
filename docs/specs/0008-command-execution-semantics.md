@@ -12,9 +12,10 @@ underspecified statements in 0007.
 
 ## Initialization
 
-`pml init --id <id> --name <name> [--source <path>]` runs from the implementing
-product repository. The default source is the sibling `<product-directory>-pml`.
-The command creates:
+`pml init --id <id> --name <name>` runs from the implementing product repository.
+As approved in [0007](0007-project-workflow.md), its fixed source is the sibling
+`<product-directory>-pml`; this proposed specification does not introduce a source
+override. The command creates:
 
 - source `index.pml.yaml` containing fixed language version `0.1-draft`, the
   project ID, and project name, while deliberately omitting normative purpose and
@@ -22,18 +23,25 @@ The command creates:
 - source `bindings.yaml` containing `pml_bindings: "0.1"` and an empty `bindings`
   map;
 - source `probes/`; and
-- product-local `.pml/`.
+- product-local `.pml/`; and
+- the PML release's repository-scoped agent skill at
+  `.agents/skills/pml/` in the implementing product.
 
 The definition boilerplate is intentionally incomplete and MUST fail ordinary PML
 validation until its owner supplies product intent. Initialization MUST NOT invent
 placeholder intent merely to satisfy the definition schema. It creates no state,
 environment configuration, review metadata, or lock.
 
-Before writing, initialization checks that neither the selected source nor product
-`.pml/` exists. A collision rejects the operation without merging or overwriting.
-The command prepares temporary sibling paths and renames them into place only after
-all boilerplate is ready. A runtime failure triggers best-effort cleanup; PML does
-not claim transactional crash atomicity across filesystems.
+The installed skill is copied from the running PML release, so its guidance matches
+the CLI version that performed initialization. It is non-normative and does not
+install or modify a user-global skill.
+
+Before writing, initialization checks that the source, product `.pml/`, and product
+`.agents/skills/pml/` do not exist. A collision rejects the operation without
+merging or overwriting. Destinations are reserved exclusively. A runtime failure
+triggers bounded best-effort cleanup of unchanged entries created by the
+invocation; cleanup does not enumerate or remove concurrently added or replaced
+content. PML does not claim transactional crash atomicity across filesystems.
 
 ## Lock creation and source identity
 

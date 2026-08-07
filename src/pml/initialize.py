@@ -2,155 +2,300 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from importlib.resources import files
 import os
 from pathlib import Path
 import re
-import stat
-import tempfile
 
 import yaml
 
 
 PROJECT_ID = re.compile(r"^[a-z][a-z0-9_]*$")
+SKILL_FILES = (
+    ("SKILL.md",),
+    ("agents", "openai.yaml"),
+)
+
+
+@dataclass(frozen=True)
+class _Identity:
+    device: int
+    inode: int
+
+
+@dataclass
+class _Directory:
+    path: Path
+    fd: int
+    identity: _Identity
+    parent: _Directory | None = None
+    name: str | None = None
+
+
+@dataclass(frozen=True)
+class _OwnedFile:
+    parent: _Directory
+    name: str
+    identity: _Identity
 
 
 def initialize_project(
     product_root: Path,
     project_id: str,
     project_name: str,
-    source: Path | None = None,
 ) -> str | None:
-    """Initialize the owner-controlled source and product-local PML state."""
+    """Initialize the approved sibling source and product-local PML artifacts."""
     product_root = product_root.resolve()
     if not PROJECT_ID.fullmatch(project_id):
         return "--id must match ^[a-z][a-z0-9_]*$"
     if not project_name.strip():
         return "--name must not be empty"
 
-    source_path = (
-        (product_root.parent / f"{product_root.name}-pml")
-        if source is None
-        else (product_root / source if not source.is_absolute() else source)
-    )
+    source_path = product_root.parent / f"{product_root.name}-pml"
     state_path = product_root / ".pml"
-    targets = (source_path, state_path)
+    skill_path = product_root / ".agents" / "skills" / "pml"
+    targets = (source_path, state_path, skill_path)
     collisions = [str(path) for path in targets if path.exists() or path.is_symlink()]
     if collisions:
         return f"destination already exists: {collisions[0]}"
 
-    resolved_targets = tuple(path.resolve() for path in targets)
-    if any(
-        left == right or left in right.parents or right in left.parents
-        for index, left in enumerate(resolved_targets)
-        for right in resolved_targets[index + 1 :]
-    ):
-        return "initialization destinations must not overlap"
+    definition = yaml.safe_dump(
+        {"pml": "0.1-draft", "project": {"id": project_id, "name": project_name}},
+        sort_keys=False,
+    ).encode()
+    bindings = yaml.safe_dump(
+        {"pml_bindings": "0.1", "bindings": {}}, sort_keys=False
+    ).encode()
     try:
-        resolved_targets[0].relative_to(product_root)
-    except ValueError:
-        pass
-    else:
-        return "--source must be outside the implementing product repository"
+        skill_source = files("pml").joinpath("resources", "skills", "pml")
+        skill_content = {
+            path: skill_source.joinpath(*path).read_bytes() for path in SKILL_FILES
+        }
+    except (OSError, TypeError) as exc:
+        return f"could not load packaged PML skill: {exc}"
 
-    staged: list[tuple[Path, int]] = []
-    reserved: list[tuple[Path, int]] = []
+    handles: list[_Directory] = []
+    created: list[_Directory] = []
+    owned_files: list[_OwnedFile] = []
     initialized = False
     try:
-        staged_source = Path(tempfile.mkdtemp(prefix=".pml-init-", dir=source_path.parent))
-        staged_source_fd = _open_directory(staged_source)
-        staged.append((staged_source, staged_source_fd))
-        (staged_source / "probes").mkdir()
-        _write_yaml(
-            staged_source / "index.pml.yaml",
-            {"pml": "0.1-draft", "project": {"id": project_id, "name": project_name}},
-        )
-        _write_yaml(
-            staged_source / "bindings.yaml",
-            {"pml_bindings": "0.1", "bindings": {}},
-        )
-        source_fd = _reserve_directory(source_path)
-        reserved.append((source_path, source_fd))
-        state_fd = _reserve_directory(state_path)
-        reserved.append((state_path, state_fd))
+        product = _open_directory(product_root)
+        handles.append(product)
+        source_parent = _open_directory(source_path.parent)
+        handles.append(source_parent)
 
-        for name in ("index.pml.yaml", "bindings.yaml"):
-            os.link(
-                name,
-                name,
-                src_dir_fd=staged_source_fd,
-                dst_dir_fd=source_fd,
-                follow_symlinks=False,
-            )
-            os.unlink(name, dir_fd=staged_source_fd)
-        os.mkdir("probes", 0o700, dir_fd=source_fd)
-        os.rmdir("probes", dir_fd=staged_source_fd)
+        agents = _ensure_directory(product, ".agents", created, handles)
+        skills = _ensure_directory(agents, "skills", created, handles)
+
+        source = _reserve_directory(source_parent, source_path, created, handles)
+        state = _reserve_directory(product, state_path, created, handles)
+        skill = _reserve_directory(skills, skill_path, created, handles)
+
+        _write_file(source, "index.pml.yaml", definition, owned_files)
+        _write_file(source, "bindings.yaml", bindings, owned_files)
+        probes = _create_directory(source, "probes", created, handles)
+
+        _write_file(skill, "SKILL.md", skill_content[("SKILL.md",)], owned_files)
+        skill_agents = _create_directory(skill, "agents", created, handles)
+        _write_file(
+            skill_agents,
+            "openai.yaml",
+            skill_content[("agents", "openai.yaml")],
+            owned_files,
+        )
+
+        expected_layouts = (
+            (source, {"index.pml.yaml", "bindings.yaml", "probes"}),
+            (probes, set()),
+            (state, set()),
+            (skill, {"SKILL.md", "agents"}),
+            (skill_agents, {"openai.yaml"}),
+        )
         if not all(
-            _matches_directory(path, fd)
-            for path, fd in reserved
+            _has_exact_entries(directory, names)
+            for directory, names in expected_layouts
         ):
             return "destination changed during initialization"
+        if not all(_owned_file_is_attached(item) for item in owned_files):
+            return "destination changed during initialization"
+
         initialized = True
         return None
-    except FileExistsError as exc:
-        return f"destination already exists: {exc.filename}"
+    except _DestinationExists as exc:
+        return f"destination already exists: {exc.path}"
     except OSError as exc:
         return str(exc)
     finally:
         if not initialized:
-            for path, fd in reversed(reserved):
-                _discard_directory(path, fd)
-        for path, fd in staged:
-            _discard_directory(path, fd)
-        for _, fd in reserved:
-            os.close(fd)
-        for _, fd in staged:
-            os.close(fd)
+            for item in reversed(owned_files):
+                _discard_file(item)
+            for directory in reversed(created):
+                _discard_directory(directory)
+        for directory in reversed(handles):
+            os.close(directory.fd)
 
 
-def _write_yaml(path: Path, document: dict[str, object]) -> None:
-    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+class _DestinationExists(Exception):
+    def __init__(self, path: Path):
+        self.path = path
 
 
-def _reserve_directory(path: Path) -> int:
-    os.mkdir(path, 0o700)
-    return _open_directory(path)
+def _identity(metadata: os.stat_result) -> _Identity:
+    return _Identity(metadata.st_dev, metadata.st_ino)
 
 
-def _open_directory(path: Path) -> int:
-    return os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+def _open_directory(path: Path) -> _Directory:
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    return _Directory(path, fd, _identity(os.fstat(fd)))
 
 
-def _matches_directory(path: Path, fd: int) -> bool:
+def _open_child_directory(parent: _Directory, name: str) -> _Directory:
+    fd = os.open(
+        name,
+        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+        dir_fd=parent.fd,
+    )
+    return _Directory(
+        parent.path / name,
+        fd,
+        _identity(os.fstat(fd)),
+        parent,
+        name,
+    )
+
+
+def _ensure_directory(
+    parent: _Directory,
+    name: str,
+    created: list[_Directory],
+    handles: list[_Directory],
+) -> _Directory:
     try:
-        metadata = path.stat(follow_symlinks=False)
+        directory = _open_child_directory(parent, name)
+    except FileNotFoundError:
+        try:
+            os.mkdir(name, 0o700, dir_fd=parent.fd)
+        except FileExistsError:
+            directory = _open_child_directory(parent, name)
+        else:
+            directory = _open_child_directory(parent, name)
+            created.append(directory)
+    handles.append(directory)
+    return directory
+
+
+def _reserve_directory(
+    parent: _Directory,
+    path: Path,
+    created: list[_Directory],
+    handles: list[_Directory],
+) -> _Directory:
+    try:
+        directory = _create_directory(parent, path.name, created, handles)
+    except FileExistsError as exc:
+        raise _DestinationExists(path) from exc
+    return directory
+
+
+def _create_directory(
+    parent: _Directory,
+    name: str,
+    created: list[_Directory],
+    handles: list[_Directory],
+) -> _Directory:
+    os.mkdir(name, 0o700, dir_fd=parent.fd)
+    directory = _open_child_directory(parent, name)
+    created.append(directory)
+    handles.append(directory)
+    return directory
+
+
+def _write_file(
+    parent: _Directory,
+    name: str,
+    content: bytes,
+    owned_files: list[_OwnedFile],
+) -> None:
+    fd = os.open(
+        name,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        0o600,
+        dir_fd=parent.fd,
+    )
+    owned_files.append(_OwnedFile(parent, name, _identity(os.fstat(fd))))
+    try:
+        output = os.fdopen(fd, "wb")
+    except BaseException:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        raise
+    with output:
+        output.write(content)
+
+
+def _directory_is_attached(directory: _Directory) -> bool:
+    if directory.parent is None:
+        try:
+            return (
+                _identity(directory.path.stat(follow_symlinks=False))
+                == directory.identity
+            )
+        except OSError:
+            return False
+    if not _directory_is_attached(directory.parent):
+        return False
+    try:
+        metadata = os.stat(
+            directory.name,
+            dir_fd=directory.parent.fd,
+            follow_symlinks=False,
+        )
     except OSError:
         return False
-    expected = os.fstat(fd)
-    return metadata.st_dev == expected.st_dev and metadata.st_ino == expected.st_ino
+    return _identity(metadata) == directory.identity
 
 
-def _discard_directory(path: Path, fd: int) -> None:
-    """Empty a pinned directory without traversing its mutable pathname."""
-
+def _owned_file_is_attached(item: _OwnedFile) -> bool:
+    if not _directory_is_attached(item.parent):
+        return False
     try:
-        _clear_directory(fd)
-        if _matches_directory(path, fd):
-            os.rmdir(path)
+        metadata = os.stat(item.name, dir_fd=item.parent.fd, follow_symlinks=False)
+    except OSError:
+        return False
+    return _identity(metadata) == item.identity
+
+
+def _has_exact_entries(directory: _Directory, expected: set[str]) -> bool:
+    """Check a fixed layout without materializing or traversing arbitrary content."""
+    if not _directory_is_attached(directory):
+        return False
+    remaining = set(expected)
+    with os.scandir(directory.fd) as entries:
+        for count, entry in enumerate(entries, start=1):
+            if count > len(expected) or entry.name not in remaining:
+                return False
+            remaining.remove(entry.name)
+    return not remaining
+
+
+def _discard_file(item: _OwnedFile) -> None:
+    """Remove only the exact file created by this invocation."""
+    if not _owned_file_is_attached(item):
+        return
+    try:
+        os.unlink(item.name, dir_fd=item.parent.fd)
     except OSError:
         pass
 
 
-def _clear_directory(fd: int) -> None:
-    for name in os.listdir(fd):
-        metadata = os.stat(name, dir_fd=fd, follow_symlinks=False)
-        if stat.S_ISDIR(metadata.st_mode):
-            child_fd = os.open(
-                name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd
-            )
-            try:
-                _clear_directory(child_fd)
-            finally:
-                os.close(child_fd)
-            os.rmdir(name, dir_fd=fd)
-        else:
-            os.unlink(name, dir_fd=fd)
+def _discard_directory(directory: _Directory) -> None:
+    """Remove an unchanged owned directory only when it is already empty."""
+    if directory.parent is None or not _directory_is_attached(directory):
+        return
+    try:
+        os.rmdir(directory.name, dir_fd=directory.parent.fd)
+    except OSError:
+        pass

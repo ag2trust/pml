@@ -32,7 +32,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     init_parser = subparsers.add_parser("init", help="initialize PML for a product repository")
     init_parser.add_argument("--id", required=True, dest="project_id")
     init_parser.add_argument("--name", required=True, dest="project_name")
-    init_parser.add_argument("--source", type=Path)
     validate_parser = subparsers.add_parser("validate", help="validate a PML definition")
     validate_parser.add_argument("path", type=Path)
     obligations_parser = subparsers.add_parser(
@@ -65,9 +64,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "init":
-        error = initialize_project(
-            Path.cwd(), args.project_id, args.project_name, args.source
-        )
+        error = initialize_project(Path.cwd(), args.project_id, args.project_name)
         if error is not None:
             print(f"PML NOT INITIALIZED: {error}")
             return 1
