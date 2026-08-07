@@ -47,35 +47,20 @@ def test_initialize_project_unmocked_success_path(tmp_path: Path) -> None:
     assert (product / ".agents/skills/pml/SKILL.md").is_file()
 
 
-def test_init_scan_may_close_only_its_owned_descriptor(
-    tmp_path: Path, monkeypatch
-) -> None:
-    product = tmp_path / "product"
-    product.mkdir()
-    original_scandir = os.scandir
-    original_close = os.close
+def test_repeated_init_does_not_leak_layout_scan_descriptors(tmp_path: Path) -> None:
+    descriptor_directory = Path("/dev/fd")
+    if not descriptor_directory.is_dir():
+        descriptor_directory = Path("/proc/self/fd")
+    if not descriptor_directory.is_dir():
+        pytest.skip("platform does not expose process file descriptors")
+    descriptors_before = len(os.listdir(descriptor_directory))
 
-    def closing_scandir(path):
-        entries = original_scandir(path)
-        if not isinstance(path, int):
-            return entries
+    for index in range(10):
+        product = tmp_path / f"case_{index}" / "product"
+        product.mkdir(parents=True)
+        assert initialize_project(product, "product", "Product") is None
 
-        class ClosingScandir:
-            def __enter__(self):
-                return entries
-
-            def __exit__(self, exc_type, exc_value, traceback):
-                entries.close()
-                original_close(path)
-
-        return ClosingScandir()
-
-    monkeypatch.setattr(initialize_module.os, "scandir", closing_scandir)
-
-    assert initialize_project(product, "product", "Product") is None
-    assert (tmp_path / "product-pml/index.pml.yaml").is_file()
-    assert (product / ".pml").is_dir()
-    assert (product / ".agents/skills/pml/SKILL.md").is_file()
+    assert len(os.listdir(descriptor_directory)) == descriptors_before
 
 
 def test_init_preserves_existing_agent_configuration(tmp_path: Path) -> None:

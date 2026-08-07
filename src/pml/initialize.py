@@ -273,23 +273,16 @@ def _has_exact_entries(directory: _Directory, expected: set[str]) -> bool:
     if not _directory_is_attached(directory):
         return False
     remaining = set(expected)
-    with _scandir_with_owned_descriptor(directory.fd) as entries:
-        for count, entry in enumerate(entries, start=1):
-            if count > len(expected) or entry.name not in remaining:
-                return False
-            remaining.remove(entry.name)
-    return not remaining
-
-
-def _scandir_with_owned_descriptor(directory_fd: int):
-    """Start a directory scan that owns a duplicate of ``directory_fd``."""
-
-    scan_fd = os.dup(directory_fd)
+    scan_fd = os.dup(directory.fd)
     try:
-        return os.scandir(scan_fd)
-    except BaseException:
+        with os.scandir(scan_fd) as entries:
+            for count, entry in enumerate(entries, start=1):
+                if count > len(expected) or entry.name not in remaining:
+                    return False
+                remaining.remove(entry.name)
+        return not remaining
+    finally:
         os.close(scan_fd)
-        raise
 
 
 def _discard_file(item: _OwnedFile) -> None:
