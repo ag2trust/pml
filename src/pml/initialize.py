@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import errno
 from importlib.resources import files
 import os
 from pathlib import Path
@@ -239,11 +240,18 @@ def _has_exact_entries(directory: _Directory, expected: set[str]) -> bool:
     remaining = set(expected)
     scan_fd = os.dup(directory.fd)
     try:
-        entries = os.listdir(scan_fd)
+        with os.scandir(scan_fd) as entries:
+            for count, entry in enumerate(entries, start=1):
+                if count > len(expected) or entry.name not in remaining:
+                    return False
+                remaining.remove(entry.name)
     finally:
-        os.close(scan_fd)
-    for count, name in enumerate(entries, start=1):
-        if count > len(expected) or name not in remaining:
-            return False
-        remaining.remove(name)
+        # CPython's scandir ownership of a supplied descriptor varies by
+        # platform. Close it when scandir leaves it open; otherwise its close
+        # has already consumed it.
+        try:
+            os.close(scan_fd)
+        except OSError as exc:
+            if exc.errno != errno.EBADF:
+                raise
     return not remaining

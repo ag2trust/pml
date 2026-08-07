@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -198,3 +199,26 @@ def test_repeated_init_does_not_leak_descriptors(tmp_path: Path) -> None:
         assert initialize_project(product, "product", "Product") is None
 
     assert len(os.listdir(descriptor_directory)) == descriptors_before
+
+
+def test_layout_scan_stops_after_first_unexpected_entry(tmp_path: Path, monkeypatch) -> None:
+    directory_path = tmp_path / "directory"
+    directory_path.mkdir()
+    directory = initialize_module._open_directory(directory_path)
+
+    class Entries:
+        def __iter__(self):
+            yield SimpleNamespace(name="unexpected")
+            raise AssertionError("layout scan read beyond the first unexpected entry")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(initialize_module.os, "scandir", lambda _: Entries())
+    try:
+        assert not initialize_module._has_exact_entries(directory, set())
+    finally:
+        os.close(directory.fd)
