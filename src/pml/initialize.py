@@ -40,6 +40,13 @@ class _OwnedFile:
     identity: _Identity
 
 
+@dataclass(frozen=True)
+class _OwnedDirectory:
+    parent: _Directory
+    name: str
+    identity: _Identity
+
+
 def initialize_project(
     product_root: Path,
     project_id: str,
@@ -76,7 +83,7 @@ def initialize_project(
         return f"could not load packaged PML skill: {exc}"
 
     handles: list[_Directory] = []
-    created: list[_Directory] = []
+    created: list[_OwnedDirectory] = []
     owned_files: list[_OwnedFile] = []
     initialized = False
     try:
@@ -168,7 +175,7 @@ def _open_child_directory(parent: _Directory, name: str) -> _Directory:
 def _ensure_directory(
     parent: _Directory,
     name: str,
-    created: list[_Directory],
+    created: list[_OwnedDirectory],
     handles: list[_Directory],
 ) -> _Directory:
     try:
@@ -179,8 +186,7 @@ def _ensure_directory(
         except FileExistsError:
             directory = _open_child_directory(parent, name)
         else:
-            directory = _open_child_directory(parent, name)
-            created.append(directory)
+            return _open_created_directory(parent, name, created, handles)
     handles.append(directory)
     return directory
 
@@ -188,7 +194,7 @@ def _ensure_directory(
 def _reserve_directory(
     parent: _Directory,
     path: Path,
-    created: list[_Directory],
+    created: list[_OwnedDirectory],
     handles: list[_Directory],
 ) -> _Directory:
     try:
@@ -201,12 +207,26 @@ def _reserve_directory(
 def _create_directory(
     parent: _Directory,
     name: str,
-    created: list[_Directory],
+    created: list[_OwnedDirectory],
     handles: list[_Directory],
 ) -> _Directory:
     os.mkdir(name, 0o700, dir_fd=parent.fd)
+    return _open_created_directory(parent, name, created, handles)
+
+
+def _open_created_directory(
+    parent: _Directory,
+    name: str,
+    created: list[_OwnedDirectory],
+    handles: list[_Directory],
+) -> _Directory:
+    metadata = os.stat(name, dir_fd=parent.fd, follow_symlinks=False)
+    owned = _OwnedDirectory(parent, name, _identity(metadata))
+    created.append(owned)
     directory = _open_child_directory(parent, name)
-    created.append(directory)
+    if directory.identity != owned.identity:
+        os.close(directory.fd)
+        raise OSError("created directory changed during initialization")
     handles.append(directory)
     return directory
 
@@ -295,9 +315,19 @@ def _discard_file(item: _OwnedFile) -> None:
         pass
 
 
-def _discard_directory(directory: _Directory) -> None:
+def _discard_directory(directory: _OwnedDirectory) -> None:
     """Remove an unchanged owned directory only when it is already empty."""
-    if directory.parent is None or not _directory_is_attached(directory):
+    if not _directory_is_attached(directory.parent):
+        return
+    try:
+        metadata = os.stat(
+            directory.name,
+            dir_fd=directory.parent.fd,
+            follow_symlinks=False,
+        )
+    except OSError:
+        return
+    if _identity(metadata) != directory.identity:
         return
     try:
         os.rmdir(directory.name, dir_fd=directory.parent.fd)

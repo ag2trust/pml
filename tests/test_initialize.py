@@ -1,4 +1,5 @@
 from pathlib import Path
+import errno
 import os
 
 import pytest
@@ -330,6 +331,65 @@ def test_init_cleans_owned_artifacts_after_write_failure(
     assert not (tmp_path / "product-pml").exists()
     assert not (product / ".pml").exists()
     assert not (product / ".agents").exists()
+
+    monkeypatch.undo()
+    assert initialize_project(product, "product", "Product") is None
+
+
+def test_init_cleans_new_agent_parent_when_handle_open_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    product.mkdir()
+    original_open = initialize_module._open_child_directory
+    agent_open_calls = 0
+
+    def fail_open_after_agent_mkdir(parent, name):
+        nonlocal agent_open_calls
+        if name == ".agents":
+            agent_open_calls += 1
+            if agent_open_calls == 2:
+                raise OSError(errno.EMFILE, "simulated handle exhaustion")
+        return original_open(parent, name)
+
+    monkeypatch.setattr(
+        initialize_module, "_open_child_directory", fail_open_after_agent_mkdir
+    )
+
+    error = initialize_project(product, "product", "Product")
+
+    assert "simulated handle exhaustion" in error
+    assert not (product / ".agents").exists()
+    assert not (tmp_path / "product-pml").exists()
+    assert not (product / ".pml").exists()
+
+    monkeypatch.undo()
+    assert initialize_project(product, "product", "Product") is None
+
+
+def test_init_cleans_reservation_when_handle_open_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    (product / ".agents/skills").mkdir(parents=True)
+    source = tmp_path / "product-pml"
+    original_open = initialize_module._open_child_directory
+
+    def fail_source_open(parent, name):
+        if name == source.name:
+            raise OSError(errno.EMFILE, "simulated handle exhaustion")
+        return original_open(parent, name)
+
+    monkeypatch.setattr(
+        initialize_module, "_open_child_directory", fail_source_open
+    )
+
+    error = initialize_project(product, "product", "Product")
+
+    assert "simulated handle exhaustion" in error
+    assert not source.exists()
+    assert not (product / ".pml").exists()
+    assert not (product / ".agents/skills/pml").exists()
 
     monkeypatch.undo()
     assert initialize_project(product, "product", "Product") is None
