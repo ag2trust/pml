@@ -7,7 +7,6 @@ from importlib.resources import files
 import os
 from pathlib import Path
 import re
-import secrets
 
 import yaml
 
@@ -34,20 +33,6 @@ class _Directory:
     name: str | None = None
 
 
-@dataclass(frozen=True)
-class _OwnedFile:
-    parent: _Directory
-    name: str
-    identity: _Identity
-
-
-@dataclass(frozen=True)
-class _OwnedDirectory:
-    parent: _Directory
-    name: str
-    identity: _Identity
-
-
 def initialize_project(
     product_root: Path,
     project_id: str,
@@ -63,10 +48,9 @@ def initialize_project(
     source_path = product_root.parent / f"{product_root.name}-pml"
     state_path = product_root / ".pml"
     skill_path = product_root / ".agents" / "skills" / "pml"
-    targets = (source_path, state_path, skill_path)
-    collisions = [str(path) for path in targets if path.exists() or path.is_symlink()]
-    if collisions:
-        return f"destination already exists: {collisions[0]}"
+    for path in (source_path, state_path, skill_path):
+        if path.exists() or path.is_symlink():
+            return f"destination already exists: {path}"
 
     definition = yaml.safe_dump(
         {"pml": "0.1-draft", "project": {"id": project_id, "name": project_name}},
@@ -84,33 +68,27 @@ def initialize_project(
         return f"could not load packaged PML skill: {exc}"
 
     handles: list[_Directory] = []
-    created: list[_OwnedDirectory] = []
-    owned_files: list[_OwnedFile] = []
-    initialized = False
     try:
         product = _open_directory(product_root)
         handles.append(product)
         source_parent = _open_directory(source_path.parent)
         handles.append(source_parent)
 
-        agents = _ensure_directory(product, ".agents", created, handles)
-        skills = _ensure_directory(agents, "skills", created, handles)
+        agents = _ensure_directory(product, ".agents", handles)
+        skills = _ensure_directory(agents, "skills", handles)
+        source = _reserve_directory(source_parent, source_path, handles)
+        state = _reserve_directory(product, state_path, handles)
+        skill = _reserve_directory(skills, skill_path, handles)
 
-        source = _reserve_directory(source_parent, source_path, created, handles)
-        state = _reserve_directory(product, state_path, created, handles)
-        skill = _reserve_directory(skills, skill_path, created, handles)
-
-        _write_file(source, "index.pml.yaml", definition, owned_files)
-        _write_file(source, "bindings.yaml", bindings, owned_files)
-        probes = _create_directory(source, "probes", created, handles)
-
-        _write_file(skill, "SKILL.md", skill_content[("SKILL.md",)], owned_files)
-        skill_agents = _create_directory(skill, "agents", created, handles)
+        _write_file(source, "index.pml.yaml", definition)
+        _write_file(source, "bindings.yaml", bindings)
+        probes = _create_directory(source, "probes", handles)
+        _write_file(skill, "SKILL.md", skill_content[("SKILL.md",)])
+        skill_agents = _create_directory(skill, "agents", handles)
         _write_file(
             skill_agents,
             "openai.yaml",
             skill_content[("agents", "openai.yaml")],
-            owned_files,
         )
 
         expected_layouts = (
@@ -125,21 +103,12 @@ def initialize_project(
             for directory, names in expected_layouts
         ):
             return "destination changed during initialization"
-        if not all(_owned_file_is_attached(item) for item in owned_files):
-            return "destination changed during initialization"
-
-        initialized = True
         return None
     except _DestinationExists as exc:
         return f"destination already exists: {exc.path}"
     except OSError as exc:
-        return str(exc)
+        return f"{exc}; partial initialization artifacts may remain"
     finally:
-        if not initialized:
-            for item in reversed(owned_files):
-                _quarantine_file(item)
-            for directory in reversed(created):
-                _quarantine_directory(directory)
         for directory in reversed(handles):
             os.close(directory.fd)
 
@@ -176,7 +145,6 @@ def _open_child_directory(parent: _Directory, name: str) -> _Directory:
 def _ensure_directory(
     parent: _Directory,
     name: str,
-    created: list[_OwnedDirectory],
     handles: list[_Directory],
 ) -> _Directory:
     try:
@@ -187,7 +155,7 @@ def _ensure_directory(
         except FileExistsError:
             directory = _open_child_directory(parent, name)
         else:
-            return _open_created_directory(parent, name, created, handles)
+            directory = _open_created_directory(parent, name)
     handles.append(directory)
     return directory
 
@@ -195,63 +163,48 @@ def _ensure_directory(
 def _reserve_directory(
     parent: _Directory,
     path: Path,
-    created: list[_OwnedDirectory],
     handles: list[_Directory],
 ) -> _Directory:
     try:
-        directory = _create_directory(parent, path.name, created, handles)
+        return _create_directory(parent, path.name, handles)
     except FileExistsError as exc:
         raise _DestinationExists(path) from exc
-    return directory
 
 
 def _create_directory(
     parent: _Directory,
     name: str,
-    created: list[_OwnedDirectory],
     handles: list[_Directory],
 ) -> _Directory:
     os.mkdir(name, 0o700, dir_fd=parent.fd)
-    return _open_created_directory(parent, name, created, handles)
-
-
-def _open_created_directory(
-    parent: _Directory,
-    name: str,
-    created: list[_OwnedDirectory],
-    handles: list[_Directory],
-) -> _Directory:
-    metadata = os.stat(name, dir_fd=parent.fd, follow_symlinks=False)
-    owned = _OwnedDirectory(parent, name, _identity(metadata))
-    created.append(owned)
-    directory = _open_child_directory(parent, name)
-    if directory.identity != owned.identity:
-        os.close(directory.fd)
-        raise OSError("created directory changed during initialization")
+    directory = _open_created_directory(parent, name)
     handles.append(directory)
     return directory
 
 
-def _write_file(
-    parent: _Directory,
-    name: str,
-    content: bytes,
-    owned_files: list[_OwnedFile],
-) -> None:
+def _open_created_directory(parent: _Directory, name: str) -> _Directory:
+    """Open a new directory and reject replacement between creation and open."""
+    created_identity = _identity(
+        os.stat(name, dir_fd=parent.fd, follow_symlinks=False)
+    )
+    directory = _open_child_directory(parent, name)
+    if directory.identity != created_identity:
+        os.close(directory.fd)
+        raise OSError("created directory changed during initialization")
+    return directory
+
+
+def _write_file(parent: _Directory, name: str, content: bytes) -> None:
     fd = os.open(
         name,
         os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
         0o600,
         dir_fd=parent.fd,
     )
-    owned_files.append(_OwnedFile(parent, name, _identity(os.fstat(fd))))
     try:
         output = os.fdopen(fd, "wb")
     except BaseException:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
+        os.close(fd)
         raise
     with output:
         output.write(content)
@@ -279,18 +232,8 @@ def _directory_is_attached(directory: _Directory) -> bool:
     return _identity(metadata) == directory.identity
 
 
-def _owned_file_is_attached(item: _OwnedFile) -> bool:
-    if not _directory_is_attached(item.parent):
-        return False
-    try:
-        metadata = os.stat(item.name, dir_fd=item.parent.fd, follow_symlinks=False)
-    except OSError:
-        return False
-    return _identity(metadata) == item.identity
-
-
 def _has_exact_entries(directory: _Directory, expected: set[str]) -> bool:
-    """Check a fixed layout without materializing or traversing arbitrary content."""
+    """Check a fixed layout without traversing arbitrary content."""
     if not _directory_is_attached(directory):
         return False
     remaining = set(expected)
@@ -304,55 +247,3 @@ def _has_exact_entries(directory: _Directory, expected: set[str]) -> bool:
         return not remaining
     finally:
         os.close(scan_fd)
-
-
-def _quarantine_file(item: _OwnedFile) -> None:
-    """Detach an unchanged owned file without deleting quarantined content."""
-    if _owned_file_is_attached(item):
-        _detach_entry(item.parent, item.name)
-
-
-def _detach_entry(parent: _Directory, name: str) -> str | None:
-    """Move an entry to an unpredictable recovery name without deleting it."""
-    for _ in range(16):
-        detached = f".pml-cleanup-{secrets.token_hex(16)}"
-        try:
-            os.stat(detached, dir_fd=parent.fd, follow_symlinks=False)
-        except FileNotFoundError:
-            pass
-        except OSError:
-            return None
-        else:
-            continue
-        try:
-            os.rename(
-                name,
-                detached,
-                src_dir_fd=parent.fd,
-                dst_dir_fd=parent.fd,
-            )
-        except OSError:
-            return None
-        return detached
-    return None
-
-
-def _owned_directory_is_attached(directory: _OwnedDirectory) -> bool:
-    """Return whether the public name still identifies the owned directory."""
-    if not _directory_is_attached(directory.parent):
-        return False
-    try:
-        metadata = os.stat(
-            directory.name,
-            dir_fd=directory.parent.fd,
-            follow_symlinks=False,
-        )
-    except OSError:
-        return False
-    return _identity(metadata) == directory.identity
-
-
-def _quarantine_directory(directory: _OwnedDirectory) -> None:
-    """Detach an unchanged owned directory without deleting quarantined content."""
-    if _owned_directory_is_attached(directory):
-        _detach_entry(directory.parent, directory.name)

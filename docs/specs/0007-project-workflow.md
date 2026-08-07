@@ -87,15 +87,11 @@ the authored definition, bindings, and probes after initialization. Generated
 boilerplate remains unpinned until it validates and `pml lock` is run.
 
 Before writing, initialization rejects an existing source, `.pml/`, or PML skill
-destination without merging or overwriting. It reserves each destination
-exclusively and rejects symbolic agent-configuration path components. On failure,
-cleanup considers only the fixed set of entries created by that invocation and
-atomically detaches an entry only while its public name identifies the recorded
-filesystem object. Cleanup MUST NOT unlink or recursively enumerate detached
-content because portable filesystem operations cannot conditionally delete a name
-by inode identity. Detached recovery content remains under a
-`.pml-cleanup-*` name, while canonical destinations are freed for retry. A
-concurrent replacement detected before detachment remains at its public name.
+destination without merging or overwriting. It creates each destination
+exclusively and rejects symbolic agent-configuration path components. If
+initialization fails after creating artifacts, it reports failure and may leave
+incomplete artifacts at their canonical destinations for inspection and manual
+removal before retry.
 
 ## Validation and locking
 
