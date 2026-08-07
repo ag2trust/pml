@@ -25,7 +25,8 @@ behavior = {
   trigger: trigger,
   outcome: outcome,
   failures?: failure-map,
-  rules?: rule-map
+  rules?: rule-map,
+  related_to?: unique non-empty list[feature-or-behavior-id]
 }
 ```
 
@@ -124,9 +125,38 @@ failures:
 This structure makes the successful result explicit without an `expected`
 marker, boolean, or universal failure taxonomy.
 
+### Transition obligations
+
+Transition fields are normative by their authored position and resolve into
+stable obligations without repeating their statements as rules:
+
+- optional conditions resolve together at
+  `<fully-qualified-behavior-id>.conditions`; this obligation verifies that all
+  authored conditions gate applicability;
+- a direct trigger resolves at `<fully-qualified-behavior-id>.trigger`;
+- each `trigger.one_of` alternative resolves at
+  `<fully-qualified-behavior-id>.trigger.<alternative-id>`; the parent trigger
+  has no exclusivity obligation because different trigger occurrences may each
+  initiate an evaluation;
+- every behavior resolves one completion-exclusivity obligation at
+  `<fully-qualified-behavior-id>.completion`, verifying that each initiated
+  evaluation completes exactly one outcome or authored failure;
+- a direct outcome resolves at `<fully-qualified-behavior-id>.outcome`;
+- `outcome.one_of` resolves successful-alternative exclusivity at
+  `<fully-qualified-behavior-id>.outcome` and each alternative at
+  `<fully-qualified-behavior-id>.outcome.<alternative-id>`; and
+- each failure resolves at
+  `<fully-qualified-behavior-id>.failures.<failure-id>`.
+
+A signal is a required effect of the outcome or failure that defines it and is
+verified as part of that completion obligation; it does not create a separate
+obligation. Existing rule obligation paths remain unchanged.
+
 ### Signals
 
-A signal is defined inline by exactly one producing outcome or failure. Its closed
+Every direct outcome, outcome alternative, or failure contains either no `signal`
+field or one inline `signal` definition. A signal is therefore optional; PML does
+not require every completion or behavior to produce one. When present, its closed
 definition contains `id`, optional `subject`, and `meaning`. The separate product
 signal registry and current plural `emits` lists would be removed.
 
@@ -142,10 +172,10 @@ occurrence preserves the identity of one subject instance between its producer
 and consumers. Global signals omit `subject`. This product-level correlation does
 not prescribe a payload, identifier representation, message, or transport.
 
-One completed outcome or failure defines at most one signal. A signal has exactly
-one authoritative producing outcome or failure and may trigger multiple consuming
-behaviors. Alternative causes of one signal belong in the producing behavior's
-`trigger.one_of` rather than in multiple producers.
+An inline signal definition is the authoritative producer for its globally unique
+signal ID. Signal references resolve to that definition, and the signal may trigger
+multiple consuming behaviors. This producer rule applies only when a signal is
+authored; it does not require a signal to exist.
 
 Completing an outcome or failure containing a signal creates exactly one occurrence
 of that signal for its subject. Each consuming behavior is considered once for
@@ -171,11 +201,17 @@ behaviors.
 
 ### Relationships and architecture
 
-`related_to` and `architecture` would not be valid behavior fields. Both remain
-feature-level concerns:
+`related_to` remains a valid optional behavior field. It preserves the approved
+untyped, symmetric relationship semantics and may reference features or other
+behaviors using their fully qualified semantic paths. It expresses broader product
+association and change impact; it does not imply causality or execution order.
+
+`architecture` would not be a valid behavior field and remains a feature-level
+concern:
 
 - signals express precise directed causal relationships among behaviors;
-- feature-level `related_to` expresses broader symmetric product relationships;
+- feature- and behavior-level `related_to` express broader symmetric product
+  relationships; and
 - feature-level `architecture` associates approved technical constraints with a
   capability without attaching them to individual transitions.
 
@@ -259,6 +295,31 @@ would duplicate conditions and outcomes. No general workflow or ordering constru
 is planned; signal-to-trigger relationships already express required causal order.
 Time and quantity requirements remain precise authored statements or rules unless
 real product definitions demonstrate a need for structured scalar types.
+
+## Migration guidance
+
+Migration may be performed with agent assistance and adapted to each approved
+definition, but it is never an automatic reinterpretation of owner intent. An
+agent may propose rewritten behaviors, reference mappings, bindings, and probes;
+the owner approves the changed definition and verification policy.
+
+The migration must account explicitly for these semantic changes:
+
+- `context` becomes applicability `conditions`, not a mechanical rename when an
+  existing item does not actually gate behavior;
+- successful `output` statements move to `outcome`, while unsuccessful alternatives
+  move to `failures` only when the owner confirms that classification;
+- global signal definitions and `emits` references move to optional inline signal
+  definitions and signal triggers;
+- reactions become independently identified behaviors when their consequence is
+  retained; and
+- renamed, removed, or newly introduced obligation paths require explicit updates
+  to bindings and probes.
+
+An approved migrated definition requires a new lock. Generated state is reconciled
+against the new semantic and obligation paths. Evidence is not reassigned to a new
+or renamed obligation merely because an agent considers it similar; unmatched old
+state becomes removed or stale under the approved synchronization semantics.
 
 ## Required delivery order after approval
 

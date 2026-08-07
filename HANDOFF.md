@@ -5,9 +5,11 @@ Updated: 2026-08-06
 ## Current focus
 
 The active work is language-design brainstorming for a revised behavior model.
-The discussion was prompted by real definitions in `ag2trust-pml` PR #2, especially
-an `attention_lifecycle` behavior whose `context` and `output` fields obscured the
-initial state, initiating action, intended result, and downstream consequences.
+The discussion was prompted by real definitions in
+[`ag2trust/ag2trust-pml` PR #2](https://github.com/ag2trust/ag2trust-pml/pull/2),
+especially an `attention_lifecycle` behavior whose `context` and `output` fields
+obscured the initial state, initiating action, intended result, and downstream
+consequences.
 
 The decisions are captured in
 [`docs/specs/0010-behavior-transition-model.md`](docs/specs/0010-behavior-transition-model.md).
@@ -48,11 +50,11 @@ Current decisions:
   conformant.
 - Every initiated evaluation completes exactly one successful outcome or one
   authored failure. None or multiple is nonconformant.
-- Replace plural `emits` with at most one inline singular `signal` definition per
-  outcome or failure.
-- A signal is defined by exactly one authoritative producing outcome or failure.
-  It contains `id`, optional product `subject`, and `meaning`; the separate global
-  signal registry would be removed.
+- Replace plural `emits` with an optional inline singular `signal` definition per
+  outcome or failure: a completion contains no signal or one signal, never more.
+- When a signal is authored, its inline definition is the authoritative producer
+  for its globally unique ID. It contains `id`, optional product `subject`, and
+  `meaning`; the separate global signal registry would be removed.
 - A signal's optional subject preserves one product-instance identity between
   producer and consumers without prescribing a technical payload or transport.
 - Completing a signal-bearing outcome or failure creates one occurrence. Each
@@ -62,8 +64,12 @@ Current decisions:
   belong in the producer's `trigger.one_of`, not in multiple producers.
 - Remove `reactions`; a signal consequence becomes an ordinary behavior triggered
   by that signal.
-- Remove behavior-level `related_to` and `architecture`; both remain feature-level
-  concerns. Signals express precise directed behavior causality.
+- Keep behavior-level `related_to` for broader symmetric product relationships.
+  Signals express precise directed behavior causality. Remove behavior-level
+  `architecture`, which remains a feature-level concern.
+- Transition obligations use stable paths for conditions, triggers, completion
+  exclusivity, outcomes, and failures; signals are verified within their producing
+  completion rather than as separate obligations.
 - Keep `experience` at feature scope because persistent surfaces commonly span
   several behaviors. Behavior-specific visible changes belong in outcomes/rules.
 - Simplify feature use cases to `actor`, `goal`, and a unique non-empty list of
@@ -90,8 +96,8 @@ nice-to-have normalization.
   rule in real definitions.
 - Exact list/map bounds and closed-schema grammar for conditions, triggers,
   outcomes, failures, signals, and use-case behavior references.
-- Required migration effects on semantic paths, obligations, bindings, probes,
-  locks, and generated state after owner approval.
+- Definition-specific migration mappings; the authority and stale-state boundaries
+  are established in the draft.
 
 ## Planned post-approval improvement
 
@@ -131,7 +137,7 @@ and evidence must never alter approved intent.
 
 ## Repository state
 
-- Working directory: `/Users/michelperez/dev/pml`
+- Working directory: the active PML repository clone.
 - Branch: `design/behavior-transition-model`
 - The branch includes current `origin/master` at `6ac528a` (`Merge pull request
   #19 from ag2trust/feature/pml-init-skill`).
@@ -153,15 +159,15 @@ design branch:
 ?? uv.lock
 ```
 
-Preserve those artifacts. `.claude/` is represented by open PR #5; the others
-were not included in either focused change.
+Preserve those artifacts. `.claude/` is represented by
+[`ag2trust/pml` PR #5](https://github.com/ag2trust/pml/pull/5); the others were not
+included in either focused change.
 
 ## Pickup
 
 Start with:
 
 ```sh
-cd /Users/michelperez/dev/pml
 git status --short
 sed -n '1,320p' docs/specs/0010-behavior-transition-model.md
 ```
