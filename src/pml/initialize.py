@@ -239,11 +239,11 @@ def _has_exact_entries(directory: _Directory, expected: set[str]) -> bool:
     remaining = set(expected)
     scan_fd = os.dup(directory.fd)
     try:
-        with os.scandir(scan_fd) as entries:
-            for count, entry in enumerate(entries, start=1):
-                if count > len(expected) or entry.name not in remaining:
-                    return False
-                remaining.remove(entry.name)
-        return not remaining
+        entries = os.listdir(scan_fd)
     finally:
         os.close(scan_fd)
+    for count, name in enumerate(entries, start=1):
+        if count > len(expected) or name not in remaining:
+            return False
+        remaining.remove(name)
+    return not remaining
