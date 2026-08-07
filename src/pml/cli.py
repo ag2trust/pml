@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
+from pml.initialize import initialize_project
 from pml.ingest import ingest_report
 from pml.obligations import (
     enumerate_architecture_obligations,
@@ -28,6 +29,9 @@ from pml.validator import Diagnostic, load_document, validate_file
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pml")
     subparsers = parser.add_subparsers(dest="command", required=True)
+    init_parser = subparsers.add_parser("init", help="initialize PML for a product repository")
+    init_parser.add_argument("--id", required=True, dest="project_id")
+    init_parser.add_argument("--name", required=True, dest="project_name")
     validate_parser = subparsers.add_parser("validate", help="validate a PML definition")
     validate_parser.add_argument("path", type=Path)
     obligations_parser = subparsers.add_parser(
@@ -58,6 +62,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     ingest_parser.add_argument("probes", type=Path)
     ingest_parser.add_argument("report", type=Path)
     args = parser.parse_args(argv)
+
+    if args.command == "init":
+        error = initialize_project(Path.cwd(), args.project_id, args.project_name)
+        if error is not None:
+            print(f"PML NOT INITIALIZED: {error}")
+            return 1
+        print("PML INITIALIZED")
+        return 0
 
     path = args.path if args.command == "validate" else args.manifest
     diagnostics = validate_file(path)

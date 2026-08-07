@@ -2,6 +2,7 @@
 
 Status: Owner approved
 Approved direction: 2026-08-02
+Owner clarification: 2026-08-06 repository-scoped skill installation
 
 This decision defines the low-friction workflow from installing PML through
 initialization, authored policy, generated state, deterministic verification, and
@@ -22,8 +23,8 @@ policy, and separate review metadata:
   reviews.yaml
 ```
 
-The implementing product contains only the content lock and generated evidence
-ledger:
+The implementing product contains only the following PML data: the content lock
+and generated evidence ledger:
 
 ```text
 <project>/.pml/
@@ -31,6 +32,12 @@ ledger:
   state/**
   architecture/**
 ```
+
+Repository-scoped agent guidance is a delivery artifact rather than PML data.
+Initialization installs it at `<project>/.agents/skills/pml/` from the running PML
+release. It is non-normative: it is not authored product intent, bindings,
+generated state, evidence, or proof of conformance, and it cannot alter any of
+those artifacts.
 
 Review metadata remains separate from the normative definition. For a feature,
 behavior, or obligation, the optional `reviews.yaml` declares an authoring origin
@@ -61,17 +68,30 @@ add a runtime dependency to the implementing product.
 
 ## Initialization
 
-`pml init` runs from the implementing product repository. It deterministically
-creates:
+`pml init --id <id> --name <name>` runs from the implementing product repository.
+It deterministically creates:
 
 - a sibling `<project>-pml` source with minimal definition and bindings
   boilerplate; and
-- the product-local `.pml/` directory.
+- the product-local `.pml/` directory; and
+- the running PML release's repository-scoped agent skill at
+  `.agents/skills/pml/`.
+
+The sibling source location is fixed by this approved workflow. Initialization
+does not accept an alternate source path. It does not install or modify a
+user-global skill, and it preserves other repository-scoped agent configuration.
 
 Initialization MUST NOT inspect implementation code, infer product intent, create
 verification claims, create state, or create `pml.lock`. Agents and clients may fill
 the authored definition, bindings, and probes after initialization. Generated
 boilerplate remains unpinned until it validates and `pml lock` is run.
+
+Before writing, initialization rejects an existing source, `.pml/`, or PML skill
+destination without merging or overwriting. It creates each destination
+exclusively and rejects symbolic agent-configuration path components. If
+initialization fails after creating artifacts, it reports failure and may leave
+incomplete artifacts at their canonical destinations for inspection and manual
+removal before retry.
 
 ## Validation and locking
 
