@@ -21,6 +21,8 @@ pml = "pml.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+pml = ["resources/skills/pml/**"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
