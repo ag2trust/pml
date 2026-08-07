@@ -133,16 +133,18 @@ and evidence must never alter approved intent.
 
 - Working directory: `/Users/michelperez/dev/pml`
 - Branch: `design/behavior-transition-model`
-- HEAD and `origin/master`: `c7b8689` (`Merge pull request #18 from
-  ag2trust/daemon/anvil-3yoj-t36`)
+- The branch includes current `origin/master` at `6ac528a` (`Merge pull request
+  #19 from ag2trust/feature/pml-init-skill`).
 - The behavior-transition discussion draft and this handoff are preserved on a
   dedicated design branch and remain explicitly unapproved.
-- The independent `pml init` and packaged-skill implementation is preserved in
-  commit `96d624a` and PR #19.
+- The independent `pml init` and packaged-skill implementation was merged through
+  PR #19.
 - `git diff --check` passes.
-- The init slice passed 167 tests, skill validation, and wheel-content inspection.
+- The final init slice passed its full test and packaging review before merge.
 
-The remaining local artifacts are unrelated to this design branch:
+Unrelated pre-existing local artifacts are preserved in the named Git stash
+`preserve pre-existing local artifacts 2026-08-06` rather than mixed into this
+design branch:
 
 ```text
 ?? .claude/
