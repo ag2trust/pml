@@ -393,3 +393,98 @@ def test_init_cleans_reservation_when_handle_open_fails(
 
     monkeypatch.undo()
     assert initialize_project(product, "product", "Product") is None
+
+
+def test_cleanup_preserves_file_replaced_after_detached_validation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    product.mkdir()
+    source = tmp_path / "product-pml"
+    original_write = initialize_module._write_file
+    original_unlink = os.unlink
+    replaced = False
+
+    def fail_after_first_source_file(parent, name, content, owned_files):
+        if name == "bindings.yaml":
+            raise OSError("simulated install failure")
+        original_write(parent, name, content, owned_files)
+
+    def replace_file_before_detached_unlink(name, *, dir_fd=None):
+        nonlocal replaced
+        if (
+            isinstance(name, str)
+            and name.startswith(".pml-cleanup-")
+            and not replaced
+        ):
+            replaced = True
+            replacement_fd = os.open(
+                "index.pml.yaml",
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o600,
+                dir_fd=dir_fd,
+            )
+            try:
+                os.write(replacement_fd, b"concurrent")
+            finally:
+                os.close(replacement_fd)
+        return original_unlink(name, dir_fd=dir_fd)
+
+    monkeypatch.setattr(
+        initialize_module, "_write_file", fail_after_first_source_file
+    )
+    monkeypatch.setattr(
+        initialize_module.os, "unlink", replace_file_before_detached_unlink
+    )
+
+    assert (
+        initialize_project(product, "product", "Product")
+        == "simulated install failure"
+    )
+    assert (source / "index.pml.yaml").read_text(encoding="utf-8") == "concurrent"
+    assert not (product / ".pml").exists()
+
+
+def test_cleanup_preserves_directory_replaced_after_detached_validation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    product.mkdir()
+    source = tmp_path / "product-pml"
+    original_write = initialize_module._write_file
+    original_rmdir = os.rmdir
+    replaced = False
+
+    def fail_after_probes_creation(parent, name, content, owned_files):
+        if name == "SKILL.md":
+            raise OSError("simulated install failure")
+        original_write(parent, name, content, owned_files)
+
+    def replace_directory_before_detached_rmdir(name, *, dir_fd=None):
+        nonlocal replaced
+        if (
+            isinstance(name, str)
+            and name.startswith(".pml-cleanup-")
+            and not (source / "probes").exists()
+            and not replaced
+        ):
+            replaced = True
+            os.mkdir("probes", 0o700, dir_fd=dir_fd)
+            (source / "probes/concurrent.txt").write_text(
+                "preserve", encoding="utf-8"
+            )
+        return original_rmdir(name, dir_fd=dir_fd)
+
+    monkeypatch.setattr(initialize_module, "_write_file", fail_after_probes_creation)
+    monkeypatch.setattr(
+        initialize_module.os, "rmdir", replace_directory_before_detached_rmdir
+    )
+
+    assert (
+        initialize_project(product, "product", "Product")
+        == "simulated install failure"
+    )
+    assert (
+        source / "probes/concurrent.txt"
+    ).read_text(encoding="utf-8") == "preserve"
+    assert not (product / ".pml").exists()

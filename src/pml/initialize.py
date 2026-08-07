@@ -7,6 +7,7 @@ from importlib.resources import files
 import os
 from pathlib import Path
 import re
+import secrets
 
 import yaml
 
@@ -306,30 +307,98 @@ def _has_exact_entries(directory: _Directory, expected: set[str]) -> bool:
 
 
 def _discard_file(item: _OwnedFile) -> None:
-    """Remove only the exact file created by this invocation."""
-    if not _owned_file_is_attached(item):
+    """Atomically detach, then remove only, the file this invocation created."""
+    if not _directory_is_attached(item.parent):
+        return
+    detached = _detach_entry(item.parent, item.name)
+    if detached is None:
         return
     try:
-        os.unlink(item.name, dir_fd=item.parent.fd)
+        metadata = os.stat(
+            detached,
+            dir_fd=item.parent.fd,
+            follow_symlinks=False,
+        )
+    except OSError:
+        _restore_detached_entry(item.parent, detached, item.name)
+        return
+    if _identity(metadata) != item.identity:
+        _restore_detached_entry(item.parent, detached, item.name)
+        return
+    try:
+        os.unlink(detached, dir_fd=item.parent.fd)
+    except OSError:
+        _restore_detached_entry(item.parent, detached, item.name)
+
+
+def _detach_entry(parent: _Directory, name: str) -> str | None:
+    """Move a public entry to an unpredictable private name before validation."""
+    for _ in range(16):
+        detached = f".pml-cleanup-{secrets.token_hex(16)}"
+        try:
+            os.stat(detached, dir_fd=parent.fd, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            return None
+        else:
+            continue
+        try:
+            os.rename(
+                name,
+                detached,
+                src_dir_fd=parent.fd,
+                dst_dir_fd=parent.fd,
+            )
+        except OSError:
+            return None
+        return detached
+    return None
+
+
+def _restore_detached_entry(
+    parent: _Directory, detached: str, original: str
+) -> None:
+    """Best-effort restore without deliberately replacing a new public entry."""
+    try:
+        os.stat(original, dir_fd=parent.fd, follow_symlinks=False)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return
+    else:
+        return
+    try:
+        os.rename(
+            detached,
+            original,
+            src_dir_fd=parent.fd,
+            dst_dir_fd=parent.fd,
+        )
     except OSError:
         pass
 
 
 def _discard_directory(directory: _OwnedDirectory) -> None:
-    """Remove an unchanged owned directory only when it is already empty."""
+    """Atomically detach, then remove only, an unchanged empty owned directory."""
     if not _directory_is_attached(directory.parent):
+        return
+    detached = _detach_entry(directory.parent, directory.name)
+    if detached is None:
         return
     try:
         metadata = os.stat(
-            directory.name,
+            detached,
             dir_fd=directory.parent.fd,
             follow_symlinks=False,
         )
     except OSError:
+        _restore_detached_entry(directory.parent, detached, directory.name)
         return
     if _identity(metadata) != directory.identity:
+        _restore_detached_entry(directory.parent, detached, directory.name)
         return
     try:
-        os.rmdir(directory.name, dir_fd=directory.parent.fd)
+        os.rmdir(detached, dir_fd=directory.parent.fd)
     except OSError:
-        pass
+        _restore_detached_entry(directory.parent, detached, directory.name)
