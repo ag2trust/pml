@@ -8,6 +8,7 @@ from importlib.resources import files
 import os
 from pathlib import Path
 import re
+import stat
 
 import yaml
 
@@ -23,6 +24,12 @@ SKILL_FILES = (
 class _Identity:
     device: int
     inode: int
+
+
+@dataclass(frozen=True)
+class _Entry:
+    identity: _Identity
+    file_type: int
 
 
 @dataclass
@@ -81,23 +88,36 @@ def initialize_project(
         state = _reserve_directory(product, state_path, handles)
         skill = _reserve_directory(skills, skill_path, handles)
 
-        _write_file(source, "index.pml.yaml", definition)
-        _write_file(source, "bindings.yaml", bindings)
+        index = _write_file(source, "index.pml.yaml", definition)
+        bindings_file = _write_file(source, "bindings.yaml", bindings)
         probes = _create_directory(source, "probes", handles)
-        _write_file(skill, "SKILL.md", skill_content[("SKILL.md",)])
+        skill_file = _write_file(skill, "SKILL.md", skill_content[("SKILL.md",)])
         skill_agents = _create_directory(skill, "agents", handles)
-        _write_file(
+        skill_configuration = _write_file(
             skill_agents,
             "openai.yaml",
             skill_content[("agents", "openai.yaml")],
         )
 
         expected_layouts = (
-            (source, {"index.pml.yaml", "bindings.yaml", "probes"}),
-            (probes, set()),
-            (state, set()),
-            (skill, {"SKILL.md", "agents"}),
-            (skill_agents, {"openai.yaml"}),
+            (
+                source,
+                {
+                    "index.pml.yaml": index,
+                    "bindings.yaml": bindings_file,
+                    "probes": _directory_entry(probes),
+                },
+            ),
+            (probes, {}),
+            (state, {}),
+            (
+                skill,
+                {
+                    "SKILL.md": skill_file,
+                    "agents": _directory_entry(skill_agents),
+                },
+            ),
+            (skill_agents, {"openai.yaml": skill_configuration}),
         )
         if not all(
             _has_exact_entries(directory, names)
@@ -121,6 +141,14 @@ class _DestinationExists(Exception):
 
 def _identity(metadata: os.stat_result) -> _Identity:
     return _Identity(metadata.st_dev, metadata.st_ino)
+
+
+def _entry(metadata: os.stat_result) -> _Entry:
+    return _Entry(_identity(metadata), stat.S_IFMT(metadata.st_mode))
+
+
+def _directory_entry(directory: _Directory) -> _Entry:
+    return _Entry(directory.identity, stat.S_IFDIR)
 
 
 def _open_directory(path: Path) -> _Directory:
@@ -195,7 +223,7 @@ def _open_created_directory(parent: _Directory, name: str) -> _Directory:
     return directory
 
 
-def _write_file(parent: _Directory, name: str, content: bytes) -> None:
+def _write_file(parent: _Directory, name: str, content: bytes) -> _Entry:
     fd = os.open(
         name,
         os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -203,12 +231,14 @@ def _write_file(parent: _Directory, name: str, content: bytes) -> None:
         dir_fd=parent.fd,
     )
     try:
+        created_entry = _entry(os.fstat(fd))
         output = os.fdopen(fd, "wb")
     except BaseException:
         os.close(fd)
         raise
     with output:
         output.write(content)
+    return created_entry
 
 
 def _directory_is_attached(directory: _Directory) -> bool:
@@ -233,18 +263,30 @@ def _directory_is_attached(directory: _Directory) -> bool:
     return _identity(metadata) == directory.identity
 
 
-def _has_exact_entries(directory: _Directory, expected: set[str]) -> bool:
+def _has_exact_entries(directory: _Directory, expected: dict[str, _Entry]) -> bool:
     """Check a fixed layout without traversing arbitrary content."""
     if not _directory_is_attached(directory):
         return False
-    remaining = set(expected)
+    remaining = dict(expected)
     scan_fd = os.dup(directory.fd)
     try:
         with os.scandir(scan_fd) as entries:
             for count, entry in enumerate(entries, start=1):
                 if count > len(expected) or entry.name not in remaining:
                     return False
-                remaining.remove(entry.name)
+                expected_entry = remaining.pop(entry.name)
+                try:
+                    actual_entry = _entry(
+                        os.stat(
+                            entry.name,
+                            dir_fd=directory.fd,
+                            follow_symlinks=False,
+                        )
+                    )
+                except OSError:
+                    return False
+                if actual_entry != expected_entry:
+                    return False
     finally:
         # CPython's scandir ownership of a supplied descriptor varies by
         # platform. Close it when scandir leaves it open; otherwise its close

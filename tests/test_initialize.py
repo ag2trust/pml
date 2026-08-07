@@ -185,6 +185,33 @@ def test_failure_leaves_partial_artifacts_and_never_deletes_concurrent_content(
     )
 
 
+def test_init_rejects_generated_file_replaced_with_symlink(
+    tmp_path: Path, monkeypatch
+) -> None:
+    product = tmp_path / "product"
+    product.mkdir()
+    source = tmp_path / "product-pml"
+    replacement = tmp_path / "replacement"
+    replacement.write_text("replacement", encoding="utf-8")
+    original_write = initialize_module._write_file
+
+    def replace_index_after_write(parent, name, content):
+        entry = original_write(parent, name, content)
+        if name == "bindings.yaml":
+            index = source / "index.pml.yaml"
+            index.unlink()
+            index.symlink_to(replacement)
+        return entry
+
+    monkeypatch.setattr(initialize_module, "_write_file", replace_index_after_write)
+
+    assert initialize_project(product, "product", "Product") == (
+        "destination changed during initialization"
+    )
+    assert (source / "index.pml.yaml").is_symlink()
+    assert replacement.read_text(encoding="utf-8") == "replacement"
+
+
 def test_repeated_init_does_not_leak_descriptors(tmp_path: Path) -> None:
     descriptor_directory = Path("/dev/fd")
     if not descriptor_directory.is_dir():
@@ -219,6 +246,6 @@ def test_layout_scan_stops_after_first_unexpected_entry(tmp_path: Path, monkeypa
 
     monkeypatch.setattr(initialize_module.os, "scandir", lambda _: Entries())
     try:
-        assert not initialize_module._has_exact_entries(directory, set())
+        assert not initialize_module._has_exact_entries(directory, {})
     finally:
         os.close(directory.fd)
