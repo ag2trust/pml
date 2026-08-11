@@ -74,6 +74,8 @@ Current decisions:
   several behaviors. Behavior-specific visible changes belong in outcomes/rules.
 - Simplify feature use cases to `actor`, `goal`, and a unique non-empty list of
   behavior references. The list expresses contributing membership, not ordering.
+- Use fully qualified behavior semantic paths for every use-case behavior
+  reference; local references have no separate shorthand.
 - Use-case goals remain independently verifiable end-to-end; conforming referenced
   behaviors alone does not prove goal conformance.
 - Do not add structured lifecycle transition fields; they duplicate conditions and
@@ -88,8 +90,6 @@ Current decisions:
 Only foundational or delivery-blocking questions should be pursued now; defer
 nice-to-have normalization.
 
-- Exact syntax and resolution rules for local and cross-feature behavior references
-  in use cases.
 - Whether signal `subject` may reference only declared concepts or another existing
   canonical product-object category.
 - Whether any retry or concurrency requirement cannot be expressed adequately as a

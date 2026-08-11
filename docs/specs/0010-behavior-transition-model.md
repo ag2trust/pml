@@ -225,6 +225,10 @@ outcomes or rules.
 non-empty list of behavior references. A use case states the actor requirement PML
 aims to fulfill; its referenced behaviors collectively fulfill that goal.
 
+Every behavior reference uses one canonical form: the fully qualified behavior
+semantic path. Local and cross-feature references do not have separate shorthand
+or resolution rules. Each reference MUST resolve to a declared behavior.
+
 The behavior list expresses membership, not execution order. Trigger and signal
 relationships express causal order. The use-case goal remains an independently
 verifiable end-to-end obligation; conformance of each referenced behavior does not
@@ -236,9 +240,9 @@ use_cases:
     actor: member
     goal: Handle an Inbox Item requiring attention.
     behaviors:
-      - inbox_item_opening
-      - attention_handling
-      - attention_view_update
+      - domains.inbox.features.attention.behaviors.inbox_item_opening
+      - domains.inbox.features.attention.behaviors.attention_handling
+      - domains.inbox.features.attention.behaviors.attention_view_update
 ```
 
 ## Consolidated example
@@ -283,8 +287,6 @@ attention_view_update:
 
 The following points were identified but have not been decided:
 
-- the exact syntax for referencing local and cross-feature behaviors from use
-  cases;
 - whether signal `subject` may reference only declared concepts or another
   canonical product-object category;
 - retry and concurrency requirements that cannot be stated precisely as rules;
