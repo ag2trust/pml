@@ -1,15 +1,21 @@
-# Behavior transition model
+# PML behavior transition model
 
-Status: Discussion draft; not owner approved
+Status: Owner approved
+Approved direction: 2026-08-11
 
 ## Scope
 
-This document records the current design direction for PML behaviors so the
-discussion can continue without treating these decisions as implemented or
-authoritative language semantics. It does not amend the approved language,
-schema, validator, examples, formatter, compiler, or generated state.
+This specification defines the approved transition semantics for PML behaviors.
+It supersedes the behavior structure, behavior architecture scope, signal
+registry and emission model, reactions, and use-case scenario structure in
+[0001](0001-language-design.md), [0004](0004-language-normalization.md),
+[0006](0006-architecture-decisions.md), and
+[0009](0009-behavior-units-and-outputs.md) where they conflict with this
+specification. Existing schema, validator, examples, formatter, compiler, and
+generated-state behavior remain unchanged until migrated in the required delivery
+order below.
 
-## Current decisions
+## Approved semantics
 
 ### Behavior structure
 
@@ -17,7 +23,7 @@ A behavior is one bounded, independently addressable product transition. It has
 no descriptive, `purpose`, or `intent` field. Its semantic fields should make the
 behavior understandable without a redundant summary.
 
-The proposed closed shape is:
+The closed shape is:
 
 ```text
 behavior = {
@@ -37,7 +43,7 @@ behavior = {
 - `failures` identifies authored unsuccessful completions. It is optional.
 - `rules` contains invariants local to the behavior. It remains optional.
 
-The current `context` and `output` fields would be replaced by `conditions` and
+The prior `context` and `output` fields are replaced by `conditions` and
 `outcome` respectively.
 
 All authored conditions MUST hold when the trigger occurs. If any condition does
@@ -158,7 +164,7 @@ Every direct outcome, outcome alternative, or failure contains either no `signal
 field or one inline `signal` definition. A signal is therefore optional; PML does
 not require every completion or behavior to produce one. When present, its closed
 definition contains `id`, optional `subject`, and `meaning`. The separate product
-signal registry and current plural `emits` lists would be removed.
+signal registry and prior plural `emits` lists are removed.
 
 ```yaml
 signal:
@@ -196,7 +202,7 @@ conditions + trigger -> outcome or failure -> optional signal -> another behavio
 
 ### Reactions
 
-The `reactions` construct would be removed. A signal consequence is represented
+The `reactions` construct is removed. A signal consequence is represented
 as an ordinary behavior whose trigger references that signal. This provides one
 canonical representation instead of overlapping reactions and signal-triggered
 behaviors.
@@ -208,7 +214,7 @@ untyped, symmetric relationship semantics and may reference features or other
 behaviors using their fully qualified semantic paths. It expresses broader product
 association and change impact; it does not imply causality or execution order.
 
-`architecture` would not be a valid behavior field and remains a feature-level
+`architecture` is not a valid behavior field and remains a feature-level
 concern:
 
 - signals express precise directed causal relationships among behaviors;
@@ -338,7 +344,7 @@ rejects duplicate values. Every ID-keyed map rejects duplicate IDs and every
 reference MUST resolve to the required canonical object category.
 
 Structured lifecycle transition fields were considered and rejected because they
-would duplicate conditions and outcomes. No general workflow or ordering construct
+duplicate conditions and outcomes. No general workflow or ordering construct
 is planned; signal-to-trigger relationships already express required causal order.
 Time and quantity requirements remain precise authored statements or rules unless
 real product definitions demonstrate a need for structured scalar types.
@@ -374,9 +380,9 @@ against the new semantic and obligation paths. Evidence is not reassigned to a n
 or renamed obligation merely because an agent considers it similar; unmatched old
 state becomes removed or stale under the approved synchronization semantics.
 
-## Required delivery order after approval
+## Required delivery order
 
-If this design is owner approved, delivery follows the repository workflow:
+Delivery follows the repository workflow:
 
 1. Amend the language design and establish the exact grammar and semantics.
 2. Update the schema and semantic validator.

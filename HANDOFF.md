@@ -1,25 +1,28 @@
 # PML handoff
 
-Updated: 2026-08-06
+Updated: 2026-08-11
 
 ## Current focus
 
-The active work is language-design brainstorming for a revised behavior model.
-The discussion was prompted by real definitions in
+The behavior transition model received explicit owner approval on 2026-08-11.
+The next work is the ordered schema and semantic-validator migration. Formatter,
+compiler, bindings, probes, lock, and generated state follow only after validation
+behavior and conformance examples are defined.
+
+The design discussion was prompted by real definitions in
 [`ag2trust/ag2trust-pml` PR #2](https://github.com/ag2trust/ag2trust-pml/pull/2),
 especially an `attention_lifecycle` behavior whose `context` and `output` fields
 obscured the initial state, initiating action, intended result, and downstream
 consequences.
 
-The decisions are captured in
+The approved decisions are captured in
 [`docs/specs/0010-behavior-transition-model.md`](docs/specs/0010-behavior-transition-model.md).
-That file is intentionally marked **Discussion draft; not owner approved**. No
-schema, validator, compiler, formatter, examples, bindings, probes, or approved
-language specification has been changed for this design.
+No schema, validator, compiler, formatter, examples, bindings, probes, or
+generated-state implementation has yet been changed for this design.
 
-## Agreed discussion direction
+## Approved direction
 
-The proposed closed behavior shape is:
+The approved closed behavior shape is:
 
 ```text
 behavior = {
@@ -31,7 +34,7 @@ behavior = {
 }
 ```
 
-Current decisions:
+Approved decisions:
 
 - A behavior is one bounded, independently addressable product transition.
 - Behaviors have no descriptive, `purpose`, or `intent` field; their semantic
@@ -54,7 +57,7 @@ Current decisions:
   outcome or failure: a completion contains no signal or one signal, never more.
 - When a signal is authored, its inline definition is the authoritative producer
   for its globally unique ID. It contains `id`, optional product `subject`, and
-  `meaning`; the separate global signal registry would be removed.
+  `meaning`; the separate global signal registry is removed.
 - A signal's optional subject preserves one product-instance identity between
   producer and consumers without prescribing a technical payload or transport.
   It must reference a declared product concept and cannot introduce another
@@ -90,17 +93,18 @@ Current decisions:
   failures, or rules; do not add execution-control fields without a demonstrated
   language gap.
 
-## Design readiness
+## Approval and delivery readiness
 
-The foundational questions identified during discussion are resolved. The draft
+The foundational questions identified during discussion are resolved. The approved
 now defines canonical behavior references, signal subjects, retry and concurrency
 scope, transition obligation paths, collection bounds, closed grammar, and
 migration authority boundaries. Definition-specific migration mappings remain
 agent-assisted delivery work after semantic approval rather than a language-design
 question.
 
-The complete proposal still requires explicit owner approval before it amends the
-approved language or changes schemas, validators, examples, or downstream tools.
+Owner approval was given explicitly on 2026-08-11. Schema and semantic validation
+are now authorized as the next delivery phase; downstream tooling is not yet
+authorized to precede validation behavior.
 
 ## Planned post-approval improvement
 
@@ -125,14 +129,11 @@ definitions.
 
 ## Required workflow
 
-PML is a closed language. The discussion draft is not authority and must not be
-implemented opportunistically. Continue in this order:
+PML is a closed language. Continue in this order:
 
-1. Finish the language semantics and obtain explicit owner approval.
-2. Amend/supersede the approved language design.
-3. Update schema and semantic validation.
-4. Add positive and negative conformance examples/tests.
-5. Update obligation resolution, bindings/probes, formatter/compiler, lock/state,
+1. Update schema and semantic validation.
+2. Add positive and negative conformance examples/tests.
+3. Update obligation resolution, bindings/probes, formatter/compiler, lock/state,
    and command behavior only after validation behavior is defined.
 
 Do not introduce compatibility aliases unless separately approved. Generated state
@@ -144,8 +145,8 @@ and evidence must never alter approved intent.
 - Branch: `design/behavior-transition-model`
 - The branch includes current `origin/master` at `6ac528a` (`Merge pull request
   #19 from ag2trust/feature/pml-init-skill`).
-- The behavior-transition discussion draft and this handoff are preserved on a
-  dedicated design branch and remain explicitly unapproved.
+- The approved behavior-transition specification and this handoff are preserved on
+  the dedicated design branch pending review and merge.
 - The independent `pml init` and packaged-skill implementation was merged through
   PR #19.
 - `git diff --check` passes.
@@ -175,6 +176,6 @@ git status --short
 sed -n '1,320p' docs/specs/0010-behavior-transition-model.md
 ```
 
-The next conversation should either review the few remaining foundational questions
-or refine the draft into an exact owner-approval proposal. Do not begin schema or
-implementation work without that approval.
+The next change should update the schema and semantic validator, with positive and
+negative conformance examples. Do not update downstream formatter, compiler,
+bindings, probes, lock, or state behavior before validation behavior is defined.
