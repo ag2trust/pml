@@ -289,7 +289,6 @@ attention_view_update:
 
 The following points were identified but have not been decided:
 
-- retry and concurrency requirements that cannot be stated precisely as rules;
 - the exact size bounds and validation rules for `conditions` and `one_of` maps.
 
 Structured lifecycle transition fields were considered and rejected because they
@@ -297,6 +296,12 @@ would duplicate conditions and outcomes. No general workflow or ordering constru
 is planned; signal-to-trigger relationships already express required causal order.
 Time and quantity requirements remain precise authored statements or rules unless
 real product definitions demonstrate a need for structured scalar types.
+
+Retry and concurrency requirements likewise remain observable conditions,
+outcomes, failures, or rules. PML does not add retry counts, locks, queues,
+scheduling, or execution-control fields. A future structured construct requires a
+separate language decision supported by a product requirement that cannot be
+stated precisely through the existing transition fields and rules.
 
 ## Migration guidance
 

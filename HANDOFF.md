@@ -86,14 +86,15 @@ Current decisions:
   causal order.
 - Keep precise time and quantity requirements in authored statements/rules until
   real definitions demonstrate a need for structured scalar types.
+- Keep retry and concurrency requirements as observable conditions, outcomes,
+  failures, or rules; do not add execution-control fields without a demonstrated
+  language gap.
 
 ## Remaining design questions
 
 Only foundational or delivery-blocking questions should be pursued now; defer
 nice-to-have normalization.
 
-- Whether any retry or concurrency requirement cannot be expressed adequately as a
-  rule in real definitions.
 - Exact list/map bounds and closed-schema grammar for conditions, triggers,
   outcomes, failures, signals, and use-case behavior references.
 - Definition-specific migration mappings; the authority and stale-state boundaries
