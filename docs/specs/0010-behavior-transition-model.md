@@ -167,10 +167,12 @@ signal:
   meaning: An Inbox Item has been handled.
 ```
 
-An optional `subject` references the primary product concept concerned. Each
-occurrence preserves the identity of one subject instance between its producer
-and consumers. Global signals omit `subject`. This product-level correlation does
-not prescribe a payload, identifier representation, message, or transport.
+An optional `subject` MUST reference one declared product concept and identifies
+the primary concept concerned. It cannot reference an actor, feature, behavior, or
+ad hoc object category. Each occurrence preserves the identity of one subject
+instance between its producer and consumers. Global signals omit `subject`. This
+product-level correlation does not prescribe a payload, identifier representation,
+message, or transport.
 
 An inline signal definition is the authoritative producer for its globally unique
 signal ID. Signal references resolve to that definition, and the signal may trigger
@@ -287,8 +289,6 @@ attention_view_update:
 
 The following points were identified but have not been decided:
 
-- whether signal `subject` may reference only declared concepts or another
-  canonical product-object category;
 - retry and concurrency requirements that cannot be stated precisely as rules;
 - the exact size bounds and validation rules for `conditions` and `one_of` maps.
 

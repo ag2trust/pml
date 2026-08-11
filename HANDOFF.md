@@ -57,6 +57,8 @@ Current decisions:
   `meaning`; the separate global signal registry would be removed.
 - A signal's optional subject preserves one product-instance identity between
   producer and consumers without prescribing a technical payload or transport.
+  It must reference a declared product concept and cannot introduce another
+  product-object category.
 - Completing a signal-bearing outcome or failure creates one occurrence. Each
   consuming behavior is considered once for that occurrence, and its conditions
   are evaluated then. Failed conditions do not cause later re-evaluation.
@@ -90,8 +92,6 @@ Current decisions:
 Only foundational or delivery-blocking questions should be pursued now; defer
 nice-to-have normalization.
 
-- Whether signal `subject` may reference only declared concepts or another existing
-  canonical product-object category.
 - Whether any retry or concurrency requirement cannot be expressed adequately as a
   rule in real definitions.
 - Exact list/map bounds and closed-schema grammar for conditions, triggers,
