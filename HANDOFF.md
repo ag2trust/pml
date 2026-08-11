@@ -90,15 +90,17 @@ Current decisions:
   failures, or rules; do not add execution-control fields without a demonstrated
   language gap.
 
-## Remaining design questions
+## Design readiness
 
-Only foundational or delivery-blocking questions should be pursued now; defer
-nice-to-have normalization.
+The foundational questions identified during discussion are resolved. The draft
+now defines canonical behavior references, signal subjects, retry and concurrency
+scope, transition obligation paths, collection bounds, closed grammar, and
+migration authority boundaries. Definition-specific migration mappings remain
+agent-assisted delivery work after semantic approval rather than a language-design
+question.
 
-- Exact list/map bounds and closed-schema grammar for conditions, triggers,
-  outcomes, failures, signals, and use-case behavior references.
-- Definition-specific migration mappings; the authority and stale-state boundaries
-  are established in the draft.
+The complete proposal still requires explicit owner approval before it amends the
+approved language or changes schemas, validators, examples, or downstream tools.
 
 ## Planned post-approval improvement
 

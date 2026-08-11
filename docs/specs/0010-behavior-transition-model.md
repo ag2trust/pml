@@ -285,11 +285,57 @@ attention_view_update:
     statement: The handled Inbox Item is absent from the needs-attention view.
 ```
 
-## Open design questions
+## Closed grammar
 
-The following points were identified but have not been decided:
+```text
+identifier = [a-z][a-z0-9_]*
+statement = non-empty text
+declared-actor-id = identifier resolving to one declared actor
+concept-id = identifier resolving to one declared product concept
+declared-signal-id = identifier resolving to one inline signal definition
+feature-or-behavior-id = fully qualified feature or behavior semantic path
+behavior-id = fully qualified behavior semantic path
+rule-map = the closed ID-keyed rule map defined by the language
 
-- the exact size bounds and validation rules for `conditions` and `one_of` maps.
+conditions = unique list[statement] with 1..7 items
+direct-trigger = {statement: statement} | {signal: declared-signal-id}
+trigger = direct-trigger | {
+  one_of: map[identifier, direct-trigger] with 2..7 entries
+}
+signal = {
+  id: globally unique identifier,
+  subject?: concept-id,
+  meaning: non-empty text
+}
+completion-case = {
+  statement: statement,
+  signal?: signal
+}
+outcome = completion-case | {
+  one_of: map[identifier, completion-case] with 2..7 entries
+}
+failure-map = map[identifier, completion-case] with 1..7 entries
+behavior-reference-list = unique list[behavior-id] with 1..7 items
+relationship-list = unique list[feature-or-behavior-id] with 1..7 items
+behavior = {
+  conditions?: conditions,
+  trigger: trigger,
+  outcome: outcome,
+  failures?: failure-map,
+  rules?: rule-map,
+  related_to?: relationship-list
+}
+use-case = {
+  actor: declared-actor-id,
+  goal: non-empty text,
+  behaviors: behavior-reference-list
+}
+```
+
+Every object is closed and rejects unknown keys. Direct and `one_of` trigger or
+outcome forms are mutually exclusive. Every list is non-empty when present and
+rejects duplicate values. Every ID-keyed map rejects duplicate IDs and every
+reference MUST resolve to the required canonical object category.
 
 Structured lifecycle transition fields were considered and rejected because they
 would duplicate conditions and outcomes. No general workflow or ordering construct
