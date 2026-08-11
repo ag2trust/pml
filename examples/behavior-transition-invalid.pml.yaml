@@ -1,0 +1,46 @@
+pml: "0.1-draft"
+
+project:
+  id: invalid_transition_sample
+  name: Invalid Transition Sample
+  purpose: Demonstrate transition reference diagnostics.
+
+actors:
+  member:
+    meaning: A person authorized to use the product.
+
+concepts:
+  message:
+    meaning: A message handled by the product.
+
+domains:
+  messaging:
+    purpose: Manage messages.
+    features:
+      handling:
+        purpose: Handle a message.
+        behaviors:
+          message_handling:
+            trigger:
+              statement: A Member submits a Message.
+            outcome:
+              statement: The Message is handled.
+              signal:
+                id: message_handled
+                subject: missing_concept
+                meaning: A Message has been handled.
+          duplicate_producer:
+            trigger:
+              signal: missing_signal
+            outcome:
+              statement: The duplicate producer completes.
+              signal:
+                id: message_handled
+                subject: message
+                meaning: A Message has also been handled.
+        use_cases:
+          handle_message:
+            actor: member
+            goal: Handle a Message.
+            behaviors:
+              - domains.messaging.features.handling.behaviors.missing_behavior
