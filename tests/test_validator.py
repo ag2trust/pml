@@ -453,6 +453,42 @@ def test_outcome_statement_rejects_implementation_detail(tmp_path: Path) -> None
     assert "non-normative" not in {item.code for item in diagnostics}
 
 
+def test_inline_signal_meaning_rejects_implementation_detail(tmp_path: Path) -> None:
+    behavior = {
+        "trigger": {"statement": "A Member requests a Note decision."},
+        "outcome": {
+            "statement": "One visible Note result.",
+            "signal": {
+                "id": "note_decided",
+                "meaning": "A queue receives the Note decision.",
+            },
+        },
+    }
+
+    diagnostics = validate_file(_behavior_manifest(tmp_path, behavior, "signal-meaning"))
+
+    assert any(
+        item.code == "implementation-detail"
+        and item.path.endswith(".outcome.signal.meaning")
+        for item in diagnostics
+    )
+
+
+@pytest.mark.parametrize("concepts", [None, [], "not a concept registry"])
+def test_malformed_concepts_registry_returns_schema_diagnostics(
+    tmp_path: Path,
+    concepts: object,
+) -> None:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    document["concepts"] = concepts
+    manifest = tmp_path / "malformed-concepts.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    diagnostics = validate_file(manifest)
+
+    assert any(item.code == "schema" and item.path == "concepts" for item in diagnostics)
+
+
 def test_trigger_statement_rejects_rest_api(tmp_path: Path) -> None:
     behavior = {
         "trigger": {"statement": "The REST API receives the Note."},

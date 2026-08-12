@@ -215,9 +215,14 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
 
     vocabulary = document.get("vocabulary", {})
+    vocabulary_map = vocabulary if isinstance(vocabulary, dict) else {}
     forbidden: dict[str, str] = {}
-    for canonical, definition in vocabulary.items():
+    for canonical, definition in vocabulary_map.items():
+        if not isinstance(definition, dict):
+            continue
         for synonym in definition.get("forbidden_synonyms", []):
+            if not isinstance(synonym, str):
+                continue
             forbidden[synonym.casefold()] = canonical
 
     normative_fields = {"statement"}
@@ -269,8 +274,10 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                     )
                 )
 
-    actor_ids = set(document.get("actors", {}))
-    concept_ids = set(document.get("concepts", {}))
+    actors = document.get("actors", {})
+    actor_ids = set(actors) if isinstance(actors, dict) else set()
+    concepts = document.get("concepts", {})
+    concept_ids = set(concepts) if isinstance(concepts, dict) else set()
     architecture = document.get("architecture", {})
     architecture_map = architecture if isinstance(architecture, dict) else {}
     architecture_ids = set(architecture_map)
@@ -307,6 +314,15 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                         f"{signal_path}.subject",
                         "undefined-reference",
                         f"unknown concept '{subject}'",
+                    )
+                )
+            meaning = signal.get("meaning")
+            if isinstance(meaning, str) and TRANSITION_IMPLEMENTATION_DETAIL.search(meaning):
+                diagnostics.append(
+                    Diagnostic(
+                        f"{signal_path}.meaning",
+                        "implementation-detail",
+                        "signal meanings must describe product occurrences, not implementation details",
                     )
                 )
 
