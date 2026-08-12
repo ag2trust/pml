@@ -98,64 +98,45 @@ justify an alias for removed paths.
 
 ## Documentation gaps
 
-The following findings were current user-facing documentation defects at the
-original audit snapshot (PR head `34172a7`). They do not alter the runtime
-acceptance surface above. Later base integration can resolve an item without
-changing this audit's classification; the current-base disposition is recorded
-below.
+### Current gap
 
-- [`README.md`](../../README.md), lines 6-7 and 24-27 calls out outputs and
-  reactions and points readers to superseded specification 0009 as the current
-  design.
-- [`docs/quickstart.md`](../quickstart.md), lines 29-36 provides the removed
-  use-case `given`, `when`, `then`, and `otherwise` scenario fields; lines
-  45-47 also instruct readers to use reactions and says every behavior has one
-  output.
-- [`docs/authoring-guide.md`](../authoring-guide.md), lines 19-21 describes a
-  behavior's removed `output` and `context`; lines 25-37 further describe
-  reaction statements, `output.emits`, and `reactions.on`; and lines 42-49
-  incorrectly direct authors to reference architecture decisions from an
-  affected behavior. Behavior-level `architecture` is removed: the closed
-  behavior schema permits only `conditions`, `trigger`, `outcome`, `failures`,
-  `rules`, and `related_to`
-  ([`schema/pml.schema.json`](../../schema/pml.schema.json), lines 199-210),
-  and [`tests/test_behavior_transition_validation.py`](../../tests/test_behavior_transition_validation.py),
-  lines 91-104 verifies that a behavior `architecture` key is rejected. This
-  is a current documentation defect, not an implementation dependency.
+[`docs/specs/0003-product-state.md`](../specs/0003-product-state.md), lines
+22-31 is the sole current documentation gap: its approved, non-superseded
+stable-obligations section still says reactions compile into independently
+addressable obligation paths. Its repository-boundary and sync-execution
+sections have later replacements, but that does not supersede this statement.
+This is a documentation defect only; it does not alter the runtime acceptance
+surface above.
+
+### Resolved snapshot findings
+
+The following were current user-facing documentation dependencies at the
+immutable audit snapshot `34172a7`. They are all documentation gaps, not
+implementation dependencies, and commit `98ef5e7`—already in this branch's
+merged base—corrected every one. They are retained as audit evidence and are
+not current gaps:
+
+- [`README.md`](../../README.md), lines 6-7 and 24-27 called out outputs and
+  reactions and directed readers to superseded specification 0009.
+- [`docs/quickstart.md`](../quickstart.md), lines 29-36 used the removed
+  `given`, `when`, `then`, and `otherwise` scenario fields; lines 45-47 also
+  instructed readers to use reactions and a behavior output.
+- [`docs/authoring-guide.md`](../authoring-guide.md), lines 19-21 described
+  removed behavior `output` and `context`; lines 25-37 described reactions and
+  `output.emits`; lines 30-31 described the removed use-case scenario model;
+  and lines 42-49 allowed behavior-level architecture. The latter conflicts
+  with the closed behavior schema
+  ([`schema/pml.schema.json`](../../schema/pml.schema.json), lines 199-210) and
+  its rejection test
+  ([`tests/test_behavior_transition_validation.py`](../../tests/test_behavior_transition_validation.py),
+  lines 91-104).
 - [`docs/language-reference.md`](../language-reference.md), lines 20-58
-  presents the removed top-level `signals` registry; lines 80-92 presents
-  removed behavior `context`, `output`, and behavior-level `architecture`;
-  lines 102-107 presents the removed use-case scenario fields; and lines
-  109-174 presents `reactions`, `emits`, and the removed `.output` obligation
-  paths.
-- [`docs/verification.md`](../verification.md), line 3 says reactions resolve
+  presented the removed top-level signals registry; lines 67-75 listed feature
+  `reactions` and `emits`; lines 80-92 presented removed behavior fields and
+  architecture; lines 102-107 described scenario fields; and lines 109-174
+  described reactions, emits, and `.output` paths.
+- [`docs/verification.md`](../verification.md), line 3 said reactions resolve
   into stable obligations.
-- [`docs/specs/0003-product-state.md`](../specs/0003-product-state.md), lines
-  22-31 is an approved, non-superseded stable-obligations section that says
-  reactions compile into independently addressable obligation paths. Its
-  repository-boundary and sync-execution sections have later replacements, but
-  that does not supersede this stable-obligations statement; it is therefore a
-  current documentation defect.
-
-### Resolved during later base integration
-
-The following two findings complete the documentation inventory requested by
-review. They were current dependencies at audit head `34172a7`, and are
-classified as documentation gaps (not implementation dependencies). Both are
-now resolved by commits included in the merged base, so neither is a remaining
-current gap on this branch:
-
-- At `34172a7`, [`docs/authoring-guide.md`](../authoring-guide.md), lines
-  30-31 described use cases as actor goals, preconditions, actions, and
-  outcomes—the removed scenario model rather than the required `behaviors`
-  membership list. Commit `98ef5e7` replaces that guidance with the current
-  use-case shape and explicitly rejects `given`, `when`, `then`, and
-  `otherwise`.
-- At `34172a7`, [`docs/language-reference.md`](../language-reference.md),
-  lines 67-75 listed `reactions` and `emits` as valid feature fields. Commit
-  `98ef5e7` removes both from the feature field list. The current list contains
-  only `purpose`, `actors`, `rules`, `use_cases`, `behaviors`, `experience`,
-  `related_to`, and `architecture`.
 
 ## Superseded historical specifications (not current documentation gaps)
 
