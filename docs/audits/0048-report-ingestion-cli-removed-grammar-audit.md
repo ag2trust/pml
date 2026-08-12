@@ -112,6 +112,12 @@ the runtime acceptance surface above.
   the removed `.output` obligation paths.
 - [`docs/verification.md`](../verification.md), line 3 says reactions resolve
   into stable obligations.
+- [`docs/specs/0003-product-state.md`](../specs/0003-product-state.md), lines
+  22-31 is an approved, non-superseded stable-obligations section that says
+  reactions compile into independently addressable obligation paths. Its
+  repository-boundary and sync-execution sections have later replacements, but
+  that does not supersede this stable-obligations statement; it is therefore a
+  current documentation defect.
 
 [`docs/specs/0009-behavior-units-and-outputs.md`](../specs/0009-behavior-units-and-outputs.md)
 also contains the old terms and paths, but it is a superseded historical design,
