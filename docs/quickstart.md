@@ -86,6 +86,15 @@ bindings:
         probes: {preserve_content: 1.0}
       domains.notes.features.creation.use_cases.create_note:
         agent_judgment: 1.0
+  domains.notes.features.creation.behaviors.note_creation:
+    paths: [src/notes]
+    verification:
+      domains.notes.features.creation.behaviors.note_creation.trigger:
+        agent_judgment: 1.0
+      domains.notes.features.creation.behaviors.note_creation.completion:
+        agent_judgment: 1.0
+      domains.notes.features.creation.behaviors.note_creation.outcome:
+        agent_judgment: 1.0
 ```
 
 Paths are interpreted from `sample-product/`, even though the bindings file is in
