@@ -1,9 +1,8 @@
 # Task 46: lock, state, and status compatibility audit
 
-Audit target: the post-PR #21 validator plus PR #22 transition-obligation
-resolver (`d2ccc754d2c9fc2983a5d2eb245736d7def67290`). This checkout is based on
-PR #21; PR #22 is available locally on `feature/transition-obligations`, so the
-findings below inspect that commit without changing it.
+Audit target: the post-PR #21 validator and PR #22 transition-obligation
+resolver (`d2ccc754d2c9fc2983a5d2eb245736d7def67290`). The findings inspect that
+post-#22 implementation without changing it.
 
 ## Result
 
@@ -39,7 +38,8 @@ they do not affect lock resolution, state validation, or status execution.
 
 | File | Evidence | Gap |
 | --- | --- | --- |
-| `README.md:24-27` | Calls 0009 the current behavior/output design, though 0010 is the approved transition model. | Current-status documentation is stale. The lock/status invocation at `README.md:63-90` is otherwise grammar-neutral. |
+| `README.md:6-8,24-27` | The overview still lists `outputs`, `signals`, and `reactions` as PML constructs, and the current-status section calls 0009 the approved behavior/output design rather than the superseding 0010 transition model. | Both the overview and current-status documentation are stale. The lock/status invocation at `README.md:63-90` is otherwise grammar-neutral. |
+| `docs/language-reference.md:22-31,67-133,168-174` | Documents the removed top-level `signals` registry; feature `reactions` and `emits`; behavior `context`, `output`, `reactions`, and `architecture`; and legacy `.output` / `.output.<alternative-id>` obligation IDs. | Stale language and obligation reference. Its lock-source boundary description at `:181-189` is otherwise generic. |
 | `docs/quickstart.md:45-47` | Says behaviors use signals and reactions and have one `output`. | Stale authoring guidance. |
 | `docs/authoring-guide.md:19-37` | Describes `output`, `context`, `reactions`, global `signals`, and `emits`. | Stale authoring guidance. |
 | `docs/verification.md:3-5` | States that rules, reactions, and use cases resolve to obligations. | Stale obligation description; its lock/status boundary text at `:7-20` is otherwise generic. |
