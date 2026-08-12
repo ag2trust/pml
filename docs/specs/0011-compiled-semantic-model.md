@@ -470,21 +470,76 @@ The rules are:
 
 1. Preserve every authored string code point for code point after YAML decoding.
    Do not trim, case-fold, Unicode-normalize, or reflow it.
-2. Preserve authored sequence order in copied lists. Consumers MUST still obey the
-   approved semantics of each list; in particular, use-case behavior order does
-   not imply execution order and condition order does not imply evaluation order.
-3. Sort records originating from ID-keyed authored maps lexically by their local
-   ID. Sort flattened domain, feature, behavior, use-case, and obligation arrays
-   lexically by canonical path or obligation ID.
-4. Sort every derived inverse list lexically by its referenced canonical ID. Sort
-   signal consumers by `(behavior, trigger)`, use-case memberships by
-   `(use_case, behavior)`, and relationships by their endpoint pair.
-5. Sort each symmetric relationship's `endpoints` and `declared_by` arrays
-   lexically. Emit only one relationship record per endpoint pair.
-6. Serialize JSON object keys in Unicode code-point lexical order, use UTF-8
+2. Preserve authored sequence order in every array copied from an authored YAML
+   sequence. The exhaustive set is:
+   `vocabulary[].forbidden_synonyms`, `concepts[].states`, `features[].actors`,
+   `features[].related_to`, `features[].architecture`,
+   `features[].experience.surfaces[].contains`,
+   `features[].experience.surfaces[].accessibility`,
+   `features[].experience.surfaces[].responsive_behavior`,
+   `features[].experience.surfaces[].states[].statements`,
+   `behaviors[].conditions.statements`, and `use_cases[].behaviors`. The
+   `conditions` and `use_case` obligation definitions preserve the same source
+   sequence order. Consumers MUST still obey the approved semantics of each list;
+   in particular, use-case behavior order does not imply execution order and
+   condition order does not imply evaluation order.
+3. Sort every array materialized from an ID-keyed authored map by the record key
+   shown below. This rule applies recursively and does not depend on traversal or
+   YAML mapping order:
+
+   | Array | Sort key |
+   | --- | --- |
+   | top-level `vocabulary` | `term` |
+   | top-level `actors` | `id` |
+   | top-level `concepts` | `id` |
+   | top-level `architecture` | `path` |
+   | top-level `domains` | `path` |
+   | top-level `features` | `path` |
+   | top-level `behaviors` | `path` |
+   | top-level `use_cases` | `path` |
+   | top-level `signals` | `id` |
+   | `experience.surfaces` | surface `id` |
+   | `experience.surfaces[].states` | state `id` |
+   | `trigger.cases` | alternative `id` |
+   | `outcome.cases` | alternative `id` |
+   | `behaviors[].failures` | failure `id` |
+   | top-level `obligations` | obligation `id` |
+
+4. Sort every array of references or records derived from maps, inverse indexes,
+   or normalization by the exact key below:
+
+   | Array | Sort key |
+   | --- | --- |
+   | `project.rule_obligations` | obligation ID |
+   | `project.domains` | domain path |
+   | `architecture[].constraint_obligations` | obligation ID |
+   | `architecture[].referenced_by` | feature path |
+   | `domains[].rule_obligations` | obligation ID |
+   | `domains[].features` | feature path |
+   | `features[].rule_obligations` | obligation ID |
+   | `features[].use_cases` | use-case path |
+   | `features[].behaviors` | behavior path |
+   | `behaviors[].rule_obligations` | obligation ID |
+   | `behaviors[].use_cases` | use-case path |
+   | `signals[].consumers` | tuple `(behavior, trigger)` |
+   | top-level `relationships` | tuple `(endpoints[0], endpoints[1])` |
+   | top-level `use_case_memberships` | tuple `(use_case, behavior)` |
+   | `completion` obligation `definition.outcomes` | obligation ID |
+   | `completion` obligation `definition.failures` | obligation ID |
+   | `outcome_exclusivity` obligation `definition.alternatives` | obligation ID |
+
+   The authored reference arrays named in rule 2 retain authored order instead;
+   this table does not reorder them merely because their entries are references.
+5. Sort each symmetric relationship's two `endpoints` lexically before using the
+   endpoint tuple as its identity and sort `declared_by` lexically by semantic
+   path. Emit only one relationship record per endpoint pair.
+6. These rules exhaust every array in version 1. A future format change that adds
+   an array MUST assign it either source-sequence preservation or an explicit total
+   sort key before that format version is approved.
+7. Serialize JSON object keys in Unicode code-point lexical order, use UTF-8
    without ASCII escaping, use two-space indentation, omit trailing whitespace,
    and end the document with one line feed.
-7. Do not include timestamps, source paths, machine paths, random identifiers,
+8. Do not include timestamps, source paths, machine paths, random identifiers,
    generated state, or environment-dependent values.
 
 Lexical ordering compares Unicode scalar values without locale-sensitive
