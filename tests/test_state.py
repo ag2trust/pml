@@ -101,10 +101,15 @@ def test_obligations_have_stable_ids() -> None:
     assert [item.id for item in obligations] == [
         "domains.notes.features.creation.rules.preserve_content",
         "domains.notes.features.creation.use_cases.create_note",
+        "domains.notes.features.creation.behaviors.note_creation.conditions",
+        "domains.notes.features.creation.behaviors.note_creation.trigger",
+        "domains.notes.features.creation.behaviors.note_creation.completion",
+        "domains.notes.features.creation.behaviors.note_creation.outcome",
+        "domains.notes.features.creation.behaviors.note_creation.failures.rejected",
     ]
 
 
-def test_direct_output_has_exact_fully_qualified_obligation_id() -> None:
+def test_direct_transition_has_exact_fully_qualified_obligation_ids() -> None:
     document, diagnostics = load_document(
         ROOT / "examples" / "behavior-direct-output.pml.yaml"
     )
@@ -113,12 +118,15 @@ def test_direct_output_has_exact_fully_qualified_obligation_id() -> None:
 
     obligations = list(enumerate_obligations(document))
     assert [item.id for item in obligations] == [
-        "domains.email.features.triage.behaviors.importance_decision.output"
+        "domains.email.features.triage.behaviors.importance_decision.conditions",
+        "domains.email.features.triage.behaviors.importance_decision.trigger",
+        "domains.email.features.triage.behaviors.importance_decision.completion",
+        "domains.email.features.triage.behaviors.importance_decision.outcome",
     ]
-    assert obligations[0].definition["emits"] == ["email_processed"]
+    assert obligations[3].definition["signal"]["id"] == "email_processed"
 
 
-def test_one_of_output_has_exact_fully_qualified_obligation_ids() -> None:
+def test_alternative_transition_has_exact_fully_qualified_obligation_ids() -> None:
     document, diagnostics = load_document(
         ROOT / "examples" / "behavior-one-of-output.pml.yaml"
     )
@@ -127,18 +135,24 @@ def test_one_of_output_has_exact_fully_qualified_obligation_ids() -> None:
 
     obligations = list(enumerate_obligations(document))
     assert [item.id for item in obligations] == [
-        "domains.email.features.triage.behaviors.importance_decision.output",
-        "domains.email.features.triage.behaviors.importance_decision.output.decision",
-        "domains.email.features.triage.behaviors.importance_decision.output.processing_failure",
+        "domains.email.features.triage.behaviors.importance_decision.conditions",
+        "domains.email.features.triage.behaviors.importance_decision.trigger.received",
+        "domains.email.features.triage.behaviors.importance_decision.trigger.requested_again",
+        "domains.email.features.triage.behaviors.importance_decision.completion",
+        "domains.email.features.triage.behaviors.importance_decision.outcome",
+        "domains.email.features.triage.behaviors.importance_decision.outcome.important",
+        "domains.email.features.triage.behaviors.importance_decision.outcome.ordinary",
+        "domains.email.features.triage.behaviors.importance_decision.failures.processing_failure",
     ]
-    assert obligations[0].definition == {
-        "one_of": ["decision", "processing_failure"]
+    assert obligations[3].definition == {
+        "outcomes": ["important", "ordinary"],
+        "failures": ["processing_failure"],
     }
-    assert obligations[1].definition["emits"] == ["email_processed"]
-    assert obligations[2].definition["emits"] == ["email_processing_failed"]
+    assert obligations[5].definition["signal"]["id"] == "important_email_processed"
+    assert obligations[7].definition["signal"]["id"] == "email_processing_failed"
 
 
-def test_behavior_output_obligations_are_accepted_by_bindings_schema(
+def test_behavior_transition_obligations_are_accepted_by_bindings_schema(
     tmp_path: Path,
 ) -> None:
     document, diagnostics = load_document(
@@ -206,6 +220,8 @@ def test_product_state_detects_changed_bound_input(tmp_path: Path) -> None:
     assert document is not None
     node_id = "domains.notes.features.creation"
     node = document["domains"]["notes"]["features"]["creation"]
+    behavior_id = f"{node_id}.behaviors.note_creation"
+    behavior = node["behaviors"]["note_creation"]
 
     product = tmp_path / "product"
     owner = tmp_path / "product-pml"
@@ -232,7 +248,14 @@ def test_product_state_detects_changed_bound_input(tmp_path: Path) -> None:
                         "agent_judgment": 1.0
                     },
                 },
-            }
+            },
+            behavior_id: {
+                "paths": ["src/notes.py"],
+                "verification": {
+                    obligation.id: {"agent_judgment": 1.0}
+                    for obligation in enumerate_obligations(document, behavior_id)
+                },
+            },
         },
     }
     (owner / "bindings.yaml").write_text(yaml.safe_dump(bindings, sort_keys=False))
@@ -258,6 +281,22 @@ def test_product_state_detects_changed_bound_input(tmp_path: Path) -> None:
     }
     state_path = state_dir / "creation.state.yaml"
     state_path.write_text(yaml.safe_dump(state, sort_keys=False))
+    behavior_obligations = {
+        obligation.id: {"implemented": "unknown", "evidence": {}}
+        for obligation in enumerate_obligations(document, behavior_id)
+    }
+    behavior_state_path = (
+        state_dir / "creation" / "behaviors" / "note_creation.state.yaml"
+    )
+    behavior_state_path.parent.mkdir(parents=True)
+    behavior_state_path.write_text(yaml.safe_dump({
+        "pml_state": "0.1",
+        "node": behavior_id,
+        "definition_hash": canonical_hash(behavior),
+        "bindings_digest": bindings_digest(bindings),
+        "input_fingerprint": input_fingerprint(product, ["src/notes.py"]),
+        "obligations": behavior_obligations,
+    }, sort_keys=False))
 
     assert validate_product_state(
         product,
@@ -564,7 +603,7 @@ def test_product_state_limits_discovered_generated_state_files(
         product, document, definition_source=manifest
     )
 
-    assert len(loaded) == min(MAX_PRODUCT_STATE_ENTRIES, 2)
+    assert len(loaded) == min(MAX_PRODUCT_STATE_ENTRIES, 3)
     assert [item.code for item in diagnostics] == ["state-limit"]
 
 
