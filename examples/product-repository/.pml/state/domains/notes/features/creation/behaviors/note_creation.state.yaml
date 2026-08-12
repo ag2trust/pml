@@ -1,0 +1,21 @@
+pml_state: "0.1"
+node: domains.notes.features.creation.behaviors.note_creation
+definition_hash: sha256:7598aaa3dce3b2193cdf9c63a291411674df75f5853d75213035847906b87e0d
+bindings_digest: sha256:d24c16a5ec26898ac1d77a0f47aec677bc03c8db6cca1cf745b1efeb3b5b4adb
+input_fingerprint: sha256:ef137bfc1a0b5ac3ba684c458a0f830000cad06e28567759f4b42073b6cb5843
+obligations:
+  domains.notes.features.creation.behaviors.note_creation.conditions:
+    implemented: unknown
+    evidence: {}
+  domains.notes.features.creation.behaviors.note_creation.trigger:
+    implemented: unknown
+    evidence: {}
+  domains.notes.features.creation.behaviors.note_creation.completion:
+    implemented: unknown
+    evidence: {}
+  domains.notes.features.creation.behaviors.note_creation.outcome:
+    implemented: unknown
+    evidence: {}
+  domains.notes.features.creation.behaviors.note_creation.failures.rejected:
+    implemented: unknown
+    evidence: {}

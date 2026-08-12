@@ -9,3 +9,17 @@ bindings:
           preserve_content: 1.0
       domains.notes.features.creation.use_cases.create_note:
         agent_judgment: 1.0
+  domains.notes.features.creation.behaviors.note_creation:
+    paths:
+      - src/notes.txt
+    verification:
+      domains.notes.features.creation.behaviors.note_creation.conditions:
+        agent_judgment: 1.0
+      domains.notes.features.creation.behaviors.note_creation.trigger:
+        agent_judgment: 1.0
+      domains.notes.features.creation.behaviors.note_creation.completion:
+        agent_judgment: 1.0
+      domains.notes.features.creation.behaviors.note_creation.outcome:
+        agent_judgment: 1.0
+      domains.notes.features.creation.behaviors.note_creation.failures.rejected:
+        agent_judgment: 1.0
