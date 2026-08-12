@@ -26,7 +26,6 @@ must not mirror code, framework, repository, service, or infrastructure structur
 | `vocabulary` | no | Canonical terms and forbidden synonyms. |
 | `actors` | no | People, systems, or processes participating in behavior. |
 | `concepts` | no | Meaningful product entities and their semantic states. |
-| `signals` | no | Meaningful product facts connecting behavior. |
 | `rules` | no | Project-wide normative obligations. |
 | `architecture` | no | Owner-approved technical constraints. |
 | `domains` | yes | Product responsibility areas containing features. |
@@ -49,13 +48,8 @@ Each actor has one required `meaning`.
 ### `concepts.<id>`
 
 Each concept has one required `meaning` and may list unordered semantic `states`.
-Rules, use cases, and signals describe valid transitions. Concepts do not declare
+Rules and behaviors describe valid transitions. Concepts do not declare
 storage, classes, tables, or organizational ownership.
-
-### `signals.<id>`
-
-Each signal has one required `meaning`. A signal is a meaningful product fact, not
-a required code event, message, log, queue item, or transport mechanism.
 
 ## Behavioral objects
 
@@ -70,8 +64,7 @@ A feature requires `purpose` and at least one of `rules`, `use_cases`, or
 `behaviors`. It may contain:
 
 ```text
-purpose, actors, rules, use_cases, behaviors, experience, reactions,
-related_to, emits, architecture
+purpose, actors, rules, use_cases, behaviors, experience, related_to, architecture
 ```
 
 Features do not have generic inputs or outputs: those fields tend to restate use
@@ -79,17 +72,35 @@ cases or drift into API design.
 
 ### `behaviors.<id>`
 
-A behavior requires `output` and may contain:
+A behavior is one bounded, independently addressable transition. It requires
+`trigger` and `outcome` and may contain:
 
 ```text
-context, output, rules, reactions, related_to, architecture
+conditions, trigger, outcome, failures, rules, related_to
 ```
 
-Behaviors cannot contain behaviors. `context` is a unique list of one through seven
-descriptive product facts. `output` is either one direct `statement` with optional
-signal `emits`, or a closed `one_of` map with two through seven ID-keyed cases of
-that same shape. Output statements describe observable results and are normative by
-position, so they do not require `MUST` or `MUST NOT`.
+Behaviors cannot contain behaviors or architecture references. `conditions` is an
+optional unique list of one through seven product-state statements that all must
+hold when the trigger occurs. If they do not, the behavior does not apply.
+
+`trigger` is either a direct `statement`, a signal reference, or a closed ID-keyed
+`one_of` map of two through seven such alternatives. Each trigger occurrence
+initiates one evaluation; its alternatives are not globally exclusive.
+
+`outcome` is either one direct successful completion or a closed ID-keyed `one_of`
+map of two through seven mutually exclusive successful completions. Optional
+`failures` is an ID-keyed map of one through seven unsuccessful completions. Every
+initiated evaluation completes exactly one outcome or authored failure. Each direct
+completion requires a local `statement` and may define one inline `signal`.
+Transition statements are normative by position, so they do not require `MUST` or
+`MUST NOT`.
+
+An inline signal has a globally unique `id`, optional `subject`, and required
+`meaning`. Its defining outcome or failure is its authoritative producer. `subject`
+references a declared concept and preserves one subject instance between producer
+and consumers; omit it for a global product occurrence. Signals are meaningful
+product occurrences, not required code events, messages, queues, or transports.
+Signal references in triggers resolve to these inline definitions.
 
 ### `rules.<id>`
 
@@ -101,23 +112,11 @@ The location of a rule determines its scope: top-level, domain, feature, or beha
 
 ### `use_cases.<id>`
 
-A use case contains `actor`, `goal`, `given`, `when`, and `then`; `otherwise` is
-optional. It describes an end-to-end behavioral scenario, not click-by-click UI
-instructions. Rules should not be copied into `then`; scenarios demonstrate rules
-through concrete outcomes.
-
-### `reactions.<id>`
-
-A reaction contains:
-
-```yaml
-on: payment_failed
-statement: Credits MUST NOT be added.
-```
-
-`on` references one signal. `statement` expresses one direct, independently
-verifiable consequence. Multiple consequences are represented as multiple
-ID-keyed reactions referring to the same signal.
+A use case contains `actor`, `goal`, and a unique list of one through seven fully
+qualified behavior paths in `behaviors`. The listed behaviors collectively fulfill
+the goal; the list states membership, not execution order. A use-case goal is independently
+verifiable, so conformance of each behavior alone does not prove the actor can
+accomplish it.
 
 ### `related_to`
 
@@ -125,12 +124,6 @@ ID-keyed reactions referring to the same signal.
 behaviors. It establishes a symmetric behavioral relationship without declaring a
 dependency direction. Tooling treats changes to either node as relevant to the
 other node's verification freshness.
-
-### `emits`
-
-Feature-level `emits` lists declared signal IDs established by a feature. Within a
-behavior, `emits` exists only on its direct output or individual output alternative.
-Those signals are required effects whenever that output completes.
 
 ### `experience`
 
@@ -149,8 +142,8 @@ category, selection, rationale, constraints
 ```
 
 Allowed categories are `database`, `framework`, `gateway`, `provider`,
-`payment_processor`, and `runtime`. Features and behaviors may reference decisions
-bottom-up using `architecture: [decision_id]`.
+`payment_processor`, and `runtime`. Features may reference decisions using
+`architecture: [decision_id]`; behaviors cannot.
 
 A choice belongs here only when replacing it would require explicit owner approval
 even if product behavior remained correct. Architecture may name approved
@@ -162,16 +155,23 @@ Technology existence never proves behavioral conformance.
 `architecture.<decision_id>.constraints.<constraint_id>`. Their bindings belong in
 the `architecture` map of the owner-controlled bindings resolved by `pml.lock`, and
 their generated state belongs under `.pml/architecture/`; they never contribute to
-product status. Each decision must be referenced by a feature or behavior. There
+product status. Each decision must be referenced by a feature. There
 are no `applies_to`, `supports`, inline, or recursive architecture constructs.
 
 ## Obligations and verification
 
 An **obligation** is the tooling term for one resolved, independently verifiable
-product constraint. It is not an authored PML section. Rules, reactions, use-case
-outcomes, and behavior outputs resolve into stable obligation paths. A direct
-output resolves at `<behavior-id>.output`; a `one_of` output also resolves one
-alternative obligation at `<behavior-id>.output.<alternative-id>` for each case.
+product constraint. It is not an authored PML section. Rules, use-case goals, and
+behavior transitions resolve into stable obligation paths. Conditions resolve at
+`<behavior-id>.conditions`; a direct trigger resolves at `<behavior-id>.trigger`;
+and each trigger alternative resolves at
+`<behavior-id>.trigger.<alternative-id>`. Every behavior also resolves one
+completion-exclusivity obligation at `<behavior-id>.completion`. A direct outcome
+resolves at `<behavior-id>.outcome`; an `outcome.one_of` also resolves successful
+alternative exclusivity there and one alternative obligation at
+`<behavior-id>.outcome.<alternative-id>` for each case. Each failure resolves at
+`<behavior-id>.failures.<failure-id>`. A completion signal is verified as part of
+its completion obligation, not as a separate obligation.
 
 Definitions state behavior. External bindings select deterministic probes, agentic
 verification, or human attestation and assign their coverage. Generated state records

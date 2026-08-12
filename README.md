@@ -3,8 +3,8 @@
 Product Manifest Language (PML) is a small, opinionated, declarative language for
 describing what a software product is and what it must do.
 
-PML captures product concepts, actors, features, behaviors, outputs, rules, use cases,
-signals, reactions, relationships, experiences, and selected owner-mandated
+PML captures product concepts, actors, features, behavior transitions, rules, use cases,
+optional completion signals, relationships, experiences, and selected owner-mandated
 architecture without prescribing code organization, APIs, database schemas, or tests.
 
 The intended workflow is:
@@ -21,10 +21,9 @@ PML manifest
 
 ## Current status
 
-The 0.1 language MVP is under implementation. The approved behavior and output
-design is in
-[`docs/specs/0009-behavior-units-and-outputs.md`](docs/specs/0009-behavior-units-and-outputs.md),
-which supersedes the component model in the original language design.
+The 0.1 language MVP is under implementation. The owner-approved behavior
+transition grammar is in
+[`docs/specs/0010-behavior-transition-model.md`](docs/specs/0010-behavior-transition-model.md).
 
 ## Validate a manifest
 
@@ -146,6 +145,7 @@ pml architecture-status definition.pml.yaml product/
 - [Language normalization](docs/specs/0004-language-normalization.md) — approved canonical terms and removals.
 - [Bindings boundary](docs/specs/0005-bindings-boundary.md) — owner policy, lock pins, and product-local state.
 - [Architecture decisions](docs/specs/0006-architecture-decisions.md) — approved registry and separate conformance semantics.
+- [Behavior transition model](docs/specs/0010-behavior-transition-model.md) — approved transition grammar and migration guidance.
 
 Examples:
 
