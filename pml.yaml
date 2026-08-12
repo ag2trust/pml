@@ -38,21 +38,22 @@ domains:
           invalid_definition_has_diagnostics:
             statement: Invalid definitions MUST identify each detected violation.
 
+        behaviors:
+          definition_validation:
+            trigger:
+              statement: An Authoring Agent submits a PML definition for validation.
+            outcome:
+              statement: The accepted definition uses canonical constructs and every reference resolves.
+            failures:
+              invalid_definition:
+                statement: The definition is rejected and each detected violation is identified precisely.
+
         use_cases:
           define_product:
             actor: authoring_agent
             goal: Convert agreed product intent into a valid PML definition.
-            given:
-              - The Owner has expressed a product goal.
-            when:
-              - The Authoring Agent writes the product definition.
-            then:
-              - The definition uses only canonical language constructs.
-              - Every reference resolves to a declared semantic identifier.
-              - Validation reports ambiguity and missing information.
-            otherwise:
-              - The invalid definition is rejected.
-              - Validation identifies each violation precisely.
+            behaviors:
+              - domains.language.features.definition_authoring.behaviors.definition_validation
       conformance_monitoring:
         purpose: Determine whether a product continues to satisfy its approved definition.
 
@@ -72,18 +73,21 @@ domains:
           failed_conformance_has_gap:
             statement: Failed conformance MUST produce an evidence-backed gap.
 
+        behaviors:
+          conformance_evaluation:
+            conditions:
+              - The product definition is approved.
+            trigger:
+              statement: A Verification Agent evaluates current evidence against the product graph.
+            outcome:
+              statement: Every evaluated obligation receives an evidence-backed typed state.
+            failures:
+              insufficient_evidence:
+                statement: Missing evidence produces an unknown or stale state and is not reported as passing.
+
         use_cases:
           evaluate_conformance:
             actor: verification_agent
             goal: Determine whether the current product conforms to its approved definition.
-            given:
-              - The product definition is approved.
-            when:
-              - Current evidence is evaluated against the product graph.
-            then:
-              - Every evaluated rule receives a typed state.
-              - Every failure includes evidence and affected semantic identifiers.
-              - Parent status is derived from required children and dependencies.
-            otherwise:
-              - Missing evidence produces an unknown or stale state.
-              - Missing evidence is not reported as passing.
+            behaviors:
+              - domains.language.features.conformance_monitoring.behaviors.conformance_evaluation

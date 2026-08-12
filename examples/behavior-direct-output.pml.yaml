@@ -1,13 +1,13 @@
 pml: "0.1-draft"
 
 project:
-  id: direct_output_sample
-  name: Direct Output Sample
-  purpose: Demonstrate one complete behavior output.
+  id: direct_outcome_sample
+  name: Direct Outcome Sample
+  purpose: Demonstrate one complete behavior outcome.
 
-signals:
-  email_processed:
-    meaning: An inbound email has received a complete importance decision.
+concepts:
+  inbound_email:
+    meaning: A received email awaiting an importance decision.
 
 domains:
   email:
@@ -17,9 +17,13 @@ domains:
         purpose: Classify inbound email by importance.
         behaviors:
           importance_decision:
-            context:
-              - The inbound email content and sender.
-            output:
+            conditions:
+              - The inbound email has content and a sender.
+            trigger:
+              statement: The product receives an inbound email for triage.
+            outcome:
               statement: One complete importance decision classifying the inbound email as important or ordinary.
-              emits:
-                - email_processed
+              signal:
+                id: email_processed
+                subject: inbound_email
+                meaning: An inbound email has received a complete importance decision.

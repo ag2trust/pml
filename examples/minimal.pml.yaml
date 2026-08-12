@@ -20,15 +20,20 @@ domains:
         rules:
           preserve_content:
             statement: THE SYSTEM MUST preserve accepted Note content.
+        behaviors:
+          note_creation:
+            conditions:
+              - The Member is authorized.
+            trigger:
+              statement: The Member submits Note content.
+            outcome:
+              statement: The Note is available in a later session.
+            failures:
+              rejected:
+                statement: The Member receives an actionable explanation and no Note is created.
         use_cases:
           create_note:
             actor: member
             goal: Record information for later use.
-            given:
-              - The Member is authorized.
-            when:
-              - The Member submits Note content.
-            then:
-              - The Note is available in a later session.
-            otherwise:
-              - The Member receives an actionable explanation.
+            behaviors:
+              - domains.notes.features.creation.behaviors.note_creation

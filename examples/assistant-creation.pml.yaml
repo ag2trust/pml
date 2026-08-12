@@ -31,12 +31,6 @@ concepts:
       - paused
       - retired
 
-signals:
-  assistant_created:
-    meaning: A usable Assistant has been created successfully.
-  assistant_paused:
-    meaning: An Assistant has transitioned to paused.
-
 domains:
   assistants:
     purpose: Allow Members to create and operate Assistants.
@@ -46,9 +40,6 @@ domains:
         purpose: Allow a Member to create a usable Assistant.
         actors:
           - member
-
-        emits:
-          - assistant_created
 
         rules:
           ownership:
@@ -62,23 +53,34 @@ domains:
           credentials_not_exposed:
             statement: Credentials MUST NOT be exposed to the browser.
 
+        behaviors:
+          assistant_creation:
+            conditions:
+              - The Member is authenticated and may create another Assistant.
+            trigger:
+              statement: The Member provides valid configuration and requests creation.
+            outcome:
+              statement: The Assistant is created for the Member's Customer and can respond to a message.
+              signal:
+                id: assistant_created
+                subject: assistant
+                meaning: A usable Assistant has been created successfully.
+            failures:
+              rejected:
+                statement: No partial Assistant remains and the Member receives an actionable explanation.
+          created_assistant_visibility:
+            trigger:
+              signal: assistant_created
+            outcome:
+              statement: The created Assistant appears in the Assistant list without a new login.
+
         use_cases:
           create_from_scratch:
             actor: member
             goal: Create and begin using an Assistant.
-            given:
-              - The Member is authenticated.
-              - The Member may create another Assistant.
-            when:
-              - The Member provides valid configuration.
-              - The Member requests creation.
-            then:
-              - The Assistant is created for the Member's Customer.
-              - The Assistant appears in the Assistant list.
-              - The Assistant can respond to a message.
-            otherwise:
-              - No partial Assistant remains.
-              - The Member receives an actionable explanation.
+            behaviors:
+              - domains.assistants.features.creation.behaviors.assistant_creation
+              - domains.assistants.features.creation.behaviors.created_assistant_visibility
         experience:
           surfaces:
             creation_flow:
@@ -94,8 +96,3 @@ domains:
                 failure:
                   - Entered information MUST be preserved.
                   - A retry action MUST be available.
-
-        reactions:
-          created_assistant_appears:
-            on: assistant_created
-            statement: The created Assistant MUST appear without a new login.
