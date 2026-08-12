@@ -6,8 +6,9 @@ compatibility finding, not a language definition.
 
 ## Scope and baseline
 
-The removed behavior grammar is `context`, `output`, `reactions`, `emits`, the
-top-level `signals` registry, and use-case `given`/`when`/`then`/`otherwise`.
+The removed behavior grammar is `context`, `output`, `reactions`, `emits`, and
+behavior-level `architecture`; the top-level `signals` registry and use-case
+`given`/`when`/`then`/`otherwise` are also removed.
 The removed behavior obligation paths include `*.output` and
 `*.reactions.*`. The current resolver instead produces the behavior paths
 `conditions`, `trigger`, `completion`, `outcome`, and `failures.*`.
@@ -32,20 +33,26 @@ reference for every PML 0.1 attribute
 ([`README.md`](../../README.md) lines 137-146). That referenced document still
 instructs authors to use removed grammar: the top-level `signals` registry (lines
 20-32), feature `reactions` and `emits` (lines 67-75), behavior `context`,
-`output`, and `reactions` (lines 80-92), and use-case
+`output`, `reactions`, and `architecture` (lines 80-92), and use-case
 `given`/`when`/`then`/`otherwise` (lines 102-107). It also describes the removed
 `<behavior-id>.output` and alternative `*.output.*` obligation paths (lines
-168-174). Thus the packaged skill's required reference path can direct an author
-to syntax the current validator rejects and to obsolete verification IDs.
+168-174), and elsewhere explicitly permits behaviors to reference architecture
+decisions (lines 151-153 and 165). Thus the packaged skill's required reference
+path can direct an author to syntax the current validator rejects and to obsolete
+verification IDs.
 
 The current behavior schema rejects the cited legacy keys, including `context`,
-`output`, `reactions`, and `emits`, in
+`output`, `reactions`, `emits`, and `architecture`, in
 [`tests/test_behavior_transition_validation.py`](../../tests/test_behavior_transition_validation.py)
 `test_removed_behavior_keys_are_rejected` (lines 90-104). The current obligation
 IDs are instead asserted in [`tests/test_state.py`](../../tests/test_state.py)
-lines 96-152. Updating the pre-existing language reference is follow-up work
-outside this read-only audit; this audit changes neither semantics nor
-implementation.
+lines 96-152. The owner-approved transition specification explicitly makes
+`architecture` invalid at behavior scope and feature-level only
+([`docs/specs/0010-behavior-transition-model.md`](../specs/0010-behavior-transition-model.md)
+lines 210-224); the closed behavior schema likewise omits it while allowing it at
+feature scope ([`schema/pml.schema.json`](../../schema/pml.schema.json) lines
+175-210). Updating the pre-existing language reference is follow-up work outside
+this read-only audit; this audit changes neither semantics nor implementation.
 
 Apart from that indirect reference dependency, no initialization template encodes
 removed grammar or an old obligation path.
