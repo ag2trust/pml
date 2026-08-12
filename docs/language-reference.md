@@ -112,9 +112,9 @@ The location of a rule determines its scope: top-level, domain, feature, or beha
 
 ### `use_cases.<id>`
 
-A use case contains `actor`, `goal`, and a unique non-empty list of fully qualified
-behavior paths in `behaviors`. The listed behaviors collectively fulfill the goal;
-the list states membership, not execution order. A use-case goal is independently
+A use case contains `actor`, `goal`, and a unique list of one through seven fully
+qualified behavior paths in `behaviors`. The listed behaviors collectively fulfill
+the goal; the list states membership, not execution order. A use-case goal is independently
 verifiable, so conformance of each behavior alone does not prove the actor can
 accomplish it.
 

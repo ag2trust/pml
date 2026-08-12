@@ -112,8 +112,8 @@ classes, tables, endpoints, configuration syntax, or topology.
 ## State use-case goals
 
 Use cases remain at feature scope. Each has only an `actor`, a `goal`, and a
-unique non-empty `behaviors` list of fully qualified behavior paths. The listed
-behaviors are members of the actor's end-to-end goal, not ordered steps.
+unique `behaviors` list of one through seven fully qualified behavior paths. The
+listed behaviors are members of the actor's end-to-end goal, not ordered steps.
 
 ```yaml
 use_cases:
