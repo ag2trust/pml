@@ -6,9 +6,11 @@ Baseline: merge commits `a05a6eb` (PR #21) and `8da0345` (PR #22)
 ## Result
 
 There are **no remaining implementation dependencies** in report ingestion or
-CLI output on the removed behavior grammar (`output`, `emits`, `reactions`) or
-its old `.output` obligation paths. The generic obligation consumers now
-resolve the approved transition paths:
+CLI output on the PR #21 removed grammar: behavior `context`, `output`,
+`emits`, `reactions`, and `architecture`; the top-level `signals` registry; or
+use-case `given`, `when`, `then`, and `otherwise` scenario fields. There is
+also no dependency on the old `.output` obligation paths. The generic
+obligation consumers now resolve the approved transition paths:
 
 - `<behavior>.conditions` when conditions are authored;
 - `<behavior>.trigger` or `<behavior>.trigger.<alternative>`;
@@ -51,7 +53,7 @@ delegates its per-node rows to `product_status` (lines 81-112), which enumerates
 the node's current obligations without grammar-specific branching
 ([`src/pml/status.py`](../../src/pml/status.py), lines 147-190). The
 `ingest-report` command delegates to the ingestion function above (lines
-173-205). None formats or accepts `output`, `emits`, `reactions`, or an old
+173-205). None formats or accepts any removed PR #21 grammar or an old
 `.output` path.
 
 Direct command verification produced the transition IDs for both
@@ -103,13 +105,19 @@ the runtime acceptance surface above.
 - [`README.md`](../../README.md), lines 6-7 and 24-27 calls out outputs and
   reactions and points readers to superseded specification 0009 as the current
   design.
-- [`docs/quickstart.md`](../quickstart.md), lines 45-47 instructs readers to
-  use reactions and says every behavior has one output.
-- [`docs/authoring-guide.md`](../authoring-guide.md), lines 25-37 describes
+- [`docs/quickstart.md`](../quickstart.md), lines 29-36 provides the removed
+  use-case `given`, `when`, `then`, and `otherwise` scenario fields; lines
+  45-47 also instruct readers to use reactions and says every behavior has one
+  output.
+- [`docs/authoring-guide.md`](../authoring-guide.md), lines 19-21 describes a
+  behavior's removed `output` and `context`; lines 25-37 further describe
   reaction statements, `output.emits`, and `reactions.on`.
-- [`docs/language-reference.md`](../language-reference.md), lines 67-174
-  presents `output`, `emits`, and `reactions` as valid grammar and documents
-  the removed `.output` obligation paths.
+- [`docs/language-reference.md`](../language-reference.md), lines 20-58
+  presents the removed top-level `signals` registry; lines 80-92 presents
+  removed behavior `context`, `output`, and behavior-level `architecture`;
+  lines 102-107 presents the removed use-case scenario fields; and lines
+  109-174 presents `reactions`, `emits`, and the removed `.output` obligation
+  paths.
 - [`docs/verification.md`](../verification.md), line 3 says reactions resolve
   into stable obligations.
 - [`docs/specs/0003-product-state.md`](../specs/0003-product-state.md), lines
@@ -119,9 +127,30 @@ the runtime acceptance surface above.
   that does not supersede this stable-obligations statement; it is therefore a
   current documentation defect.
 
-[`docs/specs/0009-behavior-units-and-outputs.md`](../specs/0009-behavior-units-and-outputs.md)
-also contains the old terms and paths, but it is a superseded historical design,
-not a separate current-documentation defect. The approved replacement is
-[`docs/specs/0010-behavior-transition-model.md`](../specs/0010-behavior-transition-model.md),
-which defines the current paths at lines 145-167 and removes reactions at lines
-203-208.
+## Superseded historical specifications (not current documentation gaps)
+
+The audit also found the affected terms in approved historical specifications.
+They are cited here to make the inventory complete, but are not classified as
+current documentation defects because specification 0010 explicitly supersedes
+their conflicting transition scope:
+
+- [`docs/specs/0001-language-design.md`](../specs/0001-language-design.md) is
+  normalized by 0004 and has its conflicting behavior, signal, reaction, and
+  use-case scenario grammar superseded by 0010.
+- [`docs/specs/0004-language-normalization.md`](../specs/0004-language-normalization.md),
+  lines 37-50 and 61-65 contains the prior signals, reactions, obligation, and
+  behavior-architecture model; 0010 supersedes the conflicting transition
+  scope.
+- [`docs/specs/0006-architecture-decisions.md`](../specs/0006-architecture-decisions.md),
+  line 21 permits behavior-level `architecture`, but 0010 explicitly supersedes
+  behavior architecture scope.
+- [`docs/specs/0009-behavior-units-and-outputs.md`](../specs/0009-behavior-units-and-outputs.md)
+  contains the old output, signal-registry, reactions, and obligation-path
+  design; 0010 supersedes it where the specifications conflict.
+
+The approved replacement is
+[`docs/specs/0010-behavior-transition-model.md`](../specs/0010-behavior-transition-model.md):
+its scope at lines 8-16 identifies the superseded areas, lines 145-167 define
+the current transition paths and remove the registry/emission model, lines
+203-208 remove reactions, lines 210-224 remove behavior-level architecture, and
+lines 226-254 define the current use-case shape.
