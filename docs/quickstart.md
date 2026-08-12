@@ -16,6 +16,10 @@ actors:
   member:
     meaning: A person authorized to use the product.
 
+concepts:
+  note:
+    meaning: Information recorded by a Member.
+
 domains:
   notes:
     purpose: Allow Members to manage Notes.
@@ -26,14 +30,22 @@ domains:
         rules:
           preserve_content:
             statement: THE SYSTEM MUST preserve accepted Note content.
+        behaviors:
+          note_creation:
+            trigger:
+              statement: An authorized Member submits Note content.
+            outcome:
+              statement: The Note is available in a later session.
+              signal:
+                id: note_created
+                subject: note
+                meaning: A Note has been created.
         use_cases:
           create_note:
             actor: member
             goal: Record information for later use.
-            given: [The Member is authorized.]
-            when: [The Member submits Note content.]
-            then: [The Note is available in a later session.]
-            otherwise: [The Member receives an actionable explanation.]
+            behaviors:
+              - domains.notes.features.creation.behaviors.note_creation
 ```
 
 Validate it with:
@@ -42,9 +54,11 @@ Validate it with:
 pml validate my-product.pml.yaml
 ```
 
-Use behaviors for direct units of observable feature conduct, signals and reactions
-for cross-node consequences, and architecture only for independently owner-mandated
-technical choices. Every behavior has one output, and behaviors do not nest.
+Use behaviors for direct product transitions. Optional signals are defined inline
+on an outcome or failure and can trigger other behaviors. A behavior has required
+`trigger` and `outcome`, optional applicability `conditions`, optional authored
+`failures`, and no nested behaviors. Use cases group behaviors that collectively
+fulfill an actor's goal; their list does not prescribe execution order.
 
 ## Bind an implementation
 
