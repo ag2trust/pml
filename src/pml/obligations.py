@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Iterator
 
 
-OBLIGATION_SECTIONS = ("rules", "use_cases", "reactions")
+OBLIGATION_SECTIONS = ("rules", "use_cases")
 
 
 @dataclass(frozen=True)
@@ -77,33 +77,92 @@ def enumerate_obligations(
     for semantic_id, node in iter_nodes(document):
         if node_id is not None and semantic_id != node_id:
             continue
-        output = node.get("output")
-        if isinstance(output, dict):
-            alternatives = output.get("one_of")
-            if isinstance(alternatives, dict):
+        is_behavior = ".behaviors." in semantic_id
+        if is_behavior:
+            conditions = node.get("conditions")
+            if isinstance(conditions, list) and conditions:
                 yield Obligation(
-                    id=f"{semantic_id}.output",
+                    id=f"{semantic_id}.conditions",
                     node_id=semantic_id,
-                    section="output",
-                    local_id="output",
-                    definition={"one_of": list(alternatives)},
+                    section="conditions",
+                    local_id="conditions",
+                    definition={"all": conditions},
                 )
-                for alternative_id, definition in alternatives.items():
+
+            trigger = node.get("trigger")
+            if isinstance(trigger, dict):
+                alternatives = trigger.get("one_of")
+                if isinstance(alternatives, dict):
+                    for alternative_id, definition in alternatives.items():
+                        yield Obligation(
+                            id=f"{semantic_id}.trigger.{alternative_id}",
+                            node_id=semantic_id,
+                            section="trigger",
+                            local_id=alternative_id,
+                            definition=definition,
+                        )
+                else:
                     yield Obligation(
-                        id=f"{semantic_id}.output.{alternative_id}",
+                        id=f"{semantic_id}.trigger",
                         node_id=semantic_id,
-                        section="output",
-                        local_id=alternative_id,
+                        section="trigger",
+                        local_id="trigger",
+                        definition=trigger,
+                    )
+
+            outcome = node.get("outcome")
+            failures = node.get("failures")
+            if isinstance(outcome, dict):
+                outcome_alternatives = outcome.get("one_of")
+                completion_definition: dict[str, Any] = {
+                    "outcomes": (
+                        list(outcome_alternatives)
+                        if isinstance(outcome_alternatives, dict)
+                        else ["outcome"]
+                    ),
+                    "failures": list(failures) if isinstance(failures, dict) else [],
+                }
+                yield Obligation(
+                    id=f"{semantic_id}.completion",
+                    node_id=semantic_id,
+                    section="completion",
+                    local_id="completion",
+                    definition=completion_definition,
+                )
+                if isinstance(outcome_alternatives, dict):
+                    yield Obligation(
+                        id=f"{semantic_id}.outcome",
+                        node_id=semantic_id,
+                        section="outcome",
+                        local_id="outcome",
+                        definition={"one_of": list(outcome_alternatives)},
+                    )
+                    for alternative_id, definition in outcome_alternatives.items():
+                        yield Obligation(
+                            id=f"{semantic_id}.outcome.{alternative_id}",
+                            node_id=semantic_id,
+                            section="outcome",
+                            local_id=alternative_id,
+                            definition=definition,
+                        )
+                else:
+                    yield Obligation(
+                        id=f"{semantic_id}.outcome",
+                        node_id=semantic_id,
+                        section="outcome",
+                        local_id="outcome",
+                        definition=outcome,
+                    )
+
+            if isinstance(failures, dict):
+                for failure_id, definition in failures.items():
+                    yield Obligation(
+                        id=f"{semantic_id}.failures.{failure_id}",
+                        node_id=semantic_id,
+                        section="failures",
+                        local_id=failure_id,
                         definition=definition,
                     )
-            else:
-                yield Obligation(
-                    id=f"{semantic_id}.output",
-                    node_id=semantic_id,
-                    section="output",
-                    local_id="output",
-                    definition=output,
-                )
         for section in OBLIGATION_SECTIONS:
             for local_id, definition in node.get(section, {}).items():
                 yield Obligation(
