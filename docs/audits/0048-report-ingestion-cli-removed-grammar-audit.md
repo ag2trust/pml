@@ -111,7 +111,15 @@ the runtime acceptance surface above.
   output.
 - [`docs/authoring-guide.md`](../authoring-guide.md), lines 19-21 describes a
   behavior's removed `output` and `context`; lines 25-37 further describe
-  reaction statements, `output.emits`, and `reactions.on`.
+  reaction statements, `output.emits`, and `reactions.on`; and lines 42-49
+  incorrectly direct authors to reference architecture decisions from an
+  affected behavior. Behavior-level `architecture` is removed: the closed
+  behavior schema permits only `conditions`, `trigger`, `outcome`, `failures`,
+  `rules`, and `related_to`
+  ([`schema/pml.schema.json`](../../schema/pml.schema.json), lines 199-210),
+  and [`tests/test_behavior_transition_validation.py`](../../tests/test_behavior_transition_validation.py),
+  lines 91-104 verifies that a behavior `architecture` key is rejected. This
+  is a current documentation defect, not an implementation dependency.
 - [`docs/language-reference.md`](../language-reference.md), lines 20-58
   presents the removed top-level `signals` registry; lines 80-92 presents
   removed behavior `context`, `output`, and behavior-level `architecture`;
