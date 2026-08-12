@@ -153,7 +153,7 @@ current gap on this branch:
   `otherwise`.
 - At `34172a7`, [`docs/language-reference.md`](../language-reference.md),
   lines 67-75 listed `reactions` and `emits` as valid feature fields. Commit
-  `fddf0b8` removes both from the feature field list. The current list contains
+  `98ef5e7` removes both from the feature field list. The current list contains
   only `purpose`, `actors`, `rules`, `use_cases`, `behaviors`, `experience`,
   `related_to`, and `architecture`.
 
