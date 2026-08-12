@@ -21,8 +21,34 @@ Evidence for the replacement paths is
 
 ### Actual defects
 
-None. There is no remaining initialization-template or packaged-skill dependency
-on removed grammar or an old obligation path.
+One concrete indirect packaged-guidance dependency remains. This is a
+documentation defect, not a language-semantics or implementation defect.
+
+The packaged skill requires authors to read the applicable PML language reference
+([`src/pml/resources/skills/pml/SKILL.md`](../../src/pml/resources/skills/pml/SKILL.md)
+line 13), and the repository designates
+[`docs/language-reference.md`](../language-reference.md) as the Language
+reference for every PML 0.1 attribute
+([`README.md`](../../README.md) lines 137-146). That referenced document still
+instructs authors to use removed grammar: the top-level `signals` registry (lines
+20-32), feature `reactions` and `emits` (lines 67-75), behavior `context`,
+`output`, and `reactions` (lines 80-92), and use-case
+`given`/`when`/`then`/`otherwise` (lines 102-107). It also describes the removed
+`<behavior-id>.output` and alternative `*.output.*` obligation paths (lines
+168-174). Thus the packaged skill's required reference path can direct an author
+to syntax the current validator rejects and to obsolete verification IDs.
+
+The current behavior schema rejects the cited legacy keys, including `context`,
+`output`, `reactions`, and `emits`, in
+[`tests/test_behavior_transition_validation.py`](../../tests/test_behavior_transition_validation.py)
+`test_removed_behavior_keys_are_rejected` (lines 90-104). The current obligation
+IDs are instead asserted in [`tests/test_state.py`](../../tests/test_state.py)
+lines 96-152. Updating the pre-existing language reference is follow-up work
+outside this read-only audit; this audit changes neither semantics nor
+implementation.
+
+Apart from that indirect reference dependency, no initialization template encodes
+removed grammar or an old obligation path.
 
 `initialize_project` writes only the PML header/project identity and an empty,
 generic bindings map; it does not author a behavior shape or verification-key
@@ -49,9 +75,10 @@ paths. See
 The packaged skill is intentionally process-oriented and does not enumerate the
 current behavior-transition fields or transition-obligation IDs. Consequently it
 does not independently teach `conditions`/`trigger`/`outcome`/`failures` or the
-new paths. This is a documentation completeness gap only: its instruction to
-consult the applicable language reference prevents the omission from directing
-authors to removed grammar. No change is proposed by this audit.
+new paths. This is a separate documentation-completeness gap. It would be
+non-blocking if the designated reference were current, but the reference defect
+above means the package currently has no safe detailed transition grammar source.
+No language or implementation change is proposed by this audit.
 
 ### Already-covered generic obligation consumers (not findings)
 
