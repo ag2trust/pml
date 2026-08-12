@@ -10,9 +10,11 @@ enumeration, and downstream inspection tools.
 
 This specification does not change the PML language. It uses the behavior,
 transition, signal, relationship, use-case, and obligation semantics approved in
-[0010](0010-behavior-transition-model.md) exactly. It does not authorize schema,
-validator, compiler, command, formatter, bindings, probe, lock, state, or web UI
-implementation before owner approval.
+[0010](0010-behavior-transition-model.md) exactly. It also proposes the Unicode
+scalar-string loading precondition required for deterministic UTF-8 tooling; that
+precondition is input well-formedness, not product meaning. It does not authorize
+schema, validator, compiler, command, formatter, bindings, probe, lock, state, or
+web UI implementation before owner approval.
 
 ## Purpose and authority boundary
 
@@ -41,11 +43,11 @@ approval and validation before a new model may be compiled.
 
 ## Compilation boundary
 
-Compilation operates on the single in-memory document produced by the existing
+Compilation operates on the single in-memory document produced by the
 restricted-YAML loading and modular-document merge rules. The required pipeline is:
 
-1. Load and merge the authored definition without aliases, duplicate keys, or
-   implicit repairs.
+1. Load each authored source without aliases, duplicate keys, Unicode surrogate
+   code points, or implicit repairs, then merge the accepted source fragments.
 2. Apply the exact schema and local language checks approved for the document's
    PML language version.
 3. Resolve declared identities and references against that same in-memory
@@ -64,6 +66,28 @@ never a compiled model and MUST NOT be exposed as one.
 
 The input is validated and compiled as one snapshot. An implementation MUST NOT
 validate one read of a source and compile a later read without validating it again.
+
+### Unicode scalar-string precondition
+
+Every string decoded from YAML MUST consist only of Unicode scalar values:
+U+0000 through U+D7FF or U+E000 through U+10FFFF. This requirement applies to
+every mapping key and string value in every source fragment before modular merge,
+not only to fields later copied into the compiled model.
+
+If a decoded string contains any high or low surrogate code point from U+D800
+through U+DFFF, loading produces an `invalid-unicode-scalar` diagnostic and the
+source is not a valid PML document. This includes a surrogate introduced by a YAML
+escape and adjacent escaped high and low surrogates. Loading MUST NOT replace a
+surrogate, normalize it, discard it, or combine two surrogate code points into one
+supplementary scalar. Authors express a supplementary character as that Unicode
+scalar, directly or through a YAML escape that decodes to the scalar.
+
+The diagnostic identifies the source location and offending code point using an
+ASCII form such as `U+D800`; it MUST NOT reproduce a surrogate code point in
+diagnostic output. This check occurs before schema validation, definition-digest
+encoding, reference resolution, or compiled-model construction. It therefore
+preserves the all-or-nothing result: an accepted document always has well-formed
+UTF-8 and a rejected document never reaches compilation.
 
 ### Invalid input and unresolved references
 
@@ -349,7 +373,9 @@ The `definition_digest` uses the already approved definition-digest algorithm:
 `sha256:` plus the lowercase SHA-256 digest of the validated, merged document's
 UTF-8 JSON encoding with object keys sorted, arrays retained, non-ASCII text
 encoded directly, and no insignificant whitespace. It identifies the authoritative
-input snapshot; it does not make the compiled model authoritative.
+input snapshot; it does not make the compiled model authoritative. The scalar-
+string loading check precedes this encoding, so every diagnostic-free definition
+has a defined digest input.
 
 ### Structural records
 
@@ -645,18 +671,26 @@ structure cannot represent it without changing this contract.
 
 After approval, delivery follows the repository order:
 
-1. Define the version 1 JSON Schema and shared in-memory types.
-2. Refactor reference resolution and stable obligation enumeration to populate the
+1. Add the `invalid-unicode-scalar` restricted-loading diagnostic without changing
+   any other accepted syntax or validation outcome.
+2. Add negative conformance cases for escaped high and low surrogates and adjacent
+   escaped surrogate code points, plus a positive case containing a supplementary
+   Unicode scalar.
+3. Define the version 1 JSON Schema and shared in-memory types.
+4. Refactor reference resolution and stable obligation enumeration to populate the
    model without changing validation outcomes.
-3. Add positive and negative conformance fixtures plus deterministic serialization
+5. Add compiled-model conformance fixtures plus deterministic serialization
    tests. Golden-byte cases MUST cover nested non-empty and empty objects and
    arrays, separator and indentation layout, an authored architecture reference,
    reordered authored maps, equivalent modular input, and authored strings
    containing quotation mark, reverse solidus, solidus, every named control escape,
-   another U+0000–U+001F control, and non-ASCII scalars.
-4. Add `compile --json`, then build `explain`, `graph`, and the future web UI as
+   another U+0000–U+001F control, a basic non-ASCII scalar, and a supplementary
+   scalar.
+6. Add `compile --json`, then build `explain`, `graph`, and the future web UI as
    read-only consumers.
 
 Existing approved definitions and their validation behavior are the compatibility
-oracle. A refactor that changes accepted language, diagnostics, resolved paths, or
-obligation meaning is a semantic change and requires separate owner approval.
+oracle except for the scalar-string loading requirement explicitly proposed here.
+If approved, this specification authorizes that one syntax diagnostic before
+compiled-model delivery; any other change to accepted language, diagnostics,
+resolved paths, or obligation meaning requires separate owner approval.
