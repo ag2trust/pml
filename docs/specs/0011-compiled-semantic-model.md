@@ -97,8 +97,8 @@ The compiled model does not define a second identity system:
 - architecture decisions use `architecture.<decision-id>` and their constraints
   use the approved architecture obligation paths;
 - inline signal IDs remain globally unique IDs; and
-- actor IDs, concept IDs, architecture decision IDs, and vocabulary terms retain
-  their authored global identity categories.
+- actor IDs, concept IDs, and vocabulary terms retain their authored global
+  identity categories.
 
 Every cross-record reference in the model contains the canonical ID of an existing
 record of the required category. Local IDs are included only on the record that
@@ -195,7 +195,7 @@ compiled-feature = {
   behaviors: list[behavior-path],
   experience?: compiled-experience,
   related_to: list[feature-or-behavior-path],
-  architecture: list[architecture-decision-id]
+  architecture: list[architecture-decision-path]
 }
 
 compiled-experience = {
@@ -365,7 +365,10 @@ state maps compile to empty arrays.
 
 Architecture remains separate from product behavior. `referenced_by` is the
 derived inverse of feature `architecture` references and may contain only feature
-paths under the approved transition model. Architecture constraints remain
+paths under the approved transition model. Each authored architecture decision ID
+in a feature's `architecture` sequence resolves to the corresponding
+`architecture.<decision-id>` path in `compiled-feature.architecture`; the compiled
+array retains the authored sequence order. Architecture constraints remain
 architecture obligations and do not become product obligations.
 
 ### Behaviors and transitions
@@ -536,9 +539,8 @@ The rules are:
 6. These rules exhaust every array in version 1. A future format change that adds
    an array MUST assign it either source-sequence preservation or an explicit total
    sort key before that format version is approved.
-7. Serialize JSON object keys in Unicode code-point lexical order, use UTF-8
-   without ASCII escaping, use two-space indentation, omit trailing whitespace,
-   and end the document with one line feed.
+7. Serialize the ordered model with the canonical JSON algorithm below. No other
+   JSON layout or escape spelling conforms to version 1.
 8. Do not include timestamps, source paths, machine paths, random identifiers,
    generated state, or environment-dependent values.
 
@@ -549,6 +551,43 @@ deterministic.
 Authored mappings have no semantic priority based on YAML key position. Authored
 sequences are retained for faithful display, but this retention never adds order
 semantics where the language defines none.
+
+### Canonical JSON encoding
+
+Encode the model recursively at an indentation depth beginning with zero. One
+indentation unit is exactly two U+0020 SPACE characters. The output uses U+000A
+LINE FEED for every line break, contains no U+FEFF byte-order mark, contains no
+trailing spaces, and ends with exactly one line feed after the top-level value.
+
+Emit values as follows:
+
+- The version-1 model's only number is `format_version`, emitted as the single
+  ASCII byte `1`. The model contains no booleans or nulls; absent optional
+  properties are omitted as specified above.
+- An empty object is `{}` and an empty array is `[]`.
+- A non-empty object begins with `{`. For each property in Unicode scalar-value
+  lexical key order, emit a line feed, one indentation unit per child depth, the
+  encoded key string, `: `, and the recursively encoded value. Emit `,` immediately
+  after every property value except the last. After the last property, emit a line
+  feed, the current depth's indentation, and `}`. Thus every property occupies its
+  own line, although a container value continues recursively from the opening `{`
+  or `[` on that property line.
+- A non-empty array follows the same layout with `[` and `]`: emit one element per
+  line at one additional indentation depth and `,` immediately after every element
+  except the last. A container element's opening `{` or `[` appears after that
+  element's indentation on the same line.
+- A string begins and ends with `"`. Process its Unicode scalar values in order.
+  Encode U+0022 QUOTATION MARK as `\"`, U+005C REVERSE SOLIDUS as `\\`, U+0008 as
+  `\b`, U+0009 as `\t`, U+000A as `\n`, U+000C as `\f`, and U+000D as `\r`.
+  Encode every other scalar from U+0000 through U+001F as `\u00xx`, using lowercase
+  hexadecimal digits. Emit every other scalar directly as its UTF-8 byte sequence,
+  including U+002F SOLIDUS and all non-ASCII scalars; do not emit `\/`, surrogate-
+  pair escapes, or optional Unicode escapes.
+
+The punctuation in this algorithm is literal ASCII. There is exactly one space,
+after `:`, between an object key and its value; there are no other insignificant
+spaces. Object keys use the same string encoder as values. Ordering is determined
+before escaping, so alternate spellings cannot affect sort order.
 
 ## Consumer contract
 
@@ -610,7 +649,11 @@ After approval, delivery follows the repository order:
 2. Refactor reference resolution and stable obligation enumeration to populate the
    model without changing validation outcomes.
 3. Add positive and negative conformance fixtures plus deterministic serialization
-   tests.
+   tests. Golden-byte cases MUST cover nested non-empty and empty objects and
+   arrays, separator and indentation layout, an authored architecture reference,
+   reordered authored maps, equivalent modular input, and authored strings
+   containing quotation mark, reverse solidus, solidus, every named control escape,
+   another U+0000–U+001F control, and non-ASCII scalars.
 4. Add `compile --json`, then build `explain`, `graph`, and the future web UI as
    read-only consumers.
 
