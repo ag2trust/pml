@@ -42,6 +42,16 @@ consumers.
    and `README.md:24-26` still points to the superseded output design. This is
    stale overview prose only; it does not configure probes, bindings, reports,
    or command behavior.
+3. `docs/language-reference.md:168-174` still specifies that `reactions`,
+   use-case outcomes, and behavior `outputs` resolve to obligations, including
+   the removed `<behavior-id>.output` and
+   `<behavior-id>.output.<alternative-id>` paths. This is stale reference prose
+   only; the current probe and verification code derives targets from
+   `enumerate_obligations`, not this document.
+4. `docs/specs/0003-product-state.md:22-31` still says that `reactions`
+   compile into independently addressable obligation paths. This is stale
+   state-model prose only; no state, probe, or verification command reads it to
+   resolve an obligation.
 
 ## Explicit non-findings
 
@@ -59,8 +69,7 @@ consumers.
 ## Verification note
 
 Source inspection was performed against `feature/transition-obligations` at
-`d2ccc75`. A focused pytest invocation for probes, state, ingestion, and
-transition-validation tests could not collect in the supplied environment:
-`pytest` used Python 3.14 without the editable `pml` package or `jsonschema`
-installed (`ModuleNotFoundError`). No code was changed to work around that
-environmental gap.
+`d2ccc75`. After the audit report was based on the post-#22 source, the focused
+post-merge compatibility suite passed with `uv run --extra dev pytest -q
+tests/test_probes.py tests/test_state.py tests/test_ingest.py
+tests/test_behavior_transition_validation.py` (`112 passed`).
