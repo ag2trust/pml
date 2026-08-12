@@ -1,6 +1,6 @@
 # Product verification protocol
 
-PML resolves rules, reactions, and use cases into stable obligations. The approved
+PML resolves rules, behavior transitions, and use cases into stable obligations. The approved
 product definition states behavior; owner-controlled bindings assign verification
 coverage; product-local generated state records evidence and derived confidence.
 
