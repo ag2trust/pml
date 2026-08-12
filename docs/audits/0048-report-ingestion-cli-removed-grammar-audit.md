@@ -98,9 +98,11 @@ justify an alias for removed paths.
 
 ## Documentation gaps
 
-The following current user-facing documents still describe removed grammar or
-old obligation paths. These are documentation defects only; they do not alter
-the runtime acceptance surface above.
+The following findings were current user-facing documentation defects at the
+original audit snapshot (PR head `34172a7`). They do not alter the runtime
+acceptance surface above. Later base integration can resolve an item without
+changing this audit's classification; the current-base disposition is recorded
+below.
 
 - [`README.md`](../../README.md), lines 6-7 and 24-27 calls out outputs and
   reactions and points readers to superseded specification 0009 as the current
@@ -134,6 +136,26 @@ the runtime acceptance surface above.
   repository-boundary and sync-execution sections have later replacements, but
   that does not supersede this stable-obligations statement; it is therefore a
   current documentation defect.
+
+### Resolved during later base integration
+
+The following two findings complete the documentation inventory requested by
+review. They were current dependencies at audit head `34172a7`, and are
+classified as documentation gaps (not implementation dependencies). Both are
+now resolved by commits included in the merged base, so neither is a remaining
+current gap on this branch:
+
+- At `34172a7`, [`docs/authoring-guide.md`](../authoring-guide.md), lines
+  30-31 described use cases as actor goals, preconditions, actions, and
+  outcomes—the removed scenario model rather than the required `behaviors`
+  membership list. Commit `98ef5e7` replaces that guidance with the current
+  use-case shape and explicitly rejects `given`, `when`, `then`, and
+  `otherwise`.
+- At `34172a7`, [`docs/language-reference.md`](../language-reference.md),
+  lines 67-75 listed `reactions` and `emits` as valid feature fields. Commit
+  `fddf0b8` removes both from the feature field list. The current list contains
+  only `purpose`, `actors`, `rules`, `use_cases`, `behaviors`, `experience`,
+  `related_to`, and `architecture`.
 
 ## Superseded historical specifications (not current documentation gaps)
 
