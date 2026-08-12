@@ -8,7 +8,7 @@
   "properties": {
     "pml_probe": {"const": "0.1"},
     "probe": {"$ref": "#/$defs/id"},
-    "verifies": {"type": "string", "pattern": "^(?:project\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.(?:rules|use_cases|reactions)\\.[a-z][a-z0-9_]*|\\.behaviors\\.[a-z][a-z0-9_]*\\.(?:(?:rules|reactions)\\.[a-z][a-z0-9_]*|output(?:\\.[a-z][a-z0-9_]*)?))|architecture\\.[a-z][a-z0-9_]*\\.constraints\\.[a-z][a-z0-9_]*)$"},
+    "verifies": {"type": "string", "pattern": "^(?:project\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.(?:rules|use_cases)\\.[a-z][a-z0-9_]*|\\.behaviors\\.[a-z][a-z0-9_]*\\.(?:(?:rules|failures)\\.[a-z][a-z0-9_]*|conditions|completion|trigger(?:\\.[a-z][a-z0-9_]*)?|outcome(?:\\.[a-z][a-z0-9_]*)?))|architecture\\.[a-z][a-z0-9_]*\\.constraints\\.[a-z][a-z0-9_]*)$"},
     "env": {"$ref": "#/$defs/id"},
     "steps": {
       "type": "array",

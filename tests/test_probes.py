@@ -86,7 +86,7 @@ steps:
     assert missing_probe_diagnostics(probes, definition, bindings) == []
 
 
-def test_probes_can_target_behavior_output_obligations(tmp_path: Path) -> None:
+def test_probes_can_target_behavior_transition_obligations(tmp_path: Path) -> None:
     definition, diagnostics = load_document(
         ROOT / "examples" / "behavior-one-of-output.pml.yaml"
     )
@@ -96,32 +96,32 @@ def test_probes_can_target_behavior_output_obligations(tmp_path: Path) -> None:
         "domains.email.features.triage.behaviors.importance_decision"
     )
     targets = [
-        f"{behavior_id}.output",
-        f"{behavior_id}.output.processing_failure",
+        f"{behavior_id}.completion",
+        f"{behavior_id}.failures.processing_failure",
     ]
 
     for index, target in enumerate(targets):
-        probe_path = tmp_path / f"output-{index}.probe.yaml"
+        probe_path = tmp_path / f"transition-{index}.probe.yaml"
         probe_path.write_text(
             f"""\
 pml_probe: "0.1"
-probe: output_{index}
+probe: transition_{index}
 verifies: {target}
 env: staging
 steps:
-  - cli: [email, verify-output]
+  - cli: [email, verify-transition]
     expect: {{exit: 0}}
 """
         )
 
         probes, probe_diagnostics = load_probes(probe_path, definition)
 
-        assert list(probes) == [f"output_{index}"]
+        assert list(probes) == [f"transition_{index}"]
         assert probe_diagnostics == []
 
     legacy_path = tmp_path / "legacy-component.probe.yaml"
     legacy_path.write_text(
-        (tmp_path / "output-0.probe.yaml").read_text().replace(
+        (tmp_path / "transition-0.probe.yaml").read_text().replace(
             ".behaviors.", ".components."
         )
     )
