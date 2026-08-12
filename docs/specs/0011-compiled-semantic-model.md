@@ -11,10 +11,10 @@ enumeration, and downstream inspection tools.
 This specification does not change the PML language. It uses the behavior,
 transition, signal, relationship, use-case, and obligation semantics approved in
 [0010](0010-behavior-transition-model.md) exactly. It also proposes the Unicode
-scalar-string loading precondition required for deterministic UTF-8 tooling; that
-precondition is input well-formedness, not product meaning. It does not authorize
-schema, validator, compiler, command, formatter, bindings, probe, lock, state, or
-web UI implementation before owner approval.
+scalar-string and string-key loading preconditions required for deterministic JSON
+tooling; those preconditions are input well-formedness, not product meaning. It
+does not authorize schema, validator, compiler, command, formatter, bindings,
+probe, lock, state, or web UI implementation before owner approval.
 
 ## Purpose and authority boundary
 
@@ -46,8 +46,9 @@ approval and validation before a new model may be compiled.
 Compilation operates on the single in-memory document produced by the
 restricted-YAML loading and modular-document merge rules. The required pipeline is:
 
-1. Load each authored source without aliases, duplicate keys, Unicode surrogate
-   code points, or implicit repairs, then merge the accepted source fragments.
+1. Load each authored source without aliases, duplicate keys, non-string mapping
+   keys, Unicode surrogate code points, or implicit repairs, then merge the
+   accepted source fragments.
 2. Apply the exact schema and local language checks approved for the document's
    PML language version.
 3. Resolve declared identities and references against that same in-memory
@@ -67,7 +68,15 @@ never a compiled model and MUST NOT be exposed as one.
 The input is validated and compiled as one snapshot. An implementation MUST NOT
 validate one read of a source and compile a later read without validating it again.
 
-### Unicode scalar-string precondition
+### YAML string preconditions
+
+Every YAML mapping key MUST decode to a string. This applies to every mapping at
+every depth, including vocabulary terms, before modular merge or schema
+validation. A key that decodes to a number, boolean, null, sequence, mapping, or
+any other non-string value produces a `non-string-key` loading diagnostic. Loading
+MUST NOT coerce the key to text or insert it into the in-memory document. The
+diagnostic identifies the source location and decoded YAML type without using a
+coerced key as a semantic path.
 
 Every string decoded from YAML MUST consist only of Unicode scalar values:
 U+0000 through U+D7FF or U+E000 through U+10FFFF. This requirement applies to
@@ -369,13 +378,35 @@ The model has these consistency invariants:
   with no obligation inferred from descriptive text, hierarchy, a signal alone,
   or another compiled edge.
 
-The `definition_digest` uses the already approved definition-digest algorithm:
-`sha256:` plus the lowercase SHA-256 digest of the validated, merged document's
-UTF-8 JSON encoding with object keys sorted, arrays retained, non-ASCII text
-encoded directly, and no insignificant whitespace. It identifies the authoritative
-input snapshot; it does not make the compiled model authoritative. The scalar-
-string loading check precedes this encoding, so every diagnostic-free definition
-has a defined digest input.
+The `definition_digest` uses the already approved definition-digest algorithm,
+made fully explicit here for the version 1 byte contract. After complete schema
+and semantic validation, encode the merged definition with this compact canonical
+definition JSON algorithm:
+
+- A valid PML definition contains only objects, arrays, and strings. A value of
+  any other JSON kind has already failed schema validation and MUST NOT be hashed.
+- Encode an object as `{`, its properties, then `}`. Sort properties by their
+  decoded key's Unicode scalar values using the lexical comparison defined below.
+  Encode each property as the canonical encoded key string, `:`, and its recursively
+  encoded value. Separate properties with `,`. Emit no whitespace. The empty object
+  is `{}`.
+- Encode an array as `[`, its recursively encoded elements in authored sequence
+  order, then `]`. Separate elements with `,`. Emit no whitespace. The empty array
+  is `[]`.
+- Encode every key and string value with the exact string algorithm in
+  [Canonical JSON encoding](#canonical-json-encoding): named escapes for quotation
+  mark, reverse solidus, and the five named control characters; lowercase `\u00xx`
+  for other U+0000 through U+001F controls; and direct UTF-8 for every other scalar,
+  including solidus and non-ASCII scalars. No alternative JSON escape is allowed.
+- Encode the top-level object directly as UTF-8 with no byte-order mark, leading or
+  trailing whitespace, or final line feed.
+
+Hash those exact bytes with SHA-256. The field value is `sha256:` followed by the
+lowercase hexadecimal digest. This matches the established definition-digest
+behavior while making it normative across independent compilers. It identifies
+the authoritative input snapshot; it does not make the compiled model
+authoritative. The string-key and scalar-string loading checks precede this
+encoding, so every diagnostic-free definition has a defined digest input.
 
 ### Structural records
 
@@ -671,11 +702,11 @@ structure cannot represent it without changing this contract.
 
 After approval, delivery follows the repository order:
 
-1. Add the `invalid-unicode-scalar` restricted-loading diagnostic without changing
-   any other accepted syntax or validation outcome.
-2. Add negative conformance cases for escaped high and low surrogates and adjacent
-   escaped surrogate code points, plus a positive case containing a supplementary
-   Unicode scalar.
+1. Add the `non-string-key` and `invalid-unicode-scalar` restricted-loading
+   diagnostics without changing any other accepted syntax or validation outcome.
+2. Add negative conformance cases for numeric, boolean, null, sequence, and mapping
+   keys; escaped high and low surrogates; and adjacent escaped surrogate code
+   points. Add a positive case containing a supplementary Unicode scalar.
 3. Define the version 1 JSON Schema and shared in-memory types.
 4. Refactor reference resolution and stable obligation enumeration to populate the
    model without changing validation outcomes.
@@ -685,12 +716,15 @@ After approval, delivery follows the repository order:
    reordered authored maps, equivalent modular input, and authored strings
    containing quotation mark, reverse solidus, solidus, every named control escape,
    another U+0000–U+001F control, a basic non-ASCII scalar, and a supplementary
-   scalar.
+   scalar. A definition-digest golden case MUST independently fix the expected
+   compact input bytes and digest for escape-sensitive authored text including a
+   solidus, line feed, quotation mark, reverse solidus, and non-ASCII scalar.
 6. Add `compile --json`, then build `explain`, `graph`, and the future web UI as
    read-only consumers.
 
 Existing approved definitions and their validation behavior are the compatibility
-oracle except for the scalar-string loading requirement explicitly proposed here.
-If approved, this specification authorizes that one syntax diagnostic before
-compiled-model delivery; any other change to accepted language, diagnostics,
-resolved paths, or obligation meaning requires separate owner approval.
+oracle except for the string-key and scalar-string loading requirements explicitly
+proposed here. If approved, this specification authorizes those two syntax
+diagnostics before compiled-model delivery; any other change to accepted language,
+diagnostics, resolved paths, or obligation meaning requires separate owner
+approval.
