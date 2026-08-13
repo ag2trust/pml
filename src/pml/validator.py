@@ -113,16 +113,23 @@ def _construct_string(loader: UniqueKeyLoader, node: yaml.ScalarNode) -> str:
     return value
 
 
+def _construct_mapping_key(loader: UniqueKeyLoader, node: yaml.Node) -> str:
+    """Construct one YAML mapping key under the scalar-string precondition."""
+
+    key = loader.construct_object(node, deep=False)
+    if not isinstance(key, str):
+        raise _LoadingError(
+            "non-string-key",
+            f"mapping key decodes to YAML {_yaml_type_name(key)}",
+            node.start_mark,
+        )
+    return key
+
+
 def _construct_mapping(loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False) -> dict:
     mapping: dict[str, Any] = {}
     for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        if not isinstance(key, str):
-            raise _LoadingError(
-                "non-string-key",
-                f"mapping key decodes to YAML {_yaml_type_name(key)}",
-                key_node.start_mark,
-            )
+        key = _construct_mapping_key(loader, key_node)
         if key in mapping:
             raise yaml.constructor.ConstructorError(
                 "while constructing a mapping",
@@ -134,10 +141,59 @@ def _construct_mapping(loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bo
     return mapping
 
 
+def _construct_set(loader: UniqueKeyLoader, node: yaml.MappingNode) -> Iterable[set[str]]:
+    """Construct a YAML set while enforcing its mapping-key precondition."""
+
+    result: set[str] = set()
+    yield result
+    for key_node, value_node in node.value:
+        result.add(_construct_mapping_key(loader, key_node))
+        loader.construct_object(value_node)
+
+
+def _construct_pairs(
+    loader: UniqueKeyLoader, node: yaml.SequenceNode, tag_name: str
+) -> Iterable[list[tuple[str, Any]]]:
+    """Construct YAML ordered maps and pairs with string-only keys."""
+
+    result: list[tuple[str, Any]] = []
+    yield result
+    if not isinstance(node, yaml.SequenceNode):
+        raise yaml.constructor.ConstructorError(
+            f"while constructing {tag_name}", node.start_mark,
+            f"expected a sequence, but found {node.id}", node.start_mark,
+        )
+    for subnode in node.value:
+        if not isinstance(subnode, yaml.MappingNode):
+            raise yaml.constructor.ConstructorError(
+                f"while constructing {tag_name}", node.start_mark,
+                f"expected a mapping of length 1, but found {subnode.id}", subnode.start_mark,
+            )
+        if len(subnode.value) != 1:
+            raise yaml.constructor.ConstructorError(
+                f"while constructing {tag_name}", node.start_mark,
+                f"expected a single mapping item, but found {len(subnode.value)} items",
+                subnode.start_mark,
+            )
+        key_node, value_node = subnode.value[0]
+        result.append((_construct_mapping_key(loader, key_node), loader.construct_object(value_node)))
+
+
+def _construct_omap(loader: UniqueKeyLoader, node: yaml.SequenceNode) -> Iterable[list[tuple[str, Any]]]:
+    yield from _construct_pairs(loader, node, "an ordered map")
+
+
+def _construct_yaml_pairs(loader: UniqueKeyLoader, node: yaml.SequenceNode) -> Iterable[list[tuple[str, Any]]]:
+    yield from _construct_pairs(loader, node, "pairs")
+
+
 UniqueKeyLoader.add_constructor(
     yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_mapping
 )
 UniqueKeyLoader.add_constructor("tag:yaml.org,2002:str", _construct_string)
+UniqueKeyLoader.add_constructor("tag:yaml.org,2002:set", _construct_set)
+UniqueKeyLoader.add_constructor("tag:yaml.org,2002:omap", _construct_omap)
+UniqueKeyLoader.add_constructor("tag:yaml.org,2002:pairs", _construct_yaml_pairs)
 
 
 @dataclass(frozen=True)

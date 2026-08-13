@@ -204,6 +204,48 @@ def test_rejects_each_non_string_mapping_key_before_schema_validation(
 @pytest.mark.parametrize(
     "source",
     [
+        "key: !!set {1: null}\n",
+        "key: !!omap [{1: value}]\n",
+        "key: !!pairs [{1: value}]\n",
+    ],
+)
+def test_rejects_non_string_keys_in_standard_yaml_collection_tags(
+    source: str, tmp_path: Path
+) -> None:
+    manifest = tmp_path / "non-string-key-tagged.pml.yaml"
+    manifest.write_text(source)
+
+    document, diagnostics = load_document(manifest)
+
+    assert document is None
+    assert len(diagnostics) == 1
+    assert diagnostics[0].code == "non-string-key"
+    assert "integer" in diagnostics[0].message
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "key: !!set {name: null}\n",
+        "key: !!omap [{name: value}]\n",
+        "key: !!pairs [{name: value}]\n",
+    ],
+)
+def test_accepts_string_keys_in_standard_yaml_collection_tags(
+    source: str, tmp_path: Path
+) -> None:
+    manifest = tmp_path / "string-key-tagged.pml.yaml"
+    manifest.write_text(source)
+
+    document, diagnostics = load_document(manifest)
+
+    assert diagnostics == []
+    assert document is not None
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
         'key: "\\uD800"\n',
         'key: "\\uDFFF"\n',
         'key: "\\uD800\\uDC00"\n',
