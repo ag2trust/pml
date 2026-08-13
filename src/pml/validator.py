@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date, datetime
 import copy
 import json
@@ -13,7 +12,8 @@ from typing import Any, Iterable
 from jsonschema import Draft202012Validator
 import yaml
 
-from pml.obligations import iter_nodes
+from pml.diagnostics import Diagnostic
+from pml.resolver import resolve_references
 
 
 AMBIGUOUS_WORDS = (
@@ -202,16 +202,6 @@ UniqueKeyLoader.add_constructor("tag:yaml.org,2002:omap", _construct_omap)
 UniqueKeyLoader.add_constructor("tag:yaml.org,2002:pairs", _construct_yaml_pairs)
 
 
-@dataclass(frozen=True)
-class Diagnostic:
-    path: str
-    code: str
-    message: str
-
-    def format(self) -> str:
-        return f"{self.path}: [{self.code}] {self.message}"
-
-
 def _schema() -> dict[str, Any]:
     schema_path = Path(__file__).resolve().parents[2] / "schema" / "pml.schema.json"
     return json.loads(schema_path.read_text())
@@ -269,53 +259,6 @@ def _is_transition_text(parts: tuple[Any, ...]) -> bool:
         and parts[4] == "behaviors"
         and parts[6] == "conditions"
         and isinstance(parts[7], int)
-    )
-
-
-def _completion_cases(node: dict[str, Any]) -> Iterable[tuple[str, dict[str, Any]]]:
-    """Yield authored outcome and failure paths and definitions."""
-
-    outcome = node.get("outcome")
-    if not isinstance(outcome, dict):
-        outcome = {}
-    alternatives = outcome.get("one_of")
-    if isinstance(alternatives, dict):
-        for alternative_id, definition in alternatives.items():
-            if isinstance(definition, dict):
-                yield f"outcome.one_of.{alternative_id}", definition
-    elif "statement" in outcome:
-        yield "outcome", outcome
-    failures = node.get("failures", {})
-    if isinstance(failures, dict):
-        for failure_id, definition in failures.items():
-            if isinstance(definition, dict):
-                yield f"failures.{failure_id}", definition
-
-
-def _trigger_cases(node: dict[str, Any]) -> Iterable[tuple[str, dict[str, Any]]]:
-    """Yield direct or alternative trigger paths and definitions."""
-
-    trigger = node.get("trigger")
-    if not isinstance(trigger, dict):
-        return
-    alternatives = trigger.get("one_of")
-    if isinstance(alternatives, dict):
-        for alternative_id, definition in alternatives.items():
-            if isinstance(definition, dict):
-                yield f"trigger.one_of.{alternative_id}", definition
-    elif "statement" in trigger or "signal" in trigger:
-        yield "trigger", trigger
-
-
-def _is_behavior_node(node_id: str) -> bool:
-    """Return whether a semantic ID has the canonical behavior path shape."""
-
-    parts = node_id.split(".")
-    return (
-        len(parts) == 6
-        and parts[0] == "domains"
-        and parts[2] == "features"
-        and parts[4] == "behaviors"
     )
 
 
@@ -382,130 +325,33 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                     )
                 )
 
-    actors = document.get("actors", {})
-    actor_ids = set(actors) if isinstance(actors, dict) else set()
-    concepts = document.get("concepts", {})
-    concept_ids = set(concepts) if isinstance(concepts, dict) else set()
-    architecture = document.get("architecture", {})
-    architecture_map = architecture if isinstance(architecture, dict) else {}
-    architecture_ids = set(architecture_map)
-    referenced_architecture: set[str] = set()
-    node_ids = {node_id for node_id, _ in iter_nodes(document)}
-    behavior_ids = {node_id for node_id in node_ids if _is_behavior_node(node_id)}
-    signal_definitions: dict[str, str] = {}
-
-    for node_id, node in iter_nodes(document):
-        if not _is_behavior_node(node_id):
-            continue
-        for completion_path, completion in _completion_cases(node):
-            signal = completion.get("signal")
-            if not isinstance(signal, dict):
-                continue
-            signal_id = signal.get("id")
-            signal_path = f"{node_id}.{completion_path}.signal"
-            if isinstance(signal_id, str):
-                prior = signal_definitions.get(signal_id)
-                if prior is not None:
-                    diagnostics.append(
-                        Diagnostic(
-                            f"{signal_path}.id",
-                            "duplicate-signal",
-                            f"signal '{signal_id}' is already defined at {prior}",
-                        )
-                    )
-                else:
-                    signal_definitions[signal_id] = signal_path
-            subject = signal.get("subject")
-            if isinstance(subject, str) and subject not in concept_ids:
-                diagnostics.append(
-                    Diagnostic(
-                        f"{signal_path}.subject",
-                        "undefined-reference",
-                        f"unknown concept '{subject}'",
-                    )
-                )
-            meaning = signal.get("meaning")
+    resolution = resolve_references(document)
+    for step in resolution.steps:
+        diagnostics.extend(step.diagnostics)
+        if step.kind == "signal":
+            meaning = step.definition.get("meaning")
             if isinstance(meaning, str) and TRANSITION_IMPLEMENTATION_DETAIL.search(meaning):
                 diagnostics.append(
                     Diagnostic(
-                        f"{signal_path}.meaning",
+                        f"{step.path}.meaning",
                         "implementation-detail",
                         "signal meanings must describe product occurrences, not implementation details",
                     )
                 )
-
-    signal_ids = set(signal_definitions)
-    for domain_id, domain in document.get("domains", {}).items():
-        for feature_id, feature in domain.get("features", {}).items():
-            prefix = f"domains.{domain_id}.features.{feature_id}"
-            for actor in feature.get("actors", []):
-                if actor not in actor_ids:
-                    diagnostics.append(Diagnostic(f"{prefix}.actors", "undefined-reference", f"unknown actor '{actor}'"))
-            for use_case_id, use_case in feature.get("use_cases", {}).items():
-                if not isinstance(use_case, dict):
-                    continue
-                actor = use_case.get("actor")
-                if actor and actor not in actor_ids:
-                    diagnostics.append(Diagnostic(f"{prefix}.use_cases.{use_case_id}.actor", "undefined-reference", f"unknown actor '{actor}'"))
-                referenced_behaviors = use_case.get("behaviors", [])
-                if isinstance(referenced_behaviors, list):
-                    for behavior in referenced_behaviors:
-                        if isinstance(behavior, str) and behavior not in behavior_ids:
-                            diagnostics.append(
-                                Diagnostic(
-                                    f"{prefix}.use_cases.{use_case_id}.behaviors",
-                                    "undefined-reference",
-                                    f"unknown behavior '{behavior}'",
-                                )
-                            )
-    for node_id, node in iter_nodes(document):
-        related_nodes = node.get("related_to", [])
-        if isinstance(related_nodes, list):
-            for related in related_nodes:
-                if not isinstance(related, str):
-                    continue
-                if related not in node_ids:
-                    diagnostics.append(Diagnostic(f"{node_id}.related_to", "undefined-reference", f"unknown node '{related}'"))
-                elif related == node_id:
-                    diagnostics.append(Diagnostic(f"{node_id}.related_to", "self-reference", "a node cannot relate to itself"))
-        if _is_behavior_node(node_id):
-            for trigger_path, trigger in _trigger_cases(node):
-                signal = trigger.get("signal")
-                if isinstance(signal, str) and signal not in signal_ids:
-                    diagnostics.append(
-                        Diagnostic(
-                            f"{node_id}.{trigger_path}.signal",
-                            "undefined-reference",
-                            f"unknown signal '{signal}'",
-                        )
-                    )
-        node_architecture = node.get("architecture", [])
-        if not _is_behavior_node(node_id) and isinstance(node_architecture, list):
-            for decision in node_architecture:
-                if not isinstance(decision, str):
-                    continue
-                referenced_architecture.add(decision)
-                if decision not in architecture_ids:
-                    diagnostics.append(Diagnostic(f"{node_id}.architecture", "undefined-reference", f"unknown architecture decision '{decision}'"))
-    for decision_id, decision in architecture_map.items():
-        if not isinstance(decision, dict):
-            continue
-        prefix = f"architecture.{decision_id}"
-        if decision_id not in referenced_architecture:
-            diagnostics.append(Diagnostic(prefix, "unreferenced-architecture", "architecture decision is not referenced by a feature"))
-        for field in ("selection", "rationale"):
-            value = decision.get(field, "")
-            if isinstance(value, str) and ARCHITECTURE_IMPLEMENTATION_DETAIL.search(value):
-                diagnostics.append(Diagnostic(f"{prefix}.{field}", "implementation-detail", "architecture must not name implementation files, functions, classes, tables, endpoints, configuration syntax, or topology"))
-        constraints = decision.get("constraints", {})
-        if not isinstance(constraints, dict):
-            continue
-        for constraint_id, constraint in constraints.items():
-            if not isinstance(constraint, dict):
+        elif step.kind == "architecture":
+            for field in ("selection", "rationale"):
+                value = step.definition.get(field, "")
+                if isinstance(value, str) and ARCHITECTURE_IMPLEMENTATION_DETAIL.search(value):
+                    diagnostics.append(Diagnostic(f"{step.path}.{field}", "implementation-detail", "architecture must not name implementation files, functions, classes, tables, endpoints, configuration syntax, or topology"))
+            constraints = step.definition.get("constraints", {})
+            if not isinstance(constraints, dict):
                 continue
-            statement = constraint.get("statement", "")
-            if isinstance(statement, str) and ARCHITECTURE_IMPLEMENTATION_DETAIL.search(statement):
-                diagnostics.append(Diagnostic(f"{prefix}.constraints.{constraint_id}.statement", "implementation-detail", "architecture must not name implementation files, functions, classes, tables, endpoints, configuration syntax, or topology"))
+            for constraint_id, constraint in constraints.items():
+                if not isinstance(constraint, dict):
+                    continue
+                statement = constraint.get("statement", "")
+                if isinstance(statement, str) and ARCHITECTURE_IMPLEMENTATION_DETAIL.search(statement):
+                    diagnostics.append(Diagnostic(f"{step.path}.constraints.{constraint_id}.statement", "implementation-detail", "architecture must not name implementation files, functions, classes, tables, endpoints, configuration syntax, or topology"))
     return diagnostics
 
 

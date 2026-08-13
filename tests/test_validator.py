@@ -124,6 +124,71 @@ def test_rejects_undefined_actor(tmp_path: Path) -> None:
     assert any(item.code == "undefined-reference" for item in validate_file(manifest))
 
 
+def test_malformed_feature_actors_preserves_reference_diagnostics(
+    tmp_path: Path,
+) -> None:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    feature = document["domains"]["notes"]["features"]["creation"]
+    feature["actors"] = {"missing_actor": True}
+    manifest = tmp_path / "malformed-feature-actors.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    diagnostics = validate_file(manifest)
+
+    assert [
+        (item.path, item.code, item.message)
+        for item in diagnostics
+        if item.path == "domains.notes.features.creation.actors"
+    ] == [
+        (
+            "domains.notes.features.creation.actors",
+            "schema",
+            "{'missing_actor': True} is not of type 'array'",
+        ),
+        (
+            "domains.notes.features.creation.actors",
+            "undefined-reference",
+            "unknown actor 'missing_actor'",
+        ),
+    ]
+
+
+def test_colliding_derived_node_paths_preserve_reference_diagnostics(
+    tmp_path: Path,
+) -> None:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    domain = document["domains"]["notes"]
+    creation = domain["features"]["creation"]
+    creation["behaviors"]["shadow"] = {
+        "trigger": {"statement": "A valid shadow starts."},
+        "outcome": {"statement": "A valid shadow ends."},
+    }
+    domain["features"] = {
+        "creation.behaviors.shadow": {
+            "purpose": "A schema-invalid derived-path collision.",
+            "trigger": {"signal": "missing_signal"},
+            "outcome": {"statement": "The collision ends."},
+        },
+        "creation": creation,
+    }
+    manifest = tmp_path / "colliding-derived-node-paths.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    diagnostics = validate_file(manifest)
+
+    assert [
+        (item.path, item.code, item.message)
+        for item in diagnostics
+        if item.code == "undefined-reference"
+    ] == [
+        (
+            "domains.notes.features.creation.behaviors.shadow.trigger.signal",
+            "undefined-reference",
+            "unknown signal 'missing_signal'",
+        )
+    ]
+
+
 def test_validates_directory_with_path_derived_mounting(tmp_path: Path) -> None:
     (tmp_path / "index.pml.yaml").write_text(
         """\
