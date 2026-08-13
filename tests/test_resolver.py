@@ -259,6 +259,92 @@ def test_resolver_uses_stable_obligation_ids_for_every_signal_producer() -> None
     } <= obligation_ids
 
 
+def test_compiled_model_preserves_resolved_transition_obligations() -> None:
+    document = _document("behavior-one-of-output.pml.yaml")
+    behavior = "domains.email.features.triage.behaviors.importance_decision"
+    resolver = ReferenceResolver(document)
+    resolution = resolve_definition(document)
+    model = resolution.compiled_model
+
+    expected_ids = [
+        f"{behavior}.conditions",
+        f"{behavior}.trigger.received",
+        f"{behavior}.trigger.requested_again",
+        f"{behavior}.completion",
+        f"{behavior}.outcome",
+        f"{behavior}.outcome.important",
+        f"{behavior}.outcome.ordinary",
+        f"{behavior}.failures.processing_failure",
+    ]
+
+    assert resolution.diagnostics == ()
+    assert model is not None
+    assert [
+        obligation.id for obligation in resolver.enumerate_obligations(behavior)
+    ] == expected_ids
+    assert [
+        obligation["id"]
+        for obligation in model["obligations"]
+        if obligation["node"] == behavior
+    ] == sorted(expected_ids)
+    assert model["behaviors"] == [
+        {
+            "id": "importance_decision",
+            "path": behavior,
+            "feature": "domains.email.features.triage",
+            "conditions": {
+                "statements": ["The inbound email has content and a sender."],
+                "obligation": f"{behavior}.conditions",
+            },
+            "trigger": {
+                "kind": "one_of",
+                "cases": [
+                    {
+                        "id": "received",
+                        "obligation": f"{behavior}.trigger.received",
+                        "statement": "The product receives an inbound email for triage.",
+                    },
+                    {
+                        "id": "requested_again",
+                        "obligation": f"{behavior}.trigger.requested_again",
+                        "statement": "A Member requests another importance decision for the inbound email.",
+                    },
+                ],
+            },
+            "completion_obligation": f"{behavior}.completion",
+            "outcome": {
+                "kind": "one_of",
+                "exclusivity_obligation": f"{behavior}.outcome",
+                "cases": [
+                    {
+                        "id": "important",
+                        "obligation": f"{behavior}.outcome.important",
+                        "statement": "The inbound email is classified as important.",
+                        "signal": "important_email_processed",
+                    },
+                    {
+                        "id": "ordinary",
+                        "obligation": f"{behavior}.outcome.ordinary",
+                        "statement": "The inbound email is classified as ordinary.",
+                        "signal": "ordinary_email_processed",
+                    },
+                ],
+            },
+            "failures": [
+                {
+                    "id": "processing_failure",
+                    "obligation": f"{behavior}.failures.processing_failure",
+                    "statement": "A visible failure indicates that a complete importance decision could not be supported.",
+                    "signal": "email_processing_failed",
+                }
+            ],
+            "rule_obligations": [],
+            "related_to": [],
+            "use_cases": [],
+        }
+    ]
+
+
 def test_resolver_preserves_established_reference_diagnostics() -> None:
     resolution = resolve_references(
         _document("behavior-transition-invalid.pml.yaml")
