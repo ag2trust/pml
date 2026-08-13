@@ -1,20 +1,22 @@
 # PML canonical compiled semantic model
 
-Status: Proposed — owner approval required
+Status: Owner approved on 2026-08-13
 
-## Decision requested
+## Approved decision
 
-Approve version 1 of the read-only compiled semantic model defined here as the
+Version 1 of the read-only compiled semantic model defined here is approved as the
 single derived representation shared by PML reference resolution, obligation
 enumeration, and downstream inspection tools.
 
 This specification does not change the PML language. It uses the behavior,
 transition, signal, relationship, use-case, and obligation semantics approved in
-[0010](0010-behavior-transition-model.md) exactly. It also proposes the Unicode
+[0010](0010-behavior-transition-model.md) exactly. It also approves the Unicode
 scalar-string and string-key loading preconditions required for deterministic JSON
 tooling; those preconditions are input well-formedness, not product meaning. It
 does not authorize schema, validator, compiler, command, formatter, bindings,
-probe, lock, state, or web UI implementation before owner approval.
+probe, lock, state, or web UI implementation before owner approval. Owner approval
+was given explicitly on 2026-08-13; implementation may now proceed in the delivery
+order defined below.
 
 ## Purpose and authority boundary
 
@@ -533,7 +535,7 @@ The rules are:
 2. Preserve authored sequence order in every array copied from an authored YAML
    sequence. The exhaustive set is:
    `vocabulary[].forbidden_synonyms`, `concepts[].states`, `features[].actors`,
-   `features[].related_to`, `features[].architecture`,
+   `features[].related_to`, `features[].architecture`, `behaviors[].related_to`,
    `features[].experience.surfaces[].contains`,
    `features[].experience.surfaces[].accessibility`,
    `features[].experience.surfaces[].responsive_behavior`,
@@ -700,7 +702,7 @@ or field meanings requires a new format version and explicit owner approval. A
 language revision also requires a new compiled format version when the current
 structure cannot represent it without changing this contract.
 
-After approval, delivery follows the repository order:
+With owner approval granted, delivery follows the repository order:
 
 1. Add the `non-string-key` and `invalid-unicode-scalar` restricted-loading
    diagnostics without changing any other accepted syntax or validation outcome.
@@ -713,7 +715,8 @@ After approval, delivery follows the repository order:
 5. Add compiled-model conformance fixtures plus deterministic serialization
    tests. Golden-byte cases MUST cover nested non-empty and empty objects and
    arrays, separator and indentation layout, an authored architecture reference,
-   reordered authored maps, equivalent modular input, and authored strings
+   a behavior `related_to` array whose authored target order differs from lexical
+   order, reordered authored maps, equivalent modular input, and authored strings
    containing quotation mark, reverse solidus, solidus, every named control escape,
    another U+0000–U+001F control, a basic non-ASCII scalar, and a supplementary
    scalar. A definition-digest golden case MUST independently fix the expected
@@ -723,8 +726,7 @@ After approval, delivery follows the repository order:
    read-only consumers.
 
 Existing approved definitions and their validation behavior are the compatibility
-oracle except for the string-key and scalar-string loading requirements explicitly
-proposed here. If approved, this specification authorizes those two syntax
-diagnostics before compiled-model delivery; any other change to accepted language,
-diagnostics, resolved paths, or obligation meaning requires separate owner
-approval.
+oracle except for the approved string-key and scalar-string loading requirements
+defined here. This specification authorizes those two syntax diagnostics before
+compiled-model delivery; any other change to accepted language, diagnostics,
+resolved paths, or obligation meaning requires separate owner approval.
