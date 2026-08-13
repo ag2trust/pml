@@ -151,6 +151,7 @@ def _construct_set(loader: UniqueKeyLoader, node: yaml.MappingNode) -> Iterable[
             "while constructing a set", node.start_mark,
             f"expected a mapping node, but found {node.id}", node.start_mark,
         )
+    loader.flatten_mapping(node)
     for key_node, value_node in node.value:
         result.add(_construct_mapping_key(loader, key_node))
         loader.construct_object(value_node)

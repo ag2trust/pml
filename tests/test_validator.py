@@ -257,6 +257,25 @@ def test_tagged_set_with_a_sequence_preserves_yaml_diagnostic(tmp_path: Path) ->
 
 
 @pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("key: !!set {<<: {name: null}}\n", {"name"}),
+        ("key: !!set {=: null}\n", {"="}),
+    ],
+)
+def test_tagged_set_preserves_safe_loader_mapping_flattening(
+    source: str, expected: set[str], tmp_path: Path
+) -> None:
+    manifest = tmp_path / "flattened-tagged-set.pml.yaml"
+    manifest.write_text(source)
+
+    document, diagnostics = load_document(manifest)
+
+    assert diagnostics == []
+    assert document == {"key": expected}
+
+
+@pytest.mark.parametrize(
     "source",
     [
         'key: "\\uD800"\n',
