@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from pml.formats import FORMAT_CHECKER
-from pml.validator import validate_file
+from pml.validator import load_document, validate_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -172,6 +172,91 @@ def test_rejects_conflicting_fragments(tmp_path: Path) -> None:
     (tmp_path / "project.pml.yaml").write_text("purpose: Two.\n")
     diagnostics = validate_file(tmp_path)
     assert any(item.code == "conflict" and "project.purpose" in item.message for item in diagnostics)
+
+
+@pytest.mark.parametrize(
+    ("key", "yaml_type"),
+    [
+        ("1", "integer"),
+        ("1.5", "number"),
+        ("true", "boolean"),
+        ("null", "null"),
+        ("[key]", "sequence"),
+        ("{key: value}", "mapping"),
+    ],
+)
+def test_rejects_each_non_string_mapping_key_before_schema_validation(
+    tmp_path: Path, key: str, yaml_type: str
+) -> None:
+    manifest = tmp_path / "non-string-key.pml.yaml"
+    manifest.write_text(f"outer:\n  {key}: value\n")
+
+    document, diagnostics = load_document(manifest)
+
+    assert document is None
+    assert len(diagnostics) == 1
+    diagnostic = diagnostics[0]
+    assert diagnostic.path == f"{manifest}:2:3"
+    assert diagnostic.code == "non-string-key"
+    assert yaml_type in diagnostic.message
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'key: "\\uD800"\n',
+        'key: "\\uDFFF"\n',
+        'key: "\\uD800\\uDC00"\n',
+        '"\\uD800": value\n',
+        'outer:\n  nested: "\\uDFFF"\n',
+    ],
+)
+def test_rejects_surrogates_in_every_yaml_string(source: str, tmp_path: Path) -> None:
+    manifest = tmp_path / "invalid-unicode.pml.yaml"
+    manifest.write_text(source)
+
+    document, diagnostics = load_document(manifest)
+
+    assert document is None
+    assert len(diagnostics) == 1
+    diagnostic = diagnostics[0]
+    assert diagnostic.code == "invalid-unicode-scalar"
+    assert diagnostic.path.startswith(f"{manifest}:")
+    assert "U+D" in diagnostic.message
+    assert not any(0xD800 <= ord(character) <= 0xDFFF for character in diagnostic.format())
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '"1": value\n',
+        'key: "\\U0001F600"\n',
+        'key: "😀"\n',
+    ],
+)
+def test_accepts_string_keys_and_unicode_scalar_strings(source: str, tmp_path: Path) -> None:
+    manifest = tmp_path / "valid-unicode.pml.yaml"
+    manifest.write_text(source)
+
+    document, diagnostics = load_document(manifest)
+
+    assert diagnostics == []
+    assert document is not None
+
+
+def test_loading_failure_prevents_modular_merge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "index.pml.yaml").write_text("project:\n  id: sample\n")
+    (tmp_path / "invalid.pml.yaml").write_text('key: "\\uD800"\n')
+
+    def unexpected_merge(*args: object, **kwargs: object) -> object:
+        raise AssertionError("invalid YAML must not reach modular merge")
+
+    monkeypatch.setattr("pml.validator._merge", unexpected_merge)
+
+    document, diagnostics = load_document(tmp_path)
+
+    assert document is None
+    assert [diagnostic.code for diagnostic in diagnostics] == ["invalid-unicode-scalar"]
 
 
 def _behavior_manifest(tmp_path: Path, behavior: dict, name: str = "behavior") -> Path:

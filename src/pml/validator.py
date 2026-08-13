@@ -58,6 +58,15 @@ class UniqueKeyLoader(yaml.SafeLoader):
         return super().compose_node(parent, index)
 
 
+class _LoadingError(yaml.YAMLError):
+    """A restricted-YAML well-formedness failure with a source mark."""
+
+    def __init__(self, code: str, message: str, mark: yaml.error.Mark) -> None:
+        self.code = code
+        self.message = message
+        self.mark = mark
+
+
 # PML treats words such as "on" and "no" as strings. Only true/false are booleans.
 UniqueKeyLoader.yaml_implicit_resolvers = copy.deepcopy(
     yaml.SafeLoader.yaml_implicit_resolvers
@@ -74,10 +83,46 @@ UniqueKeyLoader.add_implicit_resolver(
 )
 
 
+def _yaml_type_name(value: Any) -> str:
+    """Return the YAML type name used in loading diagnostics."""
+
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, list):
+        return "sequence"
+    if isinstance(value, dict):
+        return "mapping"
+    return type(value).__name__
+
+
+def _construct_string(loader: UniqueKeyLoader, node: yaml.ScalarNode) -> str:
+    value = loader.construct_scalar(node)
+    for character in value:
+        if 0xD800 <= ord(character) <= 0xDFFF:
+            raise _LoadingError(
+                "invalid-unicode-scalar",
+                f"string contains invalid Unicode scalar U+{ord(character):04X}",
+                node.start_mark,
+            )
+    return value
+
+
 def _construct_mapping(loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False) -> dict:
-    mapping: dict[Any, Any] = {}
+    mapping: dict[str, Any] = {}
     for key_node, value_node in node.value:
         key = loader.construct_object(key_node, deep=deep)
+        if not isinstance(key, str):
+            raise _LoadingError(
+                "non-string-key",
+                f"mapping key decodes to YAML {_yaml_type_name(key)}",
+                key_node.start_mark,
+            )
         if key in mapping:
             raise yaml.constructor.ConstructorError(
                 "while constructing a mapping",
@@ -92,6 +137,7 @@ def _construct_mapping(loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bo
 UniqueKeyLoader.add_constructor(
     yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_mapping
 )
+UniqueKeyLoader.add_constructor("tag:yaml.org,2002:str", _construct_string)
 
 
 @dataclass(frozen=True)
@@ -417,6 +463,9 @@ def _merge(base: Any, extra: Any, source: str, parts: tuple[Any, ...], diagnosti
 def _load(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
     try:
         document = yaml.load(path.read_text(), Loader=UniqueKeyLoader)
+    except _LoadingError as exc:
+        location = f"{path}:{exc.mark.line + 1}:{exc.mark.column + 1}"
+        return None, [Diagnostic(location, exc.code, exc.message)]
     except (OSError, yaml.YAMLError) as exc:
         return None, [Diagnostic(str(path), "yaml", str(exc))]
     if not isinstance(document, dict):
@@ -446,11 +495,22 @@ def load_document(path: Path) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
         sources = sorted(path.rglob(f"*{SUFFIX}"))
         if not sources:
             return None, [Diagnostic(str(path), "structure", f"no *{SUFFIX} files found")]
+        fragments: list[tuple[Path, dict[str, Any]]] = []
         for source in sources:
             fragment, load_diagnostics = _load(source)
             diagnostics.extend(load_diagnostics)
             if fragment is not None:
-                _merge(document, _mounted(path, source, fragment), str(source), (), diagnostics)
+                fragments.append((source, fragment))
+        # These loading preconditions must reject the complete modular input
+        # before any accepted fragment can affect the merged document.  Keep
+        # established diagnostics from other loader failures unchanged.
+        if any(
+            diagnostic.code in {"non-string-key", "invalid-unicode-scalar"}
+            for diagnostic in diagnostics
+        ):
+            return None, diagnostics
+        for source, fragment in fragments:
+            _merge(document, _mounted(path, source, fragment), str(source), (), diagnostics)
     else:
         fragment, load_diagnostics = _load(path)
         diagnostics.extend(load_diagnostics)
