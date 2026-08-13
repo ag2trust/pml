@@ -86,6 +86,67 @@ def test_resolver_emits_complete_model_for_diagnostic_free_definition() -> None:
     }
 
 
+def test_compiled_flattened_records_are_sorted_by_complete_path() -> None:
+    behavior = {
+        "trigger": {"statement": "A request occurs."},
+        "outcome": {"statement": "A visible result occurs."},
+    }
+    document = {
+        "pml": "0.1-draft",
+        "project": {
+            "id": "ordering",
+            "name": "Ordering",
+            "purpose": "Exercise compiled path ordering.",
+        },
+        "actors": {"member": {"meaning": "A participant."}},
+        "domains": {
+            "a": {
+                "purpose": "Normal ancestor.",
+                "features": {
+                    "f": {
+                        "purpose": "Normal feature.",
+                        "behaviors": {"b": behavior},
+                        "use_cases": {
+                            "u": {
+                                "actor": "member",
+                                "goal": "Observe a normal result.",
+                                "behaviors": ["domains.a.features.f.behaviors.b"],
+                            }
+                        },
+                    }
+                },
+            },
+            "a\n": {
+                "purpose": "Line-feed ancestor.",
+                "features": {
+                    "f": {
+                        "purpose": "Line-feed feature.",
+                        "behaviors": {"b": behavior},
+                        "use_cases": {
+                            "u": {
+                                "actor": "member",
+                                "goal": "Observe a line-feed result.",
+                                "behaviors": ["domains.a.features.f.behaviors.b"],
+                            }
+                        },
+                    }
+                },
+            },
+        },
+    }
+
+    resolution = resolve_definition(document)
+    model = resolution.compiled_model
+
+    assert resolution.diagnostics == ()
+    assert model is not None
+    assert list(Draft202012Validator(COMPILED_SCHEMA).iter_errors(model)) == []
+    for collection in ("features", "behaviors", "use_cases"):
+        paths = [record["path"] for record in model[collection]]
+        assert paths == sorted(paths)
+        assert paths[0].startswith("domains.a\n.features")
+
+
 def test_resolver_withholds_model_for_reference_diagnostics() -> None:
     resolution = resolve_references(
         _document("behavior-transition-invalid.pml.yaml")

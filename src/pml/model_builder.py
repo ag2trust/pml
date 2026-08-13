@@ -366,6 +366,15 @@ def _build_compiled_model(
                     }
                 )
 
+    # These collections flatten records from multiple hierarchy levels. Sorting
+    # source keys at each level is not equivalent to sorting the completed path
+    # when an accepted ID has a terminal line feed, because LF sorts before the
+    # path separator. The compiled v1 contract orders the flattened records by
+    # their complete canonical path.
+    features.sort(key=lambda feature: feature["path"])
+    behaviors.sort(key=lambda behavior: behavior["path"])
+    use_cases.sort(key=lambda use_case: use_case["path"])
+
     signal_consumers = _signal_consumers(resolution)
     signals = []
     for signal_id, signal in sorted(resolution.signals.items()):
