@@ -1,0 +1,20 @@
+{
+  "a": {
+    "empty_array": [],
+    "nested": {
+      "values": [
+        "quote \" slash / reverse \\ backspace \b tab \t line \n form \f return \r unit \u001f café 🧭",
+        {
+          "a": "first",
+          "z": "last"
+        }
+      ]
+    }
+  },
+  "z": [
+    {
+      "empty_object": {}
+    },
+    []
+  ]
+}

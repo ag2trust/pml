@@ -209,7 +209,7 @@ class CompiledSignal(TypedDict):
 
 class CompiledRelationship(TypedDict):
     kind: Literal["related_to"]
-    endpoints: tuple[Path, Path]
+    endpoints: list[Path]
     declared_by: list[Path]
 
 

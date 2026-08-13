@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping
 from typing import Any, TYPE_CHECKING, cast
 
 from pml.compiled_model import CompiledModel, CompiledObligation
+from pml.serialization import definition_digest
 
 if TYPE_CHECKING:
     from pml.resolver import Obligation, ReferenceResolver, ResolvedDefinition
@@ -19,15 +18,6 @@ def _mapping(value: Any) -> dict[str, Any]:
 
 def _sequence(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else []
-
-
-def _definition_digest(document: Mapping[str, Any]) -> str:
-    """Return the approved compact canonical digest of one valid definition."""
-
-    encoded = json.dumps(
-        dict(document), ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 def _rule_obligations(node_path: str, definition: Mapping[str, Any]) -> list[str]:
@@ -235,7 +225,7 @@ def _relationships(
     return [
         {
             "kind": "related_to",
-            "endpoints": endpoints,
+            "endpoints": list(endpoints),
             "declared_by": sorted(declarations[endpoints]),
         }
         for endpoints in sorted(declarations)
@@ -406,7 +396,7 @@ def _build_compiled_model(
         "format": "pml.compiled",
         "format_version": 1,
         "language_version": "0.1-draft",
-        "definition_digest": _definition_digest(document),
+        "definition_digest": definition_digest(document),
         "project": {
             "id": project_definition["id"],
             "name": project_definition["name"],
