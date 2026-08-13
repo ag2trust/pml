@@ -1,0 +1,95 @@
+a_work:
+  purpose: Coordinate current work.
+  features:
+    workspace:
+      purpose: Start and finish work records.
+      experience:
+        surfaces:
+          a_workspace:
+            contains: [The primary action., The record status.]
+            states:
+              a_empty: [No record is selected., An invitation is visible.]
+              z_ready: [The ready state is visible., The next action is visible.]
+            accessibility: [Announce the result., Identify the action.]
+            responsive_behavior: [Keep the action visible., Keep the status readable.]
+          z_empty_lists:
+            contains: [A status region.]
+      behaviors:
+        a_start:
+          conditions:
+            - The participant may create a record.
+            - The workspace accepts new records.
+          trigger:
+            one_of:
+              a_request:
+                statement: A participant requests a new record.
+              z_ready:
+                signal: record_ready
+          outcome:
+            one_of:
+              a_saved:
+                statement: The record starts in its draft state.
+              z_saved:
+                statement: The record starts in its ready state.
+                signal:
+                  id: z_started
+                  subject: a_record
+                  meaning: A started record is ready for later work.
+          failures:
+            a_rejected:
+              statement: The participant sees that starting was rejected.
+            z_timeout:
+              statement: The participant sees that starting did not complete in the allowed period.
+          rules:
+            a_behavior_rule:
+              statement: Started work MUST retain its earlier-sorted rule.
+            z_behavior_rule:
+              statement: Started work MUST retain its later-authored rule.
+          related_to:
+            - domains.z_archive.features.archive
+            - domains.a_work.features.workspace.behaviors.z_finish
+        z_finish:
+          trigger:
+            statement: A participant requests finalization.
+          outcome:
+            statement: The accepted record becomes ready.
+            signal:
+              id: record_ready
+              subject: a_record
+              meaning: "A ready occurrence preserves /, café, and 🧭."
+      use_cases:
+        a_flow:
+          actor: zed
+          goal: Start one unit of work.
+          behaviors: [domains.a_work.features.workspace.behaviors.a_start]
+        z_flow:
+          actor: ada
+          goal: Complete work using both behaviors.
+          behaviors:
+            - domains.a_work.features.workspace.behaviors.z_finish
+            - domains.a_work.features.workspace.behaviors.a_start
+      rules:
+        a_feature_rule:
+          statement: The workspace MUST retain its earlier-sorted rule.
+        z_feature_rule:
+          statement: The workspace MUST retain its later-authored rule.
+      actors: [zed, ada]
+      related_to:
+        - domains.z_archive.features.archive
+        - domains.a_work.features.workspace.behaviors.z_finish
+      architecture: [z_runtime, a_store]
+  rules:
+    a_domain_rule:
+      statement: The work domain MUST retain its earlier-sorted rule.
+    z_domain_rule:
+      statement: The work domain MUST retain its later-authored rule.
+
+z_archive:
+  purpose: Preserve historical records.
+  features:
+    archive:
+      purpose: Retain accepted records.
+      architecture: [a_store]
+      rules:
+        retain:
+          statement: An accepted record MUST remain available in the archive.

@@ -1,0 +1,14 @@
+pml: "0.1-draft"
+project:
+  id: digest_fixture
+  name: "Solidus /, line feed\n, quotation \"mark\", reverse solidus \\, and café."
+  purpose: Fix the compact definition byte contract independently.
+domains:
+  digest:
+    purpose: Exercise definition digest serialization.
+    features:
+      fixture:
+        purpose: Provide one digest obligation.
+        rules:
+          fixed:
+            statement: The digest fixture MUST preserve its authored text.

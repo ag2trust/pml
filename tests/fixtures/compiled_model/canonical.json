@@ -1,0 +1,637 @@
+{
+  "actors": [
+    {
+      "id": "ada",
+      "meaning": "The first actor by ID."
+    },
+    {
+      "id": "zed",
+      "meaning": "The last actor by ID."
+    }
+  ],
+  "architecture": [
+    {
+      "category": "database",
+      "constraint_obligations": [
+        "architecture.a_store.constraints.a_recovery",
+        "architecture.a_store.constraints.z_retention"
+      ],
+      "id": "a_store",
+      "path": "architecture.a_store",
+      "rationale": "The selected store preserves durable product records.",
+      "referenced_by": [
+        "domains.a_work.features.workspace",
+        "domains.z_archive.features.archive"
+      ],
+      "selection": "Durable store."
+    },
+    {
+      "category": "runtime",
+      "constraint_obligations": [],
+      "id": "z_runtime",
+      "path": "architecture.z_runtime",
+      "rationale": "The selected runtime preserves the approved operating boundary.",
+      "referenced_by": [
+        "domains.a_work.features.workspace"
+      ],
+      "selection": "Managed runtime."
+    }
+  ],
+  "behaviors": [
+    {
+      "completion_obligation": "domains.a_work.features.workspace.behaviors.a_start.completion",
+      "conditions": {
+        "obligation": "domains.a_work.features.workspace.behaviors.a_start.conditions",
+        "statements": [
+          "The participant may create a record.",
+          "The workspace accepts new records."
+        ]
+      },
+      "failures": [
+        {
+          "id": "a_rejected",
+          "obligation": "domains.a_work.features.workspace.behaviors.a_start.failures.a_rejected",
+          "statement": "The participant sees that starting was rejected."
+        },
+        {
+          "id": "z_timeout",
+          "obligation": "domains.a_work.features.workspace.behaviors.a_start.failures.z_timeout",
+          "statement": "The participant sees that starting did not complete in the allowed period."
+        }
+      ],
+      "feature": "domains.a_work.features.workspace",
+      "id": "a_start",
+      "outcome": {
+        "cases": [
+          {
+            "id": "a_saved",
+            "obligation": "domains.a_work.features.workspace.behaviors.a_start.outcome.a_saved",
+            "statement": "The record starts in its draft state."
+          },
+          {
+            "id": "z_saved",
+            "obligation": "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved",
+            "signal": "z_started",
+            "statement": "The record starts in its ready state."
+          }
+        ],
+        "exclusivity_obligation": "domains.a_work.features.workspace.behaviors.a_start.outcome",
+        "kind": "one_of"
+      },
+      "path": "domains.a_work.features.workspace.behaviors.a_start",
+      "related_to": [
+        "domains.z_archive.features.archive",
+        "domains.a_work.features.workspace.behaviors.z_finish"
+      ],
+      "rule_obligations": [
+        "domains.a_work.features.workspace.behaviors.a_start.rules.a_behavior_rule",
+        "domains.a_work.features.workspace.behaviors.a_start.rules.z_behavior_rule"
+      ],
+      "trigger": {
+        "cases": [
+          {
+            "id": "a_request",
+            "obligation": "domains.a_work.features.workspace.behaviors.a_start.trigger.a_request",
+            "statement": "A participant requests a new record."
+          },
+          {
+            "id": "z_ready",
+            "obligation": "domains.a_work.features.workspace.behaviors.a_start.trigger.z_ready",
+            "signal": "record_ready"
+          }
+        ],
+        "kind": "one_of"
+      },
+      "use_cases": [
+        "domains.a_work.features.workspace.use_cases.a_flow",
+        "domains.a_work.features.workspace.use_cases.z_flow"
+      ]
+    },
+    {
+      "completion_obligation": "domains.a_work.features.workspace.behaviors.z_finish.completion",
+      "failures": [],
+      "feature": "domains.a_work.features.workspace",
+      "id": "z_finish",
+      "outcome": {
+        "case": {
+          "obligation": "domains.a_work.features.workspace.behaviors.z_finish.outcome",
+          "signal": "record_ready",
+          "statement": "The accepted record becomes ready."
+        },
+        "kind": "direct"
+      },
+      "path": "domains.a_work.features.workspace.behaviors.z_finish",
+      "related_to": [],
+      "rule_obligations": [],
+      "trigger": {
+        "case": {
+          "obligation": "domains.a_work.features.workspace.behaviors.z_finish.trigger",
+          "statement": "A participant requests finalization."
+        },
+        "kind": "direct"
+      },
+      "use_cases": [
+        "domains.a_work.features.workspace.use_cases.z_flow"
+      ]
+    }
+  ],
+  "concepts": [
+    {
+      "id": "a_record",
+      "meaning": "A record whose authored state order is retained.",
+      "states": [
+        "ready",
+        "draft"
+      ]
+    },
+    {
+      "id": "z_record",
+      "meaning": "The last concept by ID.",
+      "states": []
+    }
+  ],
+  "definition_digest": "sha256:50b13fc3e9557b58997d1bd88956425eebdfa32c950cc7d5ab6bcebafd6e4482",
+  "domains": [
+    {
+      "features": [
+        "domains.a_work.features.workspace"
+      ],
+      "id": "a_work",
+      "path": "domains.a_work",
+      "purpose": "Coordinate current work.",
+      "rule_obligations": [
+        "domains.a_work.rules.a_domain_rule",
+        "domains.a_work.rules.z_domain_rule"
+      ]
+    },
+    {
+      "features": [
+        "domains.z_archive.features.archive"
+      ],
+      "id": "z_archive",
+      "path": "domains.z_archive",
+      "purpose": "Preserve historical records.",
+      "rule_obligations": []
+    }
+  ],
+  "features": [
+    {
+      "actors": [
+        "zed",
+        "ada"
+      ],
+      "architecture": [
+        "architecture.z_runtime",
+        "architecture.a_store"
+      ],
+      "behaviors": [
+        "domains.a_work.features.workspace.behaviors.a_start",
+        "domains.a_work.features.workspace.behaviors.z_finish"
+      ],
+      "domain": "domains.a_work",
+      "experience": {
+        "surfaces": [
+          {
+            "accessibility": [
+              "Announce the result.",
+              "Identify the action."
+            ],
+            "contains": [
+              "The primary action.",
+              "The record status."
+            ],
+            "id": "a_workspace",
+            "responsive_behavior": [
+              "Keep the action visible.",
+              "Keep the status readable."
+            ],
+            "states": [
+              {
+                "id": "a_empty",
+                "statements": [
+                  "No record is selected.",
+                  "An invitation is visible."
+                ]
+              },
+              {
+                "id": "z_ready",
+                "statements": [
+                  "The ready state is visible.",
+                  "The next action is visible."
+                ]
+              }
+            ]
+          },
+          {
+            "accessibility": [],
+            "contains": [
+              "A status region."
+            ],
+            "id": "z_empty_lists",
+            "responsive_behavior": [],
+            "states": []
+          }
+        ]
+      },
+      "id": "workspace",
+      "path": "domains.a_work.features.workspace",
+      "purpose": "Start and finish work records.",
+      "related_to": [
+        "domains.z_archive.features.archive",
+        "domains.a_work.features.workspace.behaviors.z_finish"
+      ],
+      "rule_obligations": [
+        "domains.a_work.features.workspace.rules.a_feature_rule",
+        "domains.a_work.features.workspace.rules.z_feature_rule"
+      ],
+      "use_cases": [
+        "domains.a_work.features.workspace.use_cases.a_flow",
+        "domains.a_work.features.workspace.use_cases.z_flow"
+      ]
+    },
+    {
+      "actors": [],
+      "architecture": [
+        "architecture.a_store"
+      ],
+      "behaviors": [],
+      "domain": "domains.z_archive",
+      "id": "archive",
+      "path": "domains.z_archive.features.archive",
+      "purpose": "Retain accepted records.",
+      "related_to": [],
+      "rule_obligations": [
+        "domains.z_archive.features.archive.rules.retain"
+      ],
+      "use_cases": []
+    }
+  ],
+  "format": "pml.compiled",
+  "format_version": 1,
+  "language_version": "0.1-draft",
+  "obligations": [
+    {
+      "definition": {
+        "statement": "The durable store MUST expose accepted records after recovery."
+      },
+      "id": "architecture.a_store.constraints.a_recovery",
+      "kind": "architecture_constraint",
+      "node": "architecture.a_store"
+    },
+    {
+      "definition": {
+        "statement": "The durable store MUST retain accepted records."
+      },
+      "id": "architecture.a_store.constraints.z_retention",
+      "kind": "architecture_constraint",
+      "node": "architecture.a_store"
+    },
+    {
+      "definition": {
+        "failures": [
+          "domains.a_work.features.workspace.behaviors.a_start.failures.a_rejected",
+          "domains.a_work.features.workspace.behaviors.a_start.failures.z_timeout"
+        ],
+        "outcomes": [
+          "domains.a_work.features.workspace.behaviors.a_start.outcome.a_saved",
+          "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved"
+        ]
+      },
+      "id": "domains.a_work.features.workspace.behaviors.a_start.completion",
+      "kind": "completion",
+      "node": "domains.a_work.features.workspace.behaviors.a_start"
+    },
+    {
+      "definition": {
+        "statements": [
+          "The participant may create a record.",
+          "The workspace accepts new records."
+        ]
+      },
+      "id": "domains.a_work.features.workspace.behaviors.a_start.conditions",
+      "kind": "conditions",
+      "node": "domains.a_work.features.workspace.behaviors.a_start"
+    },
+    {
+      "definition": {
+        "statement": "The participant sees that starting was rejected."
+      },
+      "id": "domains.a_work.features.workspace.behaviors.a_start.failures.a_rejected",
+      "kind": "failure",
+      "node": "domains.a_work.features.workspace.behaviors.a_start"
+    },
+    {
+      "definition": {
+        "statement": "The participant sees that starting did not complete in the allowed period."
+      },
+      "id": "domains.a_work.features.workspace.behaviors.a_start.failures.z_timeout",
+      "kind": "failure",
+      "node": "domains.a_work.features.workspace.behaviors.a_start"
+    },
+    {
+      "definition": {
+        "alternatives": [
+          "domains.a_work.features.workspace.behaviors.a_start.outcome.a_saved",
+          "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved"
+        ]
+      },
+      "id": "domains.a_work.features.workspace.behaviors.a_start.outcome",
+      "kind": "outcome_exclusivity",
+      "node": "domains.a_work.features.workspace.behaviors.a_start"
+    },
+    {
+      "definition": {
+        "statement": "The record starts in its draft state."
+      },
+      "id": "domains.a_work.features.workspace.behaviors.a_start.outcome.a_saved",
+      "kind": "outcome",
+      "node": "domains.a_work.features.workspace.behaviors.a_start"
+    },
+    {
+      "definition": {
+        "signal": "z_started",
+        "statement": "The record starts in its ready state."
+      },
+      "id": "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved",
+      "kind": "outcome",
+      "node": "domains.a_work.features.workspace.behaviors.a_start"
+    },
+    {
+      "definition": {
+        "statement": "Started work MUST retain its earlier-sorted rule."
+      },
+      "id": "domains.a_work.features.workspace.behaviors.a_start.rules.a_behavior_rule",
+      "kind": "rule",
+      "node": "domains.a_work.features.workspace.behaviors.a_start"
+    },
+    {
+      "definition": {
+        "statement": "Started work MUST retain its later-authored rule."
+      },
+      "id": "domains.a_work.features.workspace.behaviors.a_start.rules.z_behavior_rule",
+      "kind": "rule",
+      "node": "domains.a_work.features.workspace.behaviors.a_start"
+    },
+    {
+      "definition": {
+        "statement": "A participant requests a new record."
+      },
+      "id": "domains.a_work.features.workspace.behaviors.a_start.trigger.a_request",
+      "kind": "trigger",
+      "node": "domains.a_work.features.workspace.behaviors.a_start"
+    },
+    {
+      "definition": {
+        "signal": "record_ready"
+      },
+      "id": "domains.a_work.features.workspace.behaviors.a_start.trigger.z_ready",
+      "kind": "trigger",
+      "node": "domains.a_work.features.workspace.behaviors.a_start"
+    },
+    {
+      "definition": {
+        "failures": [],
+        "outcomes": [
+          "domains.a_work.features.workspace.behaviors.z_finish.outcome"
+        ]
+      },
+      "id": "domains.a_work.features.workspace.behaviors.z_finish.completion",
+      "kind": "completion",
+      "node": "domains.a_work.features.workspace.behaviors.z_finish"
+    },
+    {
+      "definition": {
+        "signal": "record_ready",
+        "statement": "The accepted record becomes ready."
+      },
+      "id": "domains.a_work.features.workspace.behaviors.z_finish.outcome",
+      "kind": "outcome",
+      "node": "domains.a_work.features.workspace.behaviors.z_finish"
+    },
+    {
+      "definition": {
+        "statement": "A participant requests finalization."
+      },
+      "id": "domains.a_work.features.workspace.behaviors.z_finish.trigger",
+      "kind": "trigger",
+      "node": "domains.a_work.features.workspace.behaviors.z_finish"
+    },
+    {
+      "definition": {
+        "statement": "The workspace MUST retain its earlier-sorted rule."
+      },
+      "id": "domains.a_work.features.workspace.rules.a_feature_rule",
+      "kind": "rule",
+      "node": "domains.a_work.features.workspace"
+    },
+    {
+      "definition": {
+        "statement": "The workspace MUST retain its later-authored rule."
+      },
+      "id": "domains.a_work.features.workspace.rules.z_feature_rule",
+      "kind": "rule",
+      "node": "domains.a_work.features.workspace"
+    },
+    {
+      "definition": {
+        "actor": "zed",
+        "behaviors": [
+          "domains.a_work.features.workspace.behaviors.a_start"
+        ],
+        "goal": "Start one unit of work."
+      },
+      "id": "domains.a_work.features.workspace.use_cases.a_flow",
+      "kind": "use_case",
+      "node": "domains.a_work.features.workspace"
+    },
+    {
+      "definition": {
+        "actor": "ada",
+        "behaviors": [
+          "domains.a_work.features.workspace.behaviors.z_finish",
+          "domains.a_work.features.workspace.behaviors.a_start"
+        ],
+        "goal": "Complete work using both behaviors."
+      },
+      "id": "domains.a_work.features.workspace.use_cases.z_flow",
+      "kind": "use_case",
+      "node": "domains.a_work.features.workspace"
+    },
+    {
+      "definition": {
+        "statement": "The work domain MUST retain its earlier-sorted rule."
+      },
+      "id": "domains.a_work.rules.a_domain_rule",
+      "kind": "rule",
+      "node": "domains.a_work"
+    },
+    {
+      "definition": {
+        "statement": "The work domain MUST retain its later-authored rule."
+      },
+      "id": "domains.a_work.rules.z_domain_rule",
+      "kind": "rule",
+      "node": "domains.a_work"
+    },
+    {
+      "definition": {
+        "statement": "An accepted record MUST remain available in the archive."
+      },
+      "id": "domains.z_archive.features.archive.rules.retain",
+      "kind": "rule",
+      "node": "domains.z_archive.features.archive"
+    },
+    {
+      "definition": {
+        "statement": "The product MUST retain the earlier-sorted project rule."
+      },
+      "id": "project.rules.a_rule",
+      "kind": "rule",
+      "node": "project"
+    },
+    {
+      "definition": {
+        "statement": "The product MUST retain the later-authored project rule."
+      },
+      "id": "project.rules.z_rule",
+      "kind": "rule",
+      "node": "project"
+    }
+  ],
+  "project": {
+    "domains": [
+      "domains.a_work",
+      "domains.z_archive"
+    ],
+    "id": "canonical_model",
+    "name": "Canonical Model",
+    "purpose": "Preserve \"quotes\", \\ paths, / solidus, \b backspace, \t tab, \n line feed, \f form feed, \r carriage return, \u001f unit separator, café, and 🧭.",
+    "rule_obligations": [
+      "project.rules.a_rule",
+      "project.rules.z_rule"
+    ]
+  },
+  "relationships": [
+    {
+      "declared_by": [
+        "domains.a_work.features.workspace"
+      ],
+      "endpoints": [
+        "domains.a_work.features.workspace",
+        "domains.a_work.features.workspace.behaviors.z_finish"
+      ],
+      "kind": "related_to"
+    },
+    {
+      "declared_by": [
+        "domains.a_work.features.workspace"
+      ],
+      "endpoints": [
+        "domains.a_work.features.workspace",
+        "domains.z_archive.features.archive"
+      ],
+      "kind": "related_to"
+    },
+    {
+      "declared_by": [
+        "domains.a_work.features.workspace.behaviors.a_start"
+      ],
+      "endpoints": [
+        "domains.a_work.features.workspace.behaviors.a_start",
+        "domains.a_work.features.workspace.behaviors.z_finish"
+      ],
+      "kind": "related_to"
+    },
+    {
+      "declared_by": [
+        "domains.a_work.features.workspace.behaviors.a_start"
+      ],
+      "endpoints": [
+        "domains.a_work.features.workspace.behaviors.a_start",
+        "domains.z_archive.features.archive"
+      ],
+      "kind": "related_to"
+    }
+  ],
+  "signals": [
+    {
+      "consumers": [
+        {
+          "behavior": "domains.a_work.features.workspace.behaviors.a_start",
+          "trigger": "domains.a_work.features.workspace.behaviors.a_start.trigger.z_ready"
+        }
+      ],
+      "id": "record_ready",
+      "meaning": "A ready occurrence preserves /, café, and 🧭.",
+      "producer": {
+        "behavior": "domains.a_work.features.workspace.behaviors.z_finish",
+        "completion": "domains.a_work.features.workspace.behaviors.z_finish.outcome"
+      },
+      "subject": "a_record"
+    },
+    {
+      "consumers": [],
+      "id": "z_started",
+      "meaning": "A started record is ready for later work.",
+      "producer": {
+        "behavior": "domains.a_work.features.workspace.behaviors.a_start",
+        "completion": "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved"
+      },
+      "subject": "a_record"
+    }
+  ],
+  "use_case_memberships": [
+    {
+      "behavior": "domains.a_work.features.workspace.behaviors.a_start",
+      "use_case": "domains.a_work.features.workspace.use_cases.a_flow"
+    },
+    {
+      "behavior": "domains.a_work.features.workspace.behaviors.a_start",
+      "use_case": "domains.a_work.features.workspace.use_cases.z_flow"
+    },
+    {
+      "behavior": "domains.a_work.features.workspace.behaviors.z_finish",
+      "use_case": "domains.a_work.features.workspace.use_cases.z_flow"
+    }
+  ],
+  "use_cases": [
+    {
+      "actor": "zed",
+      "behaviors": [
+        "domains.a_work.features.workspace.behaviors.a_start"
+      ],
+      "feature": "domains.a_work.features.workspace",
+      "goal": "Start one unit of work.",
+      "id": "a_flow",
+      "obligation": "domains.a_work.features.workspace.use_cases.a_flow",
+      "path": "domains.a_work.features.workspace.use_cases.a_flow"
+    },
+    {
+      "actor": "ada",
+      "behaviors": [
+        "domains.a_work.features.workspace.behaviors.z_finish",
+        "domains.a_work.features.workspace.behaviors.a_start"
+      ],
+      "feature": "domains.a_work.features.workspace",
+      "goal": "Complete work using both behaviors.",
+      "id": "z_flow",
+      "obligation": "domains.a_work.features.workspace.use_cases.z_flow",
+      "path": "domains.a_work.features.workspace.use_cases.z_flow"
+    }
+  ],
+  "vocabulary": [
+    {
+      "forbidden_synonyms": [],
+      "meaning": "The first term by scalar-value ordering.",
+      "term": "Alpha"
+    },
+    {
+      "forbidden_synonyms": [
+        "later_term",
+        "earlier_term"
+      ],
+      "meaning": "A basic non-ASCII vocabulary term.",
+      "term": "éclair"
+    }
+  ]
+}
