@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pml.obligations import Obligation, enumerate_architecture_obligations, enumerate_obligations, iter_architecture, iter_nodes, verification_plan
+from pml.obligations import verification_plan
+from pml.resolver import Obligation, enumerate_architecture_obligations, enumerate_obligations, iter_architecture, iter_nodes
 from pml.project_state import (
     LockedBindings,
     architecture_state_root_diagnostics,

@@ -2,13 +2,26 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Literal
 
 from pml.diagnostics import Diagnostic
-from pml.obligations import iter_nodes
+
+
+OBLIGATION_SECTIONS = ("rules", "use_cases")
+
+
+@dataclass(frozen=True)
+class Obligation:
+    """One independently addressable obligation derived from a definition."""
+
+    id: str
+    node_id: str
+    section: str
+    local_id: str
+    definition: dict[str, Any]
 
 
 ResolutionKind = Literal["signal", "feature", "use_case", "node", "architecture"]
@@ -124,6 +137,119 @@ class ReferenceResolver:
     def __init__(self, document: Mapping[str, Any]) -> None:
         self._document = document
 
+    def iter_nodes(self) -> Iterator[tuple[str, dict[str, Any]]]:
+        """Yield every state-bearing rule scope, feature, and direct behavior."""
+
+        if self._document.get("rules"):
+            yield "project", {"rules": self._document["rules"]}
+        for domain_id, domain in _mapping(self._document.get("domains")).items():
+            if not isinstance(domain, dict):
+                continue
+            if domain.get("rules"):
+                yield f"domains.{domain_id}", {"rules": domain["rules"]}
+            for feature_id, feature in _mapping(domain.get("features")).items():
+                if not isinstance(feature, dict):
+                    continue
+                semantic_id = f"domains.{domain_id}.features.{feature_id}"
+                yield semantic_id, feature
+                for behavior_id, behavior in _mapping(feature.get("behaviors")).items():
+                    if isinstance(behavior, dict):
+                        yield f"{semantic_id}.behaviors.{behavior_id}", behavior
+
+    def iter_architecture(self) -> Iterator[tuple[str, dict[str, Any]]]:
+        """Yield independent, flat architecture decision scopes."""
+
+        for decision_id, decision in _mapping(self._document.get("architecture")).items():
+            if isinstance(decision, dict):
+                yield f"architecture.{decision_id}", decision
+
+    def enumerate_obligations(
+        self, node_id: str | None = None
+    ) -> Iterator[Obligation]:
+        """Yield approved stable product obligations in authored traversal order."""
+
+        for semantic_id, node in self.iter_nodes():
+            if node_id is not None and semantic_id != node_id:
+                continue
+            if ".behaviors." in semantic_id:
+                conditions = node.get("conditions")
+                if isinstance(conditions, list) and conditions:
+                    yield Obligation(
+                        f"{semantic_id}.conditions", semantic_id, "conditions",
+                        "conditions", {"all": conditions},
+                    )
+
+                trigger = node.get("trigger")
+                if isinstance(trigger, dict):
+                    alternatives = trigger.get("one_of")
+                    if isinstance(alternatives, dict):
+                        for alternative_id, definition in alternatives.items():
+                            yield Obligation(
+                                f"{semantic_id}.trigger.{alternative_id}", semantic_id,
+                                "trigger", alternative_id, definition,
+                            )
+                    else:
+                        yield Obligation(
+                            f"{semantic_id}.trigger", semantic_id, "trigger",
+                            "trigger", trigger,
+                        )
+
+                outcome = node.get("outcome")
+                failures = node.get("failures")
+                if isinstance(outcome, dict):
+                    alternatives = outcome.get("one_of")
+                    yield Obligation(
+                        f"{semantic_id}.completion", semantic_id, "completion",
+                        "completion", {
+                            "outcomes": list(alternatives)
+                            if isinstance(alternatives, dict) else ["outcome"],
+                            "failures": list(failures)
+                            if isinstance(failures, dict) else [],
+                        },
+                    )
+                    if isinstance(alternatives, dict):
+                        yield Obligation(
+                            f"{semantic_id}.outcome", semantic_id, "outcome",
+                            "outcome", {"one_of": list(alternatives)},
+                        )
+                        for alternative_id, definition in alternatives.items():
+                            yield Obligation(
+                                f"{semantic_id}.outcome.{alternative_id}", semantic_id,
+                                "outcome", alternative_id, definition,
+                            )
+                    else:
+                        yield Obligation(
+                            f"{semantic_id}.outcome", semantic_id, "outcome",
+                            "outcome", outcome,
+                        )
+
+                if isinstance(failures, dict):
+                    for failure_id, definition in failures.items():
+                        yield Obligation(
+                            f"{semantic_id}.failures.{failure_id}", semantic_id,
+                            "failures", failure_id, definition,
+                        )
+            for section in OBLIGATION_SECTIONS:
+                for local_id, definition in _mapping(node.get(section)).items():
+                    yield Obligation(
+                        f"{semantic_id}.{section}.{local_id}", semantic_id, section,
+                        local_id, definition,
+                    )
+
+    def enumerate_architecture_obligations(
+        self, node_id: str | None = None
+    ) -> Iterator[Obligation]:
+        """Yield architecture constraints without mixing them into product scopes."""
+
+        for semantic_id, decision in self.iter_architecture():
+            if node_id is not None and semantic_id != node_id:
+                continue
+            for local_id, definition in _mapping(decision.get("constraints")).items():
+                yield Obligation(
+                    f"{semantic_id}.constraints.{local_id}", semantic_id,
+                    "constraints", local_id, definition,
+                )
+
     def resolve(self) -> ResolvedDefinition:
         actors = _mapping(self._document.get("actors"))
         concepts = _mapping(self._document.get("concepts"))
@@ -134,7 +260,7 @@ class ReferenceResolver:
 
         # Invalid authored IDs can derive the same path. Candidate lookup is
         # unique, but diagnostics must still traverse every authored record.
-        node_entries = tuple(iter_nodes(dict(self._document)))
+        node_entries = tuple(self.iter_nodes())
         nodes = dict(node_entries)
         behavior_ids = {
             node_id for node_id in nodes if _is_behavior_node(node_id)
@@ -358,3 +484,44 @@ def resolve_references(document: Mapping[str, Any]) -> ResolvedDefinition:
     """Resolve references in one PML definition using the shared resolver."""
 
     return ReferenceResolver(document).resolve()
+
+
+# ``Resolver`` and the module-level helpers preserve the previous obligation
+# consumer surface while ensuring every derivation uses ReferenceResolver.
+Resolver = ReferenceResolver
+
+
+def resolve(document: Mapping[str, Any]) -> ReferenceResolver:
+    """Create the shared resolver for one already-loaded PML definition."""
+
+    return ReferenceResolver(document)
+
+
+def iter_nodes(document: Mapping[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Yield semantic nodes through the shared resolver."""
+
+    yield from resolve(document).iter_nodes()
+
+
+def iter_architecture(
+    document: Mapping[str, Any],
+) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Yield architecture scopes through the shared resolver."""
+
+    yield from resolve(document).iter_architecture()
+
+
+def enumerate_obligations(
+    document: Mapping[str, Any], node_id: str | None = None
+) -> Iterator[Obligation]:
+    """Enumerate product obligations through the shared resolver."""
+
+    yield from resolve(document).enumerate_obligations(node_id)
+
+
+def enumerate_architecture_obligations(
+    document: Mapping[str, Any], node_id: str | None = None
+) -> Iterator[Obligation]:
+    """Enumerate architecture obligations through the shared resolver."""
+
+    yield from resolve(document).enumerate_architecture_obligations(node_id)

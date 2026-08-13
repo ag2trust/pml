@@ -8,7 +8,7 @@ from typing import Sequence
 
 from pml.initialize import initialize_project
 from pml.ingest import ingest_report
-from pml.obligations import (
+from pml.resolver import (
     enumerate_architecture_obligations,
     enumerate_obligations,
     iter_architecture,

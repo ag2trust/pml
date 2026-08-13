@@ -10,7 +10,8 @@ from jsonschema import Draft202012Validator
 import yaml
 
 from pml.formats import FORMAT_CHECKER
-from pml.obligations import enumerate_architecture_obligations, enumerate_obligations, iter_architecture, iter_nodes, required_methods, verification_plan
+from pml.obligations import required_methods, verification_plan
+from pml.resolver import enumerate_architecture_obligations, enumerate_obligations, iter_architecture, iter_nodes
 from pml.project_state import (
     LockedBindings,
     MAX_STATE_FILE_BYTES,

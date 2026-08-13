@@ -9,9 +9,11 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from pml.obligations import (
+from pml.resolver import (
     enumerate_architecture_obligations,
     enumerate_obligations,
+)
+from pml.obligations import (
     verification_plan,
 )
 from pml.project_state import canonical_hash

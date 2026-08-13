@@ -9,6 +9,7 @@ import yaml
 
 import pml.project_state as project_state
 from pml.obligations import Obligation, enumerate_architecture_obligations, enumerate_obligations
+from pml.resolver import Resolver
 from pml.cli import main
 from pml.project_state import (
     MAX_ARCHITECTURE_STATE_ENTRIES,
@@ -107,6 +108,18 @@ def test_obligations_have_stable_ids() -> None:
         "domains.notes.features.creation.behaviors.note_creation.outcome",
         "domains.notes.features.creation.behaviors.note_creation.failures.rejected",
     ]
+
+
+def test_shared_resolver_preserves_legacy_obligation_enumeration() -> None:
+    document, diagnostics = load_document(ROOT / "examples" / "behavior-one-of-output.pml.yaml")
+    assert diagnostics == []
+    assert document is not None
+
+    resolver = Resolver(document)
+    assert list(resolver.enumerate_obligations()) == list(enumerate_obligations(document))
+    assert list(resolver.enumerate_architecture_obligations()) == list(
+        enumerate_architecture_obligations(document)
+    )
 
 
 def test_direct_transition_has_exact_fully_qualified_obligation_ids() -> None:

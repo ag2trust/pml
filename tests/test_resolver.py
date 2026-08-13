@@ -2,8 +2,11 @@
 
 from pathlib import Path
 
-from pml.obligations import enumerate_obligations
-from pml.resolver import resolve_references
+from pml.obligations import (
+    enumerate_architecture_obligations,
+    enumerate_obligations,
+)
+from pml.resolver import ReferenceResolver, resolve_references
 from pml.validator import load_document
 
 
@@ -40,6 +43,18 @@ def test_resolver_records_architecture_references_by_canonical_node() -> None:
         "durable_store": ("domains.records.features.preservation",)
     }
     assert resolution.diagnostics == ()
+
+
+def test_reference_resolver_enumerates_existing_obligations() -> None:
+    document = _document("architecture-decisions.pml.yaml")
+    resolver = ReferenceResolver(document)
+
+    assert list(resolver.enumerate_obligations()) == list(
+        enumerate_obligations(document)
+    )
+    assert list(resolver.enumerate_architecture_obligations()) == list(
+        enumerate_architecture_obligations(document)
+    )
 
 
 def test_resolver_uses_stable_obligation_ids_for_every_signal_producer() -> None:

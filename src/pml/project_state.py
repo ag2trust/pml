@@ -16,13 +16,15 @@ import yaml
 
 from pml.formats import FORMAT_CHECKER
 from pml.obligations import (
+    required_methods,
+    verification_coverage,
+    verification_plan,
+)
+from pml.resolver import (
     enumerate_architecture_obligations,
     enumerate_obligations,
     iter_architecture,
     iter_nodes,
-    required_methods,
-    verification_coverage,
-    verification_plan,
 )
 from pml.validator import Diagnostic, UniqueKeyLoader, _load, _path, load_document
 
