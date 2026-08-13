@@ -1,16 +1,22 @@
 """Shared definition reference resolver coverage."""
 
+import json
 from pathlib import Path
+
+from jsonschema import Draft202012Validator
 
 from pml.obligations import (
     enumerate_architecture_obligations,
     enumerate_obligations,
 )
 from pml.resolver import ReferenceResolver, resolve_references
-from pml.validator import load_document
+from pml.validator import load_document, validate_document
 
 
 ROOT = Path(__file__).resolve().parents[1]
+COMPILED_SCHEMA = json.loads(
+    (ROOT / "schema" / "pml-compiled-model.schema.json").read_text()
+)
 
 
 def _document(example: str) -> dict:
@@ -34,6 +40,63 @@ def test_resolver_indexes_definition_identities_and_resolved_signals() -> None:
     assert resolution.signals["assistant_created"].behavior == producer
     assert resolution.signals["assistant_created"].completion == f"{producer}.outcome"
     assert resolution.diagnostics == ()
+    assert resolution.compiled_model is not None
+
+
+def test_resolver_emits_complete_model_for_diagnostic_free_definition() -> None:
+    resolution = validate_document(_document("assistant-creation.pml.yaml"))
+    model = resolution.compiled_model
+
+    assert resolution.diagnostics == ()
+    assert model is not None
+    assert list(Draft202012Validator(COMPILED_SCHEMA).iter_errors(model)) == []
+    assert set(model) == {
+        "format",
+        "format_version",
+        "language_version",
+        "definition_digest",
+        "project",
+        "vocabulary",
+        "actors",
+        "concepts",
+        "architecture",
+        "domains",
+        "features",
+        "behaviors",
+        "use_cases",
+        "signals",
+        "relationships",
+        "use_case_memberships",
+        "obligations",
+    }
+    assert model["signals"][0]["producer"]["completion"].endswith(".outcome")
+    assert model["signals"][0]["consumers"][0]["trigger"].endswith(".trigger")
+    assert {obligation["kind"] for obligation in model["obligations"]} >= {
+        "conditions",
+        "trigger",
+        "completion",
+        "outcome",
+        "failure",
+        "rule",
+        "use_case",
+    }
+
+
+def test_resolver_withholds_model_for_reference_diagnostics() -> None:
+    resolution = resolve_references(
+        _document("behavior-transition-invalid.pml.yaml")
+    )
+
+    assert resolution.diagnostics
+    assert resolution.compiled_model is None
+    assert resolution.model is None
+
+
+def test_validated_resolver_withholds_model_for_nonreference_diagnostics() -> None:
+    resolution = validate_document(_document("architecture-invalid.pml.yaml"))
+
+    assert resolution.diagnostics
+    assert resolution.compiled_model is None
 
 
 def test_resolver_records_architecture_references_by_canonical_node() -> None:

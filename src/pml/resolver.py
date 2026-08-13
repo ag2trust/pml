@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any, Literal
 
+from pml.compiled_model import CompiledModel
 from pml.diagnostics import Diagnostic
 
 
@@ -50,7 +51,12 @@ class ResolutionStep:
 
 @dataclass(frozen=True)
 class ResolvedDefinition:
-    """Read-only candidate tables and diagnostics for one definition snapshot."""
+    """Read-only resolution result for one definition snapshot.
+
+    Candidate tables remain available for diagnostic production.  ``compiled_model``
+    is populated only when the complete diagnostic sequence supplied to the
+    resolver is empty.
+    """
 
     actors: Mapping[str, Any]
     concepts: Mapping[str, Any]
@@ -61,16 +67,14 @@ class ResolvedDefinition:
     signals: Mapping[str, ResolvedSignal]
     architecture_references: Mapping[str, tuple[str, ...]]
     steps: tuple[ResolutionStep, ...]
+    diagnostics: tuple[Diagnostic, ...]
+    compiled_model: CompiledModel | None
 
     @property
-    def diagnostics(self) -> tuple[Diagnostic, ...]:
-        """Return reference diagnostics in established validation order."""
+    def model(self) -> CompiledModel | None:
+        """Return the complete compiled model, or ``None`` for a failed result."""
 
-        return tuple(
-            diagnostic
-            for step in self.steps
-            for diagnostic in step.diagnostics
-        )
+        return self.compiled_model
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -250,7 +254,19 @@ class ReferenceResolver:
                     "constraints", local_id, definition,
                 )
 
-    def resolve(self) -> ResolvedDefinition:
+    def resolve(
+        self,
+        diagnostics: Iterable[Diagnostic] = (),
+        *,
+        materialize: bool = True,
+    ) -> ResolvedDefinition:
+        """Resolve one snapshot and compile it only when all diagnostics are empty.
+
+        ``diagnostics`` carries loading, schema, or local-language findings already
+        produced for this same in-memory snapshot. Reference findings are appended
+        in their established traversal order.
+        """
+
         actors = _mapping(self._document.get("actors"))
         concepts = _mapping(self._document.get("concepts"))
         architecture = _mapping(self._document.get("architecture"))
@@ -462,7 +478,12 @@ class ReferenceResolver:
                 )
             )
 
-        return ResolvedDefinition(
+        all_diagnostics = tuple(diagnostics) + tuple(
+            diagnostic
+            for step in steps
+            for diagnostic in step.diagnostics
+        )
+        resolution = ResolvedDefinition(
             actors=MappingProxyType(dict(actors)),
             concepts=MappingProxyType(dict(concepts)),
             architecture=MappingProxyType(dict(architecture)),
@@ -477,13 +498,53 @@ class ReferenceResolver:
                 }
             ),
             steps=tuple(steps),
+            diagnostics=all_diagnostics,
+            compiled_model=None,
+        )
+        if all_diagnostics or not materialize:
+            return resolution
+
+        return self.compile(resolution)
+
+    def compile(
+        self,
+        resolution: ResolvedDefinition,
+        diagnostics: Iterable[Diagnostic] | None = None,
+    ) -> ResolvedDefinition:
+        """Finalize resolver output under the complete validation diagnostics."""
+
+        all_diagnostics = (
+            resolution.diagnostics if diagnostics is None else tuple(diagnostics)
+        )
+        if not all_diagnostics and resolution.diagnostics:
+            all_diagnostics = resolution.diagnostics
+        if all_diagnostics:
+            return replace(
+                resolution,
+                diagnostics=all_diagnostics,
+                compiled_model=None,
+            )
+
+        from pml.model_builder import build_compiled_model
+
+        return replace(
+            resolution,
+            diagnostics=(),
+            compiled_model=build_compiled_model(self._document, self, resolution),
         )
 
 
-def resolve_references(document: Mapping[str, Any]) -> ResolvedDefinition:
+def resolve_references(
+    document: Mapping[str, Any],
+    diagnostics: Iterable[Diagnostic] = (),
+    *,
+    materialize: bool = True,
+) -> ResolvedDefinition:
     """Resolve references in one PML definition using the shared resolver."""
 
-    return ReferenceResolver(document).resolve()
+    return ReferenceResolver(document).resolve(
+        diagnostics, materialize=materialize
+    )
 
 
 # ``Resolver`` and the module-level helpers preserve the previous obligation
