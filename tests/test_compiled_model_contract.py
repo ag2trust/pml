@@ -301,6 +301,48 @@ def test_schema_rejects_wrong_stable_transition_case_paths(mutate) -> None:  # t
     assert any("does not match" in message or "is not valid under any" in message for message in _messages(_validator().iter_errors(model)))
 
 
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model["obligations"][0].update({"id": "domains.notes.features.handling.behaviors.handle_note.outcome.first", "node": "domains.notes.features.handling.behaviors.handle_note", "kind": "outcome_exclusivity", "definition": {"alternatives": ["domains.notes.features.handling.behaviors.handle_note.outcome.first", "domains.notes.features.handling.behaviors.handle_note.outcome.second"]}}),  # type: ignore[index,union-attr]
+        lambda model: model["obligations"][0].update({"id": "domains.notes.features.handling.behaviors.handle_note.outcome", "node": "domains.notes.features.handling.behaviors.handle_note", "kind": "outcome_exclusivity", "definition": {"alternatives": ["domains.notes.features.handling.behaviors.handle_note.outcome", "domains.notes.features.handling.behaviors.handle_note.outcome.second"]}}),  # type: ignore[index,union-attr]
+    ],
+)
+def test_schema_rejects_exclusivity_parent_and_alternative_paths_in_wrong_positions(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any("does not match" in message or "is not valid under any" in message for message in _messages(_validator().iter_errors(model)))
+
+
+def test_schema_accepts_newline_suffixed_nested_ids_accepted_by_source_schema() -> None:
+    model = _model()
+    replacements = {
+        "domains.notes.features.handling.behaviors.handle_note": "domains.notes\n.features.handling\n.behaviors.handle_note\n",
+        "domains.notes.features.handling": "domains.notes\n.features.handling\n",
+        "domains.notes": "domains.notes\n",
+    }
+
+    def rewrite(value: object) -> object:
+        if isinstance(value, str):
+            for index, old in enumerate(replacements):
+                value = value.replace(old, f"__PATH_{index}__")
+            for index, new in enumerate(replacements.values()):
+                value = value.replace(f"__PATH_{index}__", new)
+            return value
+        if isinstance(value, list):
+            return [rewrite(item) for item in value]
+        if isinstance(value, dict):
+            return {key: rewrite(item) for key, item in value.items()}
+        return value
+
+    model = rewrite(model)  # type: ignore[assignment]
+    model["domains"][0]["id"] = "notes\n"  # type: ignore[index]
+    model["features"][0]["id"] = "handling\n"  # type: ignore[index]
+    model["behaviors"][0]["id"] = "handle_note\n"  # type: ignore[index]
+
+    assert list(_validator().iter_errors(model)) == []
+
+
 def test_shared_types_preserve_required_and_optional_contract_fields() -> None:
     model_hints = get_type_hints(CompiledModel)
     behavior_hints = get_type_hints(CompiledBehavior)
