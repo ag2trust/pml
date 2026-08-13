@@ -243,6 +243,19 @@ def test_accepts_string_keys_in_standard_yaml_collection_tags(
     assert document is not None
 
 
+def test_tagged_set_with_a_sequence_preserves_yaml_diagnostic(tmp_path: Path) -> None:
+    manifest = tmp_path / "invalid-tagged-set.pml.yaml"
+    manifest.write_text("key: !!set [name]\n")
+
+    document, diagnostics = load_document(manifest)
+
+    assert document is None
+    assert len(diagnostics) == 1
+    assert diagnostics[0].code == "yaml"
+    assert "while constructing a set" in diagnostics[0].message
+    assert "expected a mapping node, but found sequence" in diagnostics[0].message
+
+
 @pytest.mark.parametrize(
     "source",
     [

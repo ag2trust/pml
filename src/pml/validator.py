@@ -146,6 +146,11 @@ def _construct_set(loader: UniqueKeyLoader, node: yaml.MappingNode) -> Iterable[
 
     result: set[str] = set()
     yield result
+    if not isinstance(node, yaml.MappingNode):
+        raise yaml.constructor.ConstructorError(
+            "while constructing a set", node.start_mark,
+            f"expected a mapping node, but found {node.id}", node.start_mark,
+        )
     for key_node, value_node in node.value:
         result.add(_construct_mapping_key(loader, key_node))
         loader.construct_object(value_node)
