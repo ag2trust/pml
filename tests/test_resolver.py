@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from pml.obligations import enumerate_obligations
 from pml.resolver import resolve_references
 from pml.validator import load_document
 
@@ -39,6 +40,28 @@ def test_resolver_records_architecture_references_by_canonical_node() -> None:
         "durable_store": ("domains.records.features.preservation",)
     }
     assert resolution.diagnostics == ()
+
+
+def test_resolver_uses_stable_obligation_ids_for_every_signal_producer() -> None:
+    document = _document("behavior-one-of-output.pml.yaml")
+    resolution = resolve_references(document)
+    behavior = "domains.email.features.triage.behaviors.importance_decision"
+    obligation_ids = {item.id for item in enumerate_obligations(document)}
+
+    assert {
+        signal_id: signal.completion
+        for signal_id, signal in resolution.signals.items()
+    } == {
+        "important_email_processed": f"{behavior}.outcome.important",
+        "ordinary_email_processed": f"{behavior}.outcome.ordinary",
+        "email_processing_failed": f"{behavior}.failures.processing_failure",
+    }
+    assert resolution.signals["important_email_processed"].path == (
+        f"{behavior}.outcome.one_of.important.signal"
+    )
+    assert {
+        signal.completion for signal in resolution.signals.values()
+    } <= obligation_ids
 
 
 def test_resolver_preserves_established_reference_diagnostics() -> None:

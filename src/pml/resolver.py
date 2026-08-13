@@ -76,8 +76,10 @@ def _is_behavior_node(node_id: str) -> bool:
     )
 
 
-def _completion_cases(node: Mapping[str, Any]) -> Iterable[tuple[str, dict[str, Any]]]:
-    """Yield authored outcome and failure paths and definitions."""
+def _completion_cases(
+    node: Mapping[str, Any],
+) -> Iterable[tuple[str, str, dict[str, Any]]]:
+    """Yield authored paths, stable obligation paths, and completion definitions."""
 
     outcome = node.get("outcome")
     if not isinstance(outcome, dict):
@@ -86,14 +88,19 @@ def _completion_cases(node: Mapping[str, Any]) -> Iterable[tuple[str, dict[str, 
     if isinstance(alternatives, dict):
         for alternative_id, definition in alternatives.items():
             if isinstance(definition, dict):
-                yield f"outcome.one_of.{alternative_id}", definition
+                yield (
+                    f"outcome.one_of.{alternative_id}",
+                    f"outcome.{alternative_id}",
+                    definition,
+                )
     elif "statement" in outcome:
-        yield "outcome", outcome
+        yield "outcome", "outcome", outcome
     failures = node.get("failures", {})
     if isinstance(failures, dict):
         for failure_id, definition in failures.items():
             if isinstance(definition, dict):
-                yield f"failures.{failure_id}", definition
+                path = f"failures.{failure_id}"
+                yield path, path, definition
 
 
 def _trigger_cases(node: Mapping[str, Any]) -> Iterable[tuple[str, dict[str, Any]]]:
@@ -143,11 +150,11 @@ class ReferenceResolver:
         for node_id, node in nodes.items():
             if node_id not in behavior_ids:
                 continue
-            for completion_path, completion in _completion_cases(node):
+            for authored_path, obligation_path, completion in _completion_cases(node):
                 signal = completion.get("signal")
                 if not isinstance(signal, dict):
                     continue
-                signal_path = f"{node_id}.{completion_path}.signal"
+                signal_path = f"{node_id}.{authored_path}.signal"
                 signal_diagnostics: list[Diagnostic] = []
                 signal_id = signal.get("id")
                 if isinstance(signal_id, str):
@@ -165,7 +172,7 @@ class ReferenceResolver:
                             id=signal_id,
                             path=signal_path,
                             behavior=node_id,
-                            completion=f"{node_id}.{completion_path}",
+                            completion=f"{node_id}.{obligation_path}",
                             definition=MappingProxyType(signal),
                         )
                 subject = signal.get("subject")
