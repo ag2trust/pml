@@ -95,7 +95,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         assert document is not None
         assert resolution.compiled_model is not None
-        sys.stdout.write(serialize_compiled_model(resolution.compiled_model).decode("utf-8"))
+        sys.stdout.buffer.write(serialize_compiled_model(resolution.compiled_model))
         return 0
 
     path = args.path if args.command == "validate" else args.manifest

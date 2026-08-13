@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
-from pml.cli import main
+import pml.cli as cli
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,11 +15,29 @@ FIXTURES = ROOT / "tests" / "fixtures" / "compiled_model"
 def test_compile_json_writes_the_exact_canonical_model_to_stdout(capsys) -> None:
     source = FIXTURES / "canonical.pml.yaml"
 
-    assert main(["compile", str(source), "--json"]) == 0
+    assert cli.main(["compile", str(source), "--json"]) == 0
 
     captured = capsys.readouterr()
     assert captured.out.encode("utf-8") == (FIXTURES / "canonical.json").read_bytes()
     assert captured.err == ""
+
+
+def test_compile_json_writes_serializer_bytes_without_text_encoding(
+    monkeypatch,
+) -> None:
+    class BinaryStdout:
+        buffer = io.BytesIO()
+
+        def write(self, value: str) -> int:
+            raise AssertionError(f"unexpected text output: {value!r}")
+
+    source = FIXTURES / "canonical.pml.yaml"
+    stdout = BinaryStdout()
+    monkeypatch.setattr(cli.sys, "stdout", stdout)
+
+    assert cli.main(["compile", str(source), "--json"]) == 0
+
+    assert stdout.buffer.getvalue() == (FIXTURES / "canonical.json").read_bytes()
 
 
 def test_compile_json_rejects_invalid_definition_without_stdout_or_writes(
@@ -43,7 +62,7 @@ domains:
     )
     before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
 
-    assert main(["compile", str(source), "--json"]) == 1
+    assert cli.main(["compile", str(source), "--json"]) == 1
 
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -55,7 +74,7 @@ domains:
 def test_compile_requires_json_output_mode(capsys) -> None:
     source = FIXTURES / "canonical.pml.yaml"
 
-    assert main(["compile", str(source)]) == 2
+    assert cli.main(["compile", str(source)]) == 2
 
     captured = capsys.readouterr()
     assert captured.out == ""
