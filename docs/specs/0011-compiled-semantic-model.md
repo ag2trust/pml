@@ -10,7 +10,7 @@ enumeration, and downstream inspection tools.
 
 This specification does not change the PML language. It uses the behavior,
 transition, signal, relationship, use-case, and obligation semantics approved in
-[0010](0010-behavior-transition-model.md) exactly. It also proposes the Unicode
+[0010](0010-behavior-transition-model.md) exactly. It also approves the Unicode
 scalar-string and string-key loading preconditions required for deterministic JSON
 tooling; those preconditions are input well-formedness, not product meaning. It
 does not authorize schema, validator, compiler, command, formatter, bindings,
@@ -702,7 +702,7 @@ or field meanings requires a new format version and explicit owner approval. A
 language revision also requires a new compiled format version when the current
 structure cannot represent it without changing this contract.
 
-After approval, delivery follows the repository order:
+With owner approval granted, delivery follows the repository order:
 
 1. Add the `non-string-key` and `invalid-unicode-scalar` restricted-loading
    diagnostics without changing any other accepted syntax or validation outcome.
@@ -725,8 +725,7 @@ After approval, delivery follows the repository order:
    read-only consumers.
 
 Existing approved definitions and their validation behavior are the compatibility
-oracle except for the string-key and scalar-string loading requirements explicitly
-proposed here. If approved, this specification authorizes those two syntax
-diagnostics before compiled-model delivery; any other change to accepted language,
-diagnostics, resolved paths, or obligation meaning requires separate owner
-approval.
+oracle except for the approved string-key and scalar-string loading requirements
+defined here. This specification authorizes those two syntax diagnostics before
+compiled-model delivery; any other change to accepted language, diagnostics,
+resolved paths, or obligation meaning requires separate owner approval.
