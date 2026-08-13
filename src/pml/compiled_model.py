@@ -226,7 +226,15 @@ class StatementDefinition(TypedDict):
     statement: str
 
 
+class SignalOnlyDefinition(TypedDict):
+    """A trigger obligation whose initiating occurrence is a signal."""
+
+    signal: str
+
+
 class SignalDefinition(StatementDefinition):
+    """A completion definition with a required statement and optional signal."""
+
     signal: NotRequired[str]
 
 
@@ -257,7 +265,7 @@ class ConditionsObligation(_Obligation):
 
 class TriggerObligation(_Obligation):
     kind: Literal["trigger"]
-    definition: StatementDefinition | SignalDefinition
+    definition: StatementDefinition | SignalOnlyDefinition
 
 
 class CompletionObligation(_Obligation):
