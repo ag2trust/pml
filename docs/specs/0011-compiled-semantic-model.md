@@ -1,10 +1,10 @@
 # PML canonical compiled semantic model
 
-Status: Proposed — owner approval required
+Status: Owner approved on 2026-08-13
 
-## Decision requested
+## Approved decision
 
-Approve version 1 of the read-only compiled semantic model defined here as the
+Version 1 of the read-only compiled semantic model defined here is approved as the
 single derived representation shared by PML reference resolution, obligation
 enumeration, and downstream inspection tools.
 
@@ -14,7 +14,9 @@ transition, signal, relationship, use-case, and obligation semantics approved in
 scalar-string and string-key loading preconditions required for deterministic JSON
 tooling; those preconditions are input well-formedness, not product meaning. It
 does not authorize schema, validator, compiler, command, formatter, bindings,
-probe, lock, state, or web UI implementation before owner approval.
+probe, lock, state, or web UI implementation before owner approval. Owner approval
+was given explicitly on 2026-08-13; implementation may now proceed in the delivery
+order defined below.
 
 ## Purpose and authority boundary
 
