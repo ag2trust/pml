@@ -343,6 +343,20 @@ def test_schema_accepts_newline_suffixed_nested_ids_accepted_by_source_schema() 
     assert list(_validator().iter_errors(model)) == []
 
 
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model["actors"][0].__setitem__("id", "member\n\n"),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0].__setitem__("completion_obligation", "domains.notes.features.handling.behaviors.handle_note.completion\n"),  # type: ignore[index,union-attr]
+        lambda model: model.__setitem__("definition_digest", "sha256:" + "0" * 64 + "\n"),
+    ],
+)
+def test_schema_rejects_double_or_spurious_terminal_line_feeds(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any("does not match" in message for message in _messages(_validator().iter_errors(model)))
+
+
 def test_shared_types_preserve_required_and_optional_contract_fields() -> None:
     model_hints = get_type_hints(CompiledModel)
     behavior_hints = get_type_hints(CompiledBehavior)
