@@ -132,7 +132,10 @@ class ReferenceResolver:
         concept_ids = set(concepts)
         architecture_ids = set(architecture)
 
-        nodes = dict(iter_nodes(dict(self._document)))
+        # Invalid authored IDs can derive the same path. Candidate lookup is
+        # unique, but diagnostics must still traverse every authored record.
+        node_entries = tuple(iter_nodes(dict(self._document)))
+        nodes = dict(node_entries)
         behavior_ids = {
             node_id for node_id in nodes if _is_behavior_node(node_id)
         }
@@ -147,7 +150,7 @@ class ReferenceResolver:
 
         # Signals are indexed before trigger references are checked so a producer
         # may appear after its consumer in authored map order.
-        for node_id, node in nodes.items():
+        for node_id, node in node_entries:
             if node_id not in behavior_ids:
                 continue
             for authored_path, obligation_path, completion in _completion_cases(node):
@@ -254,7 +257,7 @@ class ReferenceResolver:
                     )
 
         signal_ids = set(signals)
-        for node_id, node in nodes.items():
+        for node_id, node in node_entries:
             node_diagnostics: list[Diagnostic] = []
             related_nodes = node.get("related_to", [])
             if isinstance(related_nodes, list):
