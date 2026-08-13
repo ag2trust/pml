@@ -85,7 +85,7 @@ def test_schema_accepts_every_v1_variant() -> None:
     feature = "domains.notes.features.handling"
     behavior = feature + ".behaviors.handle_note"
     model["architecture"] = [{"id": "runtime", "path": "architecture.runtime", "category": "runtime", "selection": "Managed runtime.", "rationale": "A rationale.", "constraint_obligations": ["architecture.runtime.constraints.available"], "referenced_by": [feature]}]
-    model["features"][0]["experience"] = {"surfaces": [{"id": "notes", "contains": [], "states": [{"id": "empty", "statements": []}], "accessibility": [], "responsive_behavior": []}]}  # type: ignore[index]
+    model["features"][0]["experience"] = {"surfaces": [{"id": "notes", "contains": ["Notes."], "states": [{"id": "empty", "statements": ["No notes are present."]}], "accessibility": [], "responsive_behavior": []}]}  # type: ignore[index]
     model["features"][0]["architecture"] = ["architecture.runtime"]  # type: ignore[index]
     model["behaviors"][0]["conditions"] = {"statements": ["A condition."], "obligation": behavior + ".conditions"}  # type: ignore[index]
     model["behaviors"][0]["trigger"] = {"kind": "one_of", "cases": [{"id": "request", "obligation": behavior + ".trigger.request", "statement": "A request occurs."}, {"id": "ready", "obligation": behavior + ".trigger.ready", "signal": "note_ready"}]}  # type: ignore[index]
@@ -150,6 +150,46 @@ def test_schema_rejects_one_of_case_counts_outside_approved_bounds(
                 for index in range(count)
             ],
         }
+    assert any(
+        "is too short" in message or "is too long" in message
+        for message in _messages(_validator().iter_errors(model))
+    )
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model["obligations"][0].__setitem__("id", "not-an-obligation"),  # type: ignore[index,union-attr]
+        lambda model: model["obligations"][0].__setitem__("node", "not-an-owning-node"),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0].__setitem__("completion_obligation", "not-an-obligation"),  # type: ignore[index,union-attr]
+        lambda model: model["obligations"][0]["definition"]["outcomes"].__setitem__(0, "not-an-obligation"),  # type: ignore[index,union-attr]
+    ],
+)
+def test_schema_rejects_noncanonical_obligation_ids_nodes_and_references(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any("does not match" in message or "is not valid under any" in message for message in _messages(_validator().iter_errors(model)))
+
+
+@pytest.mark.parametrize(
+    ("field", "count"),
+    [("alternatives", 1), ("alternatives", 8), ("outcomes", 8), ("failures", 8)],
+)
+def test_schema_rejects_mirrored_completion_cardinalities(field: str, count: int) -> None:
+    model = _model()
+    behavior = "domains.notes.features.handling.behaviors.handle_note"
+    if field == "alternatives":
+        model["obligations"][0] = {  # type: ignore[index]
+            "id": behavior + ".outcome",
+            "node": behavior,
+            "kind": "outcome_exclusivity",
+            "definition": {field: [behavior + f".outcome.case_{index}" for index in range(count)]},
+        }
+    else:
+        model["obligations"][0]["definition"][field] = [  # type: ignore[index,union-attr]
+            behavior + (f".outcome.case_{index}" if field == "outcomes" else f".failures.case_{index}")
+            for index in range(count)
+        ]
     assert any(
         "is too short" in message or "is too long" in message
         for message in _messages(_validator().iter_errors(model))
