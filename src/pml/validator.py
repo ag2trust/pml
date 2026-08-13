@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime
 import copy
 import json
@@ -13,7 +14,7 @@ from jsonschema import Draft202012Validator
 import yaml
 
 from pml.diagnostics import Diagnostic
-from pml.resolver import resolve_references
+from pml.resolver import ReferenceResolver, ResolvedDefinition, resolve_references
 
 
 AMBIGUOUS_WORDS = (
@@ -262,7 +263,10 @@ def _is_transition_text(parts: tuple[Any, ...]) -> bool:
     )
 
 
-def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
+def _semantic_diagnostics(
+    document: dict[str, Any],
+    resolution: ResolvedDefinition | None = None,
+) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
 
     vocabulary = document.get("vocabulary", {})
@@ -325,7 +329,8 @@ def _semantic_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                     )
                 )
 
-    resolution = resolve_references(document)
+    if resolution is None:
+        resolution = resolve_references(document)
     for step in resolution.steps:
         diagnostics.extend(step.diagnostics)
         if step.kind == "signal":
@@ -435,8 +440,35 @@ def validate_file(path: Path) -> list[Diagnostic]:
     if document is None:
         return diagnostics
 
+    return list(validate_document(document).diagnostics)
+
+
+def validate_document(document: dict[str, Any]) -> ResolvedDefinition:
+    """Validate and resolve one loaded snapshot, compiling only a clean result."""
+
+    diagnostics: list[Diagnostic] = []
     validator = Draft202012Validator(_schema())
-    for error in sorted(validator.iter_errors(document), key=lambda item: list(item.absolute_path)):
-        diagnostics.append(Diagnostic(_path(error.absolute_path), "schema", error.message))
-    diagnostics.extend(_semantic_diagnostics(document))
-    return diagnostics
+    for error in sorted(
+        validator.iter_errors(document), key=lambda item: list(item.absolute_path)
+    ):
+        diagnostics.append(
+            Diagnostic(_path(error.absolute_path), "schema", error.message)
+        )
+
+    resolver = ReferenceResolver(document)
+    resolution = resolver.resolve()
+    diagnostics.extend(_semantic_diagnostics(document, resolution))
+    if diagnostics:
+        return replace(
+            resolution,
+            diagnostics=tuple(diagnostics),
+            compiled_model=None,
+        )
+
+    from pml.model_builder import _build_compiled_model
+
+    return replace(
+        resolution,
+        diagnostics=(),
+        compiled_model=_build_compiled_model(document, resolver, resolution),
+    )

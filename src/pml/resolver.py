@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Literal
 
+from pml.compiled_model import CompiledModel
 from pml.diagnostics import Diagnostic
 
 
@@ -50,7 +51,11 @@ class ResolutionStep:
 
 @dataclass(frozen=True)
 class ResolvedDefinition:
-    """Read-only candidate tables and diagnostics for one definition snapshot."""
+    """Read-only resolution result for one definition snapshot.
+
+    Candidate tables remain available for diagnostic production. ``compiled_model``
+    is populated only by ``resolve_definition``, after complete validation.
+    """
 
     actors: Mapping[str, Any]
     concepts: Mapping[str, Any]
@@ -61,16 +66,14 @@ class ResolvedDefinition:
     signals: Mapping[str, ResolvedSignal]
     architecture_references: Mapping[str, tuple[str, ...]]
     steps: tuple[ResolutionStep, ...]
+    diagnostics: tuple[Diagnostic, ...]
+    compiled_model: CompiledModel | None
 
     @property
-    def diagnostics(self) -> tuple[Diagnostic, ...]:
-        """Return reference diagnostics in established validation order."""
+    def model(self) -> CompiledModel | None:
+        """Return the complete compiled model, or ``None`` for a failed result."""
 
-        return tuple(
-            diagnostic
-            for step in self.steps
-            for diagnostic in step.diagnostics
-        )
+        return self.compiled_model
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -251,6 +254,8 @@ class ReferenceResolver:
                 )
 
     def resolve(self) -> ResolvedDefinition:
+        """Resolve candidate indexes and references without compiling a model."""
+
         actors = _mapping(self._document.get("actors"))
         concepts = _mapping(self._document.get("concepts"))
         architecture = _mapping(self._document.get("architecture"))
@@ -462,7 +467,12 @@ class ReferenceResolver:
                 )
             )
 
-        return ResolvedDefinition(
+        reference_diagnostics = tuple(
+            diagnostic
+            for step in steps
+            for diagnostic in step.diagnostics
+        )
+        resolution = ResolvedDefinition(
             actors=MappingProxyType(dict(actors)),
             concepts=MappingProxyType(dict(concepts)),
             architecture=MappingProxyType(dict(architecture)),
@@ -477,13 +487,26 @@ class ReferenceResolver:
                 }
             ),
             steps=tuple(steps),
+            diagnostics=reference_diagnostics,
+            compiled_model=None,
         )
+        return resolution
 
 
-def resolve_references(document: Mapping[str, Any]) -> ResolvedDefinition:
-    """Resolve references in one PML definition using the shared resolver."""
+def resolve_references(
+    document: Mapping[str, Any],
+) -> ResolvedDefinition:
+    """Resolve references without treating reference cleanliness as validity."""
 
     return ReferenceResolver(document).resolve()
+
+
+def resolve_definition(document: dict[str, Any]) -> ResolvedDefinition:
+    """Validate and resolve one definition, compiling only a clean result."""
+
+    from pml.validator import validate_document
+
+    return validate_document(document)
 
 
 # ``Resolver`` and the module-level helpers preserve the previous obligation
