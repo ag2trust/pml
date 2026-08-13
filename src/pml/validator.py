@@ -13,7 +13,7 @@ from typing import Any, Iterable
 from jsonschema import Draft202012Validator
 import yaml
 
-from pml.obligations import iter_nodes
+from pml.resolver import iter_nodes
 
 
 AMBIGUOUS_WORDS = (
