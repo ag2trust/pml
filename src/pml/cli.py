@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 from typing import Sequence
 
 from pml.initialize import initialize_project
@@ -23,7 +24,8 @@ from pml.project_state import (
     validate_architecture_state,
 )
 from pml.status import architecture_status, product_status
-from pml.validator import Diagnostic, load_document, validate_file
+from pml.serialization import serialize_compiled_model
+from pml.validator import Diagnostic, load_document, validate_document, validate_file
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -34,6 +36,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     init_parser.add_argument("--name", required=True, dest="project_name")
     validate_parser = subparsers.add_parser("validate", help="validate a PML definition")
     validate_parser.add_argument("path", type=Path)
+    compile_parser = subparsers.add_parser(
+        "compile", help="compile a validated PML definition"
+    )
+    compile_parser.add_argument("path", type=Path)
+    compile_parser.add_argument(
+        "--json", action="store_true", help="write the canonical compiled JSON model"
+    )
     obligations_parser = subparsers.add_parser(
         "obligations", help="print stable obligation IDs"
     )
@@ -69,6 +78,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"PML NOT INITIALIZED: {error}")
             return 1
         print("PML INITIALIZED")
+        return 0
+
+    if args.command == "compile":
+        document, diagnostics = load_document(args.path)
+        if document is not None:
+            resolution = validate_document(document)
+            diagnostics = list(resolution.diagnostics)
+        if diagnostics:
+            for diagnostic in diagnostics:
+                print(diagnostic.format(), file=sys.stderr)
+            print(f"PML INVALID: {len(diagnostics)} violation(s)", file=sys.stderr)
+            return 1
+        if not args.json:
+            print("pml compile requires --json", file=sys.stderr)
+            return 2
+        assert document is not None
+        assert resolution.compiled_model is not None
+        sys.stdout.write(serialize_compiled_model(resolution.compiled_model).decode("utf-8"))
         return 0
 
     path = args.path if args.command == "validate" else args.manifest
