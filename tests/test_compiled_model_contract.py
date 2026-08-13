@@ -1,0 +1,383 @@
+"""Conformance checks for the versioned compiled-model contract."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import get_args, get_type_hints
+
+import pytest
+from jsonschema import Draft202012Validator
+
+from pml.compiled_model import (
+    CompiledBehavior,
+    CompiledFeature,
+    CompiledModel,
+    CompiledSignal,
+    SignalOnlyDefinition,
+    StatementDefinition,
+    TriggerObligation,
+)
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCHEMA_PATH = ROOT / "schema" / "pml-compiled-model.schema.json"
+
+
+def _model() -> dict[str, object]:
+    behavior = "domains.notes.features.handling.behaviors.handle_note"
+    feature = "domains.notes.features.handling"
+    return {
+        "format": "pml.compiled",
+        "format_version": 1,
+        "language_version": "0.1-draft",
+        "definition_digest": "sha256:" + "0" * 64,
+        "project": {
+            "id": "sample",
+            "name": "Sample",
+            "purpose": "Handle notes.",
+            "rule_obligations": [],
+            "domains": ["domains.notes"],
+        },
+        "vocabulary": [],
+        "actors": [{"id": "member", "meaning": "A member."}],
+        "concepts": [{"id": "note", "meaning": "A note.", "states": []}],
+        "architecture": [],
+        "domains": [{"id": "notes", "path": "domains.notes", "purpose": "Manage notes.", "rule_obligations": [], "features": [feature]}],
+        "features": [{"id": "handling", "path": feature, "domain": "domains.notes", "purpose": "Handle notes.", "actors": ["member"], "rule_obligations": [], "use_cases": [], "behaviors": [behavior], "related_to": [], "architecture": []}],
+        "behaviors": [{"id": "handle_note", "path": behavior, "feature": feature, "trigger": {"kind": "direct", "case": {"obligation": behavior + ".trigger", "statement": "A member requests handling."}}, "completion_obligation": behavior + ".completion", "outcome": {"kind": "direct", "case": {"obligation": behavior + ".outcome", "statement": "The note is handled."}}, "failures": [], "rule_obligations": [], "related_to": [], "use_cases": []}],
+        "use_cases": [],
+        "signals": [],
+        "relationships": [],
+        "use_case_memberships": [],
+        "obligations": [
+            {"id": behavior + ".completion", "node": behavior, "kind": "completion", "definition": {"outcomes": [behavior + ".outcome"], "failures": []}},
+            {"id": behavior + ".outcome", "node": behavior, "kind": "outcome", "definition": {"statement": "The note is handled."}},
+            {"id": behavior + ".trigger", "node": behavior, "kind": "trigger", "definition": {"statement": "A member requests handling."}},
+        ],
+    }
+
+
+def _validator() -> Draft202012Validator:
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    return Draft202012Validator(schema)
+
+
+def _messages(errors: object) -> list[str]:
+    """Flatten jsonschema branch errors so oneOf failures retain their cause."""
+
+    messages: list[str] = []
+    pending = list(errors)  # type: ignore[arg-type]
+    while pending:
+        error = pending.pop()
+        messages.append(error.message)
+        pending.extend(error.context)
+    return messages
+
+
+def test_schema_accepts_complete_v1_model() -> None:
+    assert list(_validator().iter_errors(_model())) == []
+
+
+def test_schema_accepts_every_v1_variant() -> None:
+    model = _model()
+    feature = "domains.notes.features.handling"
+    behavior = feature + ".behaviors.handle_note"
+    model["architecture"] = [{"id": "runtime", "path": "architecture.runtime", "category": "runtime", "selection": "Managed runtime.", "rationale": "A rationale.", "constraint_obligations": ["architecture.runtime.constraints.available"], "referenced_by": [feature]}]
+    model["features"][0]["experience"] = {"surfaces": [{"id": "notes", "contains": ["Notes."], "states": [{"id": "empty", "statements": ["No notes are present."]}], "accessibility": [], "responsive_behavior": []}]}  # type: ignore[index]
+    model["features"][0]["architecture"] = ["architecture.runtime"]  # type: ignore[index]
+    model["behaviors"][0]["conditions"] = {"statements": ["A condition."], "obligation": behavior + ".conditions"}  # type: ignore[index]
+    model["behaviors"][0]["trigger"] = {"kind": "one_of", "cases": [{"id": "request", "obligation": behavior + ".trigger.request", "statement": "A request occurs."}, {"id": "ready", "obligation": behavior + ".trigger.ready", "signal": "note_ready"}]}  # type: ignore[index]
+    model["behaviors"][0]["outcome"] = {"kind": "one_of", "exclusivity_obligation": behavior + ".outcome", "cases": [{"id": "handled", "obligation": behavior + ".outcome.handled", "statement": "The note is handled.", "signal": "note_done"}, {"id": "deferred", "obligation": behavior + ".outcome.deferred", "statement": "The note is deferred."}]}  # type: ignore[index]
+    model["behaviors"][0]["failures"] = [{"id": "rejected", "obligation": behavior + ".failures.rejected", "statement": "The note is rejected.", "signal": "note_rejected"}]  # type: ignore[index]
+    model["use_cases"] = [{"id": "handle", "path": feature + ".use_cases.handle", "feature": feature, "actor": "member", "goal": "Handle a note.", "behaviors": [behavior], "obligation": feature + ".use_cases.handle"}]
+    model["signals"] = [{"id": "note_done", "meaning": "A note is done.", "subject": "note", "producer": {"behavior": behavior, "completion": behavior + ".outcome.handled"}, "consumers": [{"behavior": behavior, "trigger": behavior + ".trigger.ready"}]}]
+    model["relationships"] = [{"kind": "related_to", "endpoints": [feature, behavior], "declared_by": [feature]}]
+    model["use_case_memberships"] = [{"use_case": feature + ".use_cases.handle", "behavior": behavior}]
+    model["obligations"] = [
+        {"id": behavior + ".conditions", "node": behavior, "kind": "conditions", "definition": {"statements": ["A condition."]}},
+        {"id": behavior + ".trigger.ready", "node": behavior, "kind": "trigger", "definition": {"signal": "note_ready"}},
+        {"id": behavior + ".completion", "node": behavior, "kind": "completion", "definition": {"outcomes": [behavior + ".outcome.handled", behavior + ".outcome.deferred"], "failures": [behavior + ".failures.rejected"]}},
+        {"id": behavior + ".outcome", "node": behavior, "kind": "outcome_exclusivity", "definition": {"alternatives": [behavior + ".outcome.handled", behavior + ".outcome.deferred"]}},
+        {"id": behavior + ".outcome.handled", "node": behavior, "kind": "outcome", "definition": {"statement": "The note is handled.", "signal": "note_done"}},
+        {"id": behavior + ".outcome.deferred", "node": behavior, "kind": "outcome", "definition": {"statement": "The note is deferred."}},
+        {"id": behavior + ".failures.rejected", "node": behavior, "kind": "failure", "definition": {"statement": "The note is rejected.", "signal": "note_rejected"}},
+        {"id": feature + ".rules.clear", "node": feature, "kind": "rule", "definition": {"statement": "Notes MUST be clear."}},
+        {"id": feature + ".use_cases.handle", "node": feature, "kind": "use_case", "definition": {"actor": "member", "goal": "Handle a note.", "behaviors": [behavior]}},
+        {"id": "architecture.runtime.constraints.available", "node": "architecture.runtime", "kind": "architecture_constraint", "definition": {"statement": "The runtime MUST be available."}},
+    ]
+    assert list(_validator().iter_errors(model)) == []
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected"),
+    [
+        (lambda model: model.pop("signals"), "'signals' is a required property"),
+        (lambda model: model.__setitem__("format_version", 2), "1 was expected"),
+        (lambda model: model["project"].__setitem__("extra", "no"), "Additional properties are not allowed"),  # type: ignore[union-attr]
+        (lambda model: model["features"][0].__setitem__("experience", None), "None is not of type 'object'"),  # type: ignore[index,union-attr]
+        (lambda model: model["behaviors"][0]["trigger"].__setitem__("case", {"obligation": "x", "statement": "x", "signal": "s"}), "is not valid under any of the given schemas"),  # type: ignore[index,union-attr]
+    ],
+)
+def test_schema_rejects_closed_or_invalid_v1_shape(mutate, expected: str) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any(expected in error.message for error in _validator().iter_errors(model))
+
+
+@pytest.mark.parametrize("field", ["trigger", "outcome"])
+@pytest.mark.parametrize("count", [1, 8])
+def test_schema_rejects_one_of_case_counts_outside_approved_bounds(
+    field: str, count: int
+) -> None:
+    model = _model()
+    behavior = "domains.notes.features.handling.behaviors.handle_note"
+    if field == "trigger":
+        model["behaviors"][0][field] = {  # type: ignore[index]
+            "kind": "one_of",
+            "cases": [
+                {"id": f"case_{index}", "obligation": f"{behavior}.trigger.case_{index}", "statement": "A request occurs."}
+                for index in range(count)
+            ],
+        }
+    else:
+        model["behaviors"][0][field] = {  # type: ignore[index]
+            "kind": "one_of",
+            "exclusivity_obligation": behavior + ".outcome",
+            "cases": [
+                {"id": f"case_{index}", "obligation": f"{behavior}.outcome.case_{index}", "statement": "The note changes."}
+                for index in range(count)
+            ],
+        }
+    assert any(
+        "is too short" in message or "is too long" in message
+        for message in _messages(_validator().iter_errors(model))
+    )
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model["obligations"][0].__setitem__("id", "not-an-obligation"),  # type: ignore[index,union-attr]
+        lambda model: model["obligations"][0].__setitem__("node", "not-an-owning-node"),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0].__setitem__("completion_obligation", "not-an-obligation"),  # type: ignore[index,union-attr]
+        lambda model: model["obligations"][0]["definition"]["outcomes"].__setitem__(0, "not-an-obligation"),  # type: ignore[index,union-attr]
+    ],
+)
+def test_schema_rejects_noncanonical_obligation_ids_nodes_and_references(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any("does not match" in message or "is not valid under any" in message for message in _messages(_validator().iter_errors(model)))
+
+
+@pytest.mark.parametrize(
+    ("field", "count"),
+    [("alternatives", 1), ("alternatives", 8), ("outcomes", 8), ("failures", 8)],
+)
+def test_schema_rejects_mirrored_completion_cardinalities(field: str, count: int) -> None:
+    model = _model()
+    behavior = "domains.notes.features.handling.behaviors.handle_note"
+    if field == "alternatives":
+        model["obligations"][0] = {  # type: ignore[index]
+            "id": behavior + ".outcome",
+            "node": behavior,
+            "kind": "outcome_exclusivity",
+            "definition": {field: [behavior + f".outcome.case_{index}" for index in range(count)]},
+        }
+    else:
+        model["obligations"][0]["definition"][field] = [  # type: ignore[index,union-attr]
+            behavior + (f".outcome.case_{index}" if field == "outcomes" else f".failures.case_{index}")
+            for index in range(count)
+        ]
+    assert any(
+        "is too short" in message or "is too long" in message
+        for message in _messages(_validator().iter_errors(model))
+    )
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model["project"].__setitem__("purpose", ""),  # type: ignore[union-attr]
+        lambda model: model["actors"][0].__setitem__("meaning", ""),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0]["trigger"]["case"].__setitem__("statement", ""),  # type: ignore[index,union-attr]
+        lambda model: model["obligations"][1]["definition"].__setitem__("statement", ""),  # type: ignore[index,union-attr]
+    ],
+)
+def test_schema_rejects_empty_semantic_text(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any("should be non-empty" in message for message in _messages(_validator().iter_errors(model)))
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model["features"][0]["actors"].append("member"),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0]["related_to"].extend(["domains.notes.features.handling", "domains.notes.features.handling"]),  # type: ignore[index,union-attr]
+        lambda model: model["obligations"][0]["definition"]["outcomes"].append("domains.notes.features.handling.behaviors.handle_note.outcome"),  # type: ignore[index,union-attr]
+    ],
+)
+def test_schema_rejects_duplicate_compiled_collections(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any("has non-unique elements" in message for message in _messages(_validator().iter_errors(model)))
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model.__setitem__("features", []),
+        lambda model: model.__setitem__("relationships", [{"kind": "related_to", "endpoints": ["domains.notes.features.handling", "domains.notes.features.handling"], "declared_by": ["domains.notes.features.handling"]}]),
+        lambda model: model.__setitem__("relationships", [{"kind": "related_to", "endpoints": ["domains.notes.features.handling", "domains.notes.features.handling.behaviors.handle_note"], "declared_by": []}]),
+    ],
+)
+def test_schema_rejects_empty_features_and_invalid_relationship_envelopes(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any(
+        "non-empty" in message or "has non-unique elements" in message or "is not valid under any" in message
+        for message in _messages(_validator().iter_errors(model))
+    )
+
+
+def test_schema_rejects_orphan_architecture_record() -> None:
+    model = _model()
+    model["architecture"] = [{"id": "runtime", "path": "architecture.runtime", "category": "runtime", "selection": "Managed runtime.", "rationale": "A rationale.", "constraint_obligations": [], "referenced_by": []}]
+
+    assert any("non-empty" in message for message in _messages(_validator().iter_errors(model)))
+
+
+def test_schema_accepts_empty_authored_vocabulary_term() -> None:
+    model = _model()
+    model["vocabulary"] = [{"term": "", "meaning": "The empty authored term.", "forbidden_synonyms": []}]
+
+    assert list(_validator().iter_errors(model)) == []
+
+
+def test_schema_accepts_feature_with_empty_authored_rule_map_projection() -> None:
+    model = _model()
+    model["behaviors"] = []
+    model["features"][0]["behaviors"] = []  # type: ignore[index]
+    model["obligations"] = []
+
+    assert list(_validator().iter_errors(model)) == []
+
+
+def test_flattened_feature_index_allows_all_domain_feature_records() -> None:
+    model = _model()
+    features = []
+    domains = []
+    for domain_index in range(25):
+        domain_id = f"domain_{domain_index}"
+        domain_path = f"domains.{domain_id}"
+        feature_paths = [f"{domain_path}.features.feature_{feature_index}" for feature_index in range(25)]
+        domains.append({"id": domain_id, "path": domain_path, "purpose": "A domain.", "rule_obligations": [], "features": feature_paths})
+        for feature_index in range(25):
+            feature_path = f"{domain_path}.features.feature_{feature_index}"
+            features.append({"id": f"feature_{feature_index}", "path": feature_path, "domain": domain_path, "purpose": "A feature.", "actors": [], "rule_obligations": [], "use_cases": [], "behaviors": [], "related_to": [], "architecture": []})
+    model["domains"] = domains
+    model["features"] = features
+    model["behaviors"] = []
+    model["obligations"] = []
+
+    assert len(features) == 625
+    assert list(_validator().iter_errors(model)) == []
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model["behaviors"][0]["trigger"]["case"].__setitem__("obligation", "domains.notes.features.handling.behaviors.handle_note.trigger.extra"),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0].__setitem__("trigger", {"kind": "one_of", "cases": [{"id": "first", "obligation": "domains.notes.features.handling.behaviors.handle_note.trigger", "statement": "First."}, {"id": "second", "obligation": "domains.notes.features.handling.behaviors.handle_note.trigger.second", "statement": "Second."}]}),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0]["outcome"]["case"].__setitem__("obligation", "domains.notes.features.handling.behaviors.handle_note.outcome.extra"),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0].__setitem__("outcome", {"kind": "one_of", "exclusivity_obligation": "domains.notes.features.handling.behaviors.handle_note.outcome.extra", "cases": [{"id": "first", "obligation": "domains.notes.features.handling.behaviors.handle_note.outcome.first", "statement": "First."}, {"id": "second", "obligation": "domains.notes.features.handling.behaviors.handle_note.outcome.second", "statement": "Second."}]}),  # type: ignore[index,union-attr]
+    ],
+)
+def test_schema_rejects_wrong_stable_transition_case_paths(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any("does not match" in message or "is not valid under any" in message for message in _messages(_validator().iter_errors(model)))
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model["obligations"][0].update({"id": "domains.notes.features.handling.behaviors.handle_note.outcome.first", "node": "domains.notes.features.handling.behaviors.handle_note", "kind": "outcome_exclusivity", "definition": {"alternatives": ["domains.notes.features.handling.behaviors.handle_note.outcome.first", "domains.notes.features.handling.behaviors.handle_note.outcome.second"]}}),  # type: ignore[index,union-attr]
+        lambda model: model["obligations"][0].update({"id": "domains.notes.features.handling.behaviors.handle_note.outcome", "node": "domains.notes.features.handling.behaviors.handle_note", "kind": "outcome_exclusivity", "definition": {"alternatives": ["domains.notes.features.handling.behaviors.handle_note.outcome", "domains.notes.features.handling.behaviors.handle_note.outcome.second"]}}),  # type: ignore[index,union-attr]
+    ],
+)
+def test_schema_rejects_exclusivity_parent_and_alternative_paths_in_wrong_positions(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any("does not match" in message or "is not valid under any" in message for message in _messages(_validator().iter_errors(model)))
+
+
+def test_schema_accepts_newline_suffixed_nested_ids_accepted_by_source_schema() -> None:
+    model = _model()
+    replacements = {
+        "domains.notes.features.handling.behaviors.handle_note": "domains.notes\n.features.handling\n.behaviors.handle_note\n",
+        "domains.notes.features.handling": "domains.notes\n.features.handling\n",
+        "domains.notes": "domains.notes\n",
+    }
+
+    def rewrite(value: object) -> object:
+        if isinstance(value, str):
+            for index, old in enumerate(replacements):
+                value = value.replace(old, f"__PATH_{index}__")
+            for index, new in enumerate(replacements.values()):
+                value = value.replace(f"__PATH_{index}__", new)
+            return value
+        if isinstance(value, list):
+            return [rewrite(item) for item in value]
+        if isinstance(value, dict):
+            return {key: rewrite(item) for key, item in value.items()}
+        return value
+
+    model = rewrite(model)  # type: ignore[assignment]
+    model["domains"][0]["id"] = "notes\n"  # type: ignore[index]
+    model["features"][0]["id"] = "handling\n"  # type: ignore[index]
+    model["behaviors"][0]["id"] = "handle_note\n"  # type: ignore[index]
+
+    assert list(_validator().iter_errors(model)) == []
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model["actors"][0].__setitem__("id", "member\n\n"),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0].__setitem__("completion_obligation", "domains.notes.features.handling.behaviors.handle_note.completion\n"),  # type: ignore[index,union-attr]
+        lambda model: model.__setitem__("definition_digest", "sha256:" + "0" * 64 + "\n"),
+    ],
+)
+def test_schema_rejects_double_or_spurious_terminal_line_feeds(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any("does not match" in message for message in _messages(_validator().iter_errors(model)))
+
+
+def test_shared_types_preserve_required_and_optional_contract_fields() -> None:
+    model_hints = get_type_hints(CompiledModel)
+    behavior_hints = get_type_hints(CompiledBehavior)
+    feature_hints = get_type_hints(CompiledFeature)
+    signal_hints = get_type_hints(CompiledSignal)
+
+    assert CompiledModel.__required_keys__ == frozenset({
+        "format", "format_version", "language_version", "definition_digest", "project",
+        "vocabulary", "actors", "concepts", "architecture", "domains", "features",
+        "behaviors", "use_cases", "signals", "relationships", "use_case_memberships", "obligations",
+    })
+    assert "experience" in feature_hints
+    assert CompiledFeature.__optional_keys__ == frozenset({"experience"})
+    assert CompiledBehavior.__optional_keys__ == frozenset({"conditions"})
+    assert CompiledSignal.__optional_keys__ == frozenset({"subject"})
+    assert "format_version" in model_hints and "trigger" in behavior_hints and "producer" in signal_hints
+
+
+def test_shared_types_represent_signal_only_trigger_obligations() -> None:
+    trigger_definition = get_type_hints(TriggerObligation)["definition"]
+
+    assert set(get_args(trigger_definition)) == {StatementDefinition, SignalOnlyDefinition}
+    assert SignalOnlyDefinition.__required_keys__ == frozenset({"signal"})
+    assert SignalOnlyDefinition.__optional_keys__ == frozenset()
