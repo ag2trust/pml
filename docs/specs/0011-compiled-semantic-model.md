@@ -535,7 +535,7 @@ The rules are:
 2. Preserve authored sequence order in every array copied from an authored YAML
    sequence. The exhaustive set is:
    `vocabulary[].forbidden_synonyms`, `concepts[].states`, `features[].actors`,
-   `features[].related_to`, `features[].architecture`,
+   `features[].related_to`, `features[].architecture`, `behaviors[].related_to`,
    `features[].experience.surfaces[].contains`,
    `features[].experience.surfaces[].accessibility`,
    `features[].experience.surfaces[].responsive_behavior`,
@@ -715,7 +715,8 @@ With owner approval granted, delivery follows the repository order:
 5. Add compiled-model conformance fixtures plus deterministic serialization
    tests. Golden-byte cases MUST cover nested non-empty and empty objects and
    arrays, separator and indentation layout, an authored architecture reference,
-   reordered authored maps, equivalent modular input, and authored strings
+   a behavior `related_to` array whose authored target order differs from lexical
+   order, reordered authored maps, equivalent modular input, and authored strings
    containing quotation mark, reverse solidus, solidus, every named control escape,
    another U+0000–U+001F control, a basic non-ASCII scalar, and a supplementary
    scalar. A definition-digest golden case MUST independently fix the expected
