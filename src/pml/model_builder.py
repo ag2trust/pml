@@ -242,7 +242,7 @@ def _relationships(
     ]
 
 
-def build_compiled_model(
+def _build_compiled_model(
     document: Mapping[str, Any],
     resolver: ReferenceResolver,
     resolution: ResolvedDefinition,

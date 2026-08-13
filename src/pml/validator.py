@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime
 import copy
 import json
@@ -264,7 +265,6 @@ def _is_transition_text(parts: tuple[Any, ...]) -> bool:
 
 def _semantic_diagnostics(
     document: dict[str, Any],
-    prior_diagnostics: Iterable[Diagnostic] = (),
     resolution: ResolvedDefinition | None = None,
 ) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
@@ -329,13 +329,8 @@ def _semantic_diagnostics(
                     )
                 )
 
-    # Schema findings are supplied to the resolver only to enforce the
-    # all-or-nothing compilation boundary. They retain their existing position in
-    # validate_file's result and are not appended again here.
     if resolution is None:
-        resolution = resolve_references(
-            document, prior_diagnostics, materialize=False
-        )
+        resolution = resolve_references(document)
     for step in resolution.steps:
         diagnostics.extend(step.diagnostics)
         if step.kind == "signal":
@@ -461,8 +456,19 @@ def validate_document(document: dict[str, Any]) -> ResolvedDefinition:
         )
 
     resolver = ReferenceResolver(document)
-    resolution = resolver.resolve(diagnostics, materialize=False)
-    diagnostics.extend(
-        _semantic_diagnostics(document, diagnostics, resolution)
+    resolution = resolver.resolve()
+    diagnostics.extend(_semantic_diagnostics(document, resolution))
+    if diagnostics:
+        return replace(
+            resolution,
+            diagnostics=tuple(diagnostics),
+            compiled_model=None,
+        )
+
+    from pml.model_builder import _build_compiled_model
+
+    return replace(
+        resolution,
+        diagnostics=(),
+        compiled_model=_build_compiled_model(document, resolver, resolution),
     )
-    return resolver.compile(resolution, diagnostics)

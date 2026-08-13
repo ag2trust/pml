@@ -9,7 +9,11 @@ from pml.obligations import (
     enumerate_architecture_obligations,
     enumerate_obligations,
 )
-from pml.resolver import ReferenceResolver, resolve_references
+from pml.resolver import (
+    ReferenceResolver,
+    resolve_definition,
+    resolve_references,
+)
 from pml.validator import load_document, validate_document
 
 
@@ -40,11 +44,11 @@ def test_resolver_indexes_definition_identities_and_resolved_signals() -> None:
     assert resolution.signals["assistant_created"].behavior == producer
     assert resolution.signals["assistant_created"].completion == f"{producer}.outcome"
     assert resolution.diagnostics == ()
-    assert resolution.compiled_model is not None
+    assert resolution.compiled_model is None
 
 
 def test_resolver_emits_complete_model_for_diagnostic_free_definition() -> None:
-    resolution = validate_document(_document("assistant-creation.pml.yaml"))
+    resolution = resolve_definition(_document("assistant-creation.pml.yaml"))
     model = resolution.compiled_model
 
     assert resolution.diagnostics == ()
@@ -96,6 +100,58 @@ def test_validated_resolver_withholds_model_for_nonreference_diagnostics() -> No
     resolution = validate_document(_document("architecture-invalid.pml.yaml"))
 
     assert resolution.diagnostics
+    assert resolution.compiled_model is None
+
+
+def test_reference_clean_schema_invalid_definition_cannot_compile() -> None:
+    document = _document("assistant-creation.pml.yaml")
+    document["project"]["unknown"] = "not part of PML"
+
+    references = resolve_references(document)
+    resolution = resolve_definition(document)
+
+    assert references.diagnostics == ()
+    assert references.compiled_model is None
+    assert [(item.path, item.code) for item in resolution.diagnostics] == [
+        ("project", "schema")
+    ]
+    assert resolution.compiled_model is None
+
+
+def test_reference_clean_incomplete_definition_returns_diagnostics_not_model() -> None:
+    document = _document("assistant-creation.pml.yaml")
+    del document["domains"]["assistants"]["features"]["creation"]["behaviors"][
+        "created_assistant_visibility"
+    ]["outcome"]
+
+    references = resolve_references(document)
+    resolution = resolve_definition(document)
+
+    assert references.diagnostics == ()
+    assert references.compiled_model is None
+    assert any(item.code == "schema" for item in resolution.diagnostics)
+    assert resolution.compiled_model is None
+
+
+def test_reference_clean_local_language_invalid_definition_cannot_compile() -> None:
+    document = _document("assistant-creation.pml.yaml")
+    behavior = document["domains"]["assistants"]["features"]["creation"][
+        "behaviors"
+    ]["assistant_creation"]
+    behavior["trigger"]["statement"] = "The REST API receives a request."
+
+    references = ReferenceResolver(document).resolve()
+    resolution = resolve_definition(document)
+
+    assert references.diagnostics == ()
+    assert references.compiled_model is None
+    assert [(item.path, item.code) for item in resolution.diagnostics] == [
+        (
+            "domains.assistants.features.creation.behaviors."
+            "assistant_creation.trigger.statement",
+            "implementation-detail",
+        )
+    ]
     assert resolution.compiled_model is None
 
 
