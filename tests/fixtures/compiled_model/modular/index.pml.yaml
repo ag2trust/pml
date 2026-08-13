@@ -1,0 +1,47 @@
+architecture:
+  a_store:
+    category: database
+    selection: Durable store.
+    rationale: The selected store preserves durable product records.
+    constraints:
+      a_recovery:
+        statement: The durable store MUST expose accepted records after recovery.
+      z_retention:
+        statement: The durable store MUST retain accepted records.
+  z_runtime:
+    category: runtime
+    selection: Managed runtime.
+    rationale: The selected runtime preserves the approved operating boundary.
+
+rules:
+  a_rule:
+    statement: The product MUST retain the earlier-sorted project rule.
+  z_rule:
+    statement: The product MUST retain the later-authored project rule.
+
+concepts:
+  a_record:
+    meaning: A record whose authored state order is retained.
+    states: [ready, draft]
+  z_record:
+    meaning: The last concept by ID.
+
+actors:
+  ada:
+    meaning: The first actor by ID.
+  zed:
+    meaning: The last actor by ID.
+
+vocabulary:
+  Alpha:
+    meaning: The first term by scalar-value ordering.
+  éclair:
+    meaning: A basic non-ASCII vocabulary term.
+    forbidden_synonyms: [later_term, earlier_term]
+
+project:
+  id: canonical_model
+  name: Canonical Model
+  purpose: "Preserve \"quotes\", \\ paths, / solidus, \b backspace, \t tab, \n line feed, \f form feed, \r carriage return, \u001f unit separator, café, and 🧭."
+
+pml: "0.1-draft"
