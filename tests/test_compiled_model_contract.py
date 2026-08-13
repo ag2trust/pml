@@ -196,6 +196,60 @@ def test_schema_rejects_mirrored_completion_cardinalities(field: str, count: int
     )
 
 
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model["project"].__setitem__("purpose", ""),  # type: ignore[union-attr]
+        lambda model: model["actors"][0].__setitem__("meaning", ""),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0]["trigger"]["case"].__setitem__("statement", ""),  # type: ignore[index,union-attr]
+        lambda model: model["obligations"][1]["definition"].__setitem__("statement", ""),  # type: ignore[index,union-attr]
+    ],
+)
+def test_schema_rejects_empty_semantic_text(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any("should be non-empty" in message for message in _messages(_validator().iter_errors(model)))
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model["features"][0]["actors"].append("member"),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0]["related_to"].extend(["domains.notes.features.handling", "domains.notes.features.handling"]),  # type: ignore[index,union-attr]
+        lambda model: model["obligations"][0]["definition"]["outcomes"].append("domains.notes.features.handling.behaviors.handle_note.outcome"),  # type: ignore[index,union-attr]
+    ],
+)
+def test_schema_rejects_duplicate_compiled_collections(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any("has non-unique elements" in message for message in _messages(_validator().iter_errors(model)))
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model.__setitem__("features", []),
+        lambda model: model["features"][0].update({"rule_obligations": [], "use_cases": [], "behaviors": []}),  # type: ignore[index,union-attr]
+        lambda model: model.__setitem__("relationships", [{"kind": "related_to", "endpoints": ["domains.notes.features.handling", "domains.notes.features.handling"], "declared_by": ["domains.notes.features.handling"]}]),
+        lambda model: model.__setitem__("relationships", [{"kind": "related_to", "endpoints": ["domains.notes.features.handling", "domains.notes.features.handling.behaviors.handle_note"], "declared_by": []}]),
+    ],
+)
+def test_schema_rejects_empty_features_and_invalid_relationship_envelopes(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any(
+        "non-empty" in message or "has non-unique elements" in message or "is not valid under any" in message
+        for message in _messages(_validator().iter_errors(model))
+    )
+
+
+def test_schema_rejects_orphan_architecture_record() -> None:
+    model = _model()
+    model["architecture"] = [{"id": "runtime", "path": "architecture.runtime", "category": "runtime", "selection": "Managed runtime.", "rationale": "A rationale.", "constraint_obligations": [], "referenced_by": []}]
+
+    assert any("non-empty" in message for message in _messages(_validator().iter_errors(model)))
+
+
 def test_shared_types_preserve_required_and_optional_contract_fields() -> None:
     model_hints = get_type_hints(CompiledModel)
     behavior_hints = get_type_hints(CompiledBehavior)
