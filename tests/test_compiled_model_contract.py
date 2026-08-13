@@ -229,7 +229,6 @@ def test_schema_rejects_duplicate_compiled_collections(mutate) -> None:  # type:
     "mutate",
     [
         lambda model: model.__setitem__("features", []),
-        lambda model: model["features"][0].update({"rule_obligations": [], "use_cases": [], "behaviors": []}),  # type: ignore[index,union-attr]
         lambda model: model.__setitem__("relationships", [{"kind": "related_to", "endpoints": ["domains.notes.features.handling", "domains.notes.features.handling"], "declared_by": ["domains.notes.features.handling"]}]),
         lambda model: model.__setitem__("relationships", [{"kind": "related_to", "endpoints": ["domains.notes.features.handling", "domains.notes.features.handling.behaviors.handle_note"], "declared_by": []}]),
     ],
@@ -248,6 +247,58 @@ def test_schema_rejects_orphan_architecture_record() -> None:
     model["architecture"] = [{"id": "runtime", "path": "architecture.runtime", "category": "runtime", "selection": "Managed runtime.", "rationale": "A rationale.", "constraint_obligations": [], "referenced_by": []}]
 
     assert any("non-empty" in message for message in _messages(_validator().iter_errors(model)))
+
+
+def test_schema_accepts_empty_authored_vocabulary_term() -> None:
+    model = _model()
+    model["vocabulary"] = [{"term": "", "meaning": "The empty authored term.", "forbidden_synonyms": []}]
+
+    assert list(_validator().iter_errors(model)) == []
+
+
+def test_schema_accepts_feature_with_empty_authored_rule_map_projection() -> None:
+    model = _model()
+    model["behaviors"] = []
+    model["features"][0]["behaviors"] = []  # type: ignore[index]
+    model["obligations"] = []
+
+    assert list(_validator().iter_errors(model)) == []
+
+
+def test_flattened_feature_index_allows_all_domain_feature_records() -> None:
+    model = _model()
+    features = []
+    domains = []
+    for domain_index in range(25):
+        domain_id = f"domain_{domain_index}"
+        domain_path = f"domains.{domain_id}"
+        feature_paths = [f"{domain_path}.features.feature_{feature_index}" for feature_index in range(25)]
+        domains.append({"id": domain_id, "path": domain_path, "purpose": "A domain.", "rule_obligations": [], "features": feature_paths})
+        for feature_index in range(25):
+            feature_path = f"{domain_path}.features.feature_{feature_index}"
+            features.append({"id": f"feature_{feature_index}", "path": feature_path, "domain": domain_path, "purpose": "A feature.", "actors": [], "rule_obligations": [], "use_cases": [], "behaviors": [], "related_to": [], "architecture": []})
+    model["domains"] = domains
+    model["features"] = features
+    model["behaviors"] = []
+    model["obligations"] = []
+
+    assert len(features) == 625
+    assert list(_validator().iter_errors(model)) == []
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda model: model["behaviors"][0]["trigger"]["case"].__setitem__("obligation", "domains.notes.features.handling.behaviors.handle_note.trigger.extra"),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0].__setitem__("trigger", {"kind": "one_of", "cases": [{"id": "first", "obligation": "domains.notes.features.handling.behaviors.handle_note.trigger", "statement": "First."}, {"id": "second", "obligation": "domains.notes.features.handling.behaviors.handle_note.trigger.second", "statement": "Second."}]}),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0]["outcome"]["case"].__setitem__("obligation", "domains.notes.features.handling.behaviors.handle_note.outcome.extra"),  # type: ignore[index,union-attr]
+        lambda model: model["behaviors"][0].__setitem__("outcome", {"kind": "one_of", "exclusivity_obligation": "domains.notes.features.handling.behaviors.handle_note.outcome.extra", "cases": [{"id": "first", "obligation": "domains.notes.features.handling.behaviors.handle_note.outcome.first", "statement": "First."}, {"id": "second", "obligation": "domains.notes.features.handling.behaviors.handle_note.outcome.second", "statement": "Second."}]}),  # type: ignore[index,union-attr]
+    ],
+)
+def test_schema_rejects_wrong_stable_transition_case_paths(mutate) -> None:  # type: ignore[no-untyped-def]
+    model = _model()
+    mutate(model)
+    assert any("does not match" in message or "is not valid under any" in message for message in _messages(_validator().iter_errors(model)))
 
 
 def test_shared_types_preserve_required_and_optional_contract_fields() -> None:
