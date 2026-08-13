@@ -194,17 +194,15 @@ class ReferenceResolver:
                     continue
                 prefix = f"domains.{domain_id}.features.{feature_id}"
                 feature_diagnostics: list[Diagnostic] = []
-                actors_value = feature.get("actors", [])
-                if isinstance(actors_value, list):
-                    for actor in actors_value:
-                        if actor not in actor_ids:
-                            feature_diagnostics.append(
-                                Diagnostic(
-                                    f"{prefix}.actors",
-                                    "undefined-reference",
-                                    f"unknown actor '{actor}'",
-                                )
+                for actor in feature.get("actors", []):
+                    if actor not in actor_ids:
+                        feature_diagnostics.append(
+                            Diagnostic(
+                                f"{prefix}.actors",
+                                "undefined-reference",
+                                f"unknown actor '{actor}'",
                             )
+                        )
                 steps.append(
                     ResolutionStep(
                         "feature",
