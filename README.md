@@ -21,9 +21,16 @@ PML manifest
 
 ## Current status
 
-The 0.1 language MVP is under implementation. The owner-approved behavior
-transition grammar is in
-[`docs/specs/0010-behavior-transition-model.md`](docs/specs/0010-behavior-transition-model.md).
+The owner-approved behavior transition model in
+[`docs/specs/0010-behavior-transition-model.md`](docs/specs/0010-behavior-transition-model.md)
+is implemented across the schema, semantic validation, conformance examples,
+obligation resolution, bindings, probes, state consumers, and authoring
+documentation. The owner-approved version 1 compiled semantic model in
+[`docs/specs/0011-compiled-semantic-model.md`](docs/specs/0011-compiled-semantic-model.md)
+is implemented through canonical serialization and `pml compile --json`.
+
+`pml explain`, `pml graph`, and the future read-only web explorer are approved
+but unimplemented compiled-model consumers.
 
 ## Validate a manifest
 
@@ -32,6 +39,15 @@ python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 .venv/bin/pml validate pml.yaml
 ```
+
+Compile a validated definition to the canonical compiled JSON model with:
+
+```bash
+.venv/bin/pml compile pml.yaml --json
+```
+
+`pml compile` requires `--json`, writes the model to standard output, and does
+not write project state.
 
 Initialize PML from an implementing product repository with:
 
@@ -146,6 +162,7 @@ pml architecture-status definition.pml.yaml product/
 - [Bindings boundary](docs/specs/0005-bindings-boundary.md) — owner policy, lock pins, and product-local state.
 - [Architecture decisions](docs/specs/0006-architecture-decisions.md) — approved registry and separate conformance semantics.
 - [Behavior transition model](docs/specs/0010-behavior-transition-model.md) — approved transition grammar and migration guidance.
+- [Canonical compiled semantic model](docs/specs/0011-compiled-semantic-model.md) — approved version 1 derived model and JSON contract.
 
 Examples:
 
