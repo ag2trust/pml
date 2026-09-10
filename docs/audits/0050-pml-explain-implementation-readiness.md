@@ -110,7 +110,11 @@ change, not a blocker for the minimal slice.
 enumerated at spec 0011:158-177 and correspond one-to-one with the top-level
 arrays materialized in `_build_compiled_model`
 ([`src/pml/model_builder.py`](../../src/pml/model_builder.py) lines 395-456).
-Their identity categories (spec 0011:122-149) are:
+Not every top-level array is addressable by a single canonical ID: the
+edge categories `relationships[]` and `use_case_memberships[]` are
+tuple-identified (spec 0011:346-355 and spec 0011:587-588), so they cannot
+be requested by an `explain <id>` invocation whose sole selector is a
+single string. The requestable identities (spec 0011:122-149) are:
 
 | Category | Identity carrier | Producer |
 | --- | --- | --- |
@@ -125,6 +129,21 @@ Their identity categories (spec 0011:122-149) are:
 | `use_cases[]` | `path` (`...features.<f>.use_cases.<u>`) | [`model_builder.py:345-357`](../../src/pml/model_builder.py) |
 | `signals[]` | `id` | [`model_builder.py:368-383`](../../src/pml/model_builder.py) |
 | `obligations[]` | `id` (see below) | [`model_builder.py:385-393`](../../src/pml/model_builder.py) |
+
+Non-requestable edge categories (surfaced only as derived inverse links
+when their endpoint or membership record is explained):
+
+| Category | Identity shape | Producer |
+| --- | --- | --- |
+| `relationships[]` | tuple `(endpoints[0], endpoints[1])` sorted lexically (spec 0011:346-350, 587); `declared_by` is derived independently | [`model_builder.py:217-232`](../../src/pml/model_builder.py) |
+| `use_case_memberships[]` | tuple `(use_case, behavior)` (spec 0011:352-355, 588) | [`model_builder.py:248-255`](../../src/pml/model_builder.py) |
+
+These two categories MUST NOT appear in the single-canonical-ID
+requestable set. Explaining them by string would require an owner-approved
+composite selector (for example a tuple flag), which spec 0011:665-671
+does not authorize. The minimal slice therefore renders them only as
+inverse links on their endpoint or membership records, using the two
+lookup views defined in finding 7.
 
 **Collision analysis** (this is the load-bearing correctness question for a
 single-argument `pml explain <id>` command). Two schema facts govern which
@@ -536,6 +555,37 @@ what they will observe) are:
    records. This is the primitive `pml graph` will use to render the
    directed causal edges required by spec 0011:675-679.
 
+5. **Relationship endpoint-lookup view**. For a feature or behavior path,
+   return every `compiled-relationship` whose `endpoints` contains that
+   path — regardless of which endpoint authored the reference (see
+   `declared_by` at [`model_builder.py:217-232`](../../src/pml/model_builder.py)
+   and spec 0011:346-350, 476-482). Because the top-level `relationships`
+   array is the canonical symmetric projection of resolved authored
+   `related_to` lists (spec 0011:476-482), an incoming-only edge (i.e., the
+   other endpoint's authored `related_to` includes this path but this
+   record's own `related_to` does not) still yields a matching relationship
+   record whose `declared_by` names the other endpoint. The lookup MUST
+   therefore probe `endpoints`, not the record's own authored `related_to`,
+   so `pml explain` displays symmetric relationships as spec 0011:667-671
+   requires. `pml graph` reuses this same view to render symmetric
+   `related_to` edges without reinterpreting authored YAML.
+
+6. **Use-case membership lookup view**. For a feature or behavior path,
+   return every `compiled-use-case-membership` whose `behavior` field
+   equals that path; for a use-case path, return every membership whose
+   `use_case` field equals that path (spec 0011:352-355, 484-488; produced
+   at [`model_builder.py:248-260`](../../src/pml/model_builder.py)). The
+   inverse index on each behavior's `use_cases` array
+   ([`compiled_model.py:168-180`](../../src/pml/compiled_model.py);
+   [`model_builder.py:256-260, 335`](../../src/pml/model_builder.py)) and
+   the authored-order behaviors list on each compiled use case
+   ([`model_builder.py:354`](../../src/pml/model_builder.py)) are two
+   projections of this set. Explaining a behavior therefore surfaces every
+   use case that references it, and explaining a use case surfaces every
+   behavior it authored — both sides of the membership, as spec 0011:667-671
+   requires. `pml graph` reuses this same view to render use-case
+   membership edges.
+
 None of these primitives require a schema, validator, compiler, CLI beyond
 the new `explain` subparser, or generated-state change. Each is a pure
 function over the compiled model.
@@ -550,6 +600,7 @@ function over the compiled model.
 | Actor/concept/signal same-string ambiguity (dotless namespace) | Owner-decision blocker only if minimal slice hides matches; otherwise implementation detail (render each match) |
 | Vocabulary-term vs. hierarchy path or obligation ID same-string collision (vocabulary terms are unrestricted free text at [`schema/pml.schema.json:61-65`](../../schema/pml.schema.json)) | Implementation detail (dispatch probes every category index; dropping a matching vocabulary record would be a defect) |
 | Use-case path guaranteed to match both use-case record and use_case obligation | Approved by spec ([0011:503-509](../specs/0011-compiled-semantic-model.md)); implementation detail |
+| Tuple-identified edge categories `relationships[]` and `use_case_memberships[]` (spec 0011:346-355, 587-588) | Non-requestable by a single canonical ID; requestability would require an owner-approved composite selector. Minimal slice surfaces these edges only through the endpoint- and membership-lookup views (finding 7 primitives 5-6), including relationships declared only by the other endpoint and both sides of every membership. |
 | Authored values vs. derived identity/structural fields vs. derived inverse links split per record | Implementation detail (three-section rendering required so generated `path`/`kind`/case metadata is not shown as authored) |
 | Presentation ordering within a rendered record | Implementation detail (human-readable text only) |
 | Diagnostic code and message for unknown ID | Implementation detail (reuse existing `[code] message` shape) |
@@ -587,7 +638,18 @@ that:
    (`completion_obligation`, per-case `obligation`, use-case `obligation`),
    and a "Derived inverse links" subsection listing rule-4 back-references
    (`rule_obligations`, `use_cases`, `behaviors`, `features`, `domains`,
-   `referenced_by`, signal `producer`/`consumers`).
+   `referenced_by`, signal `producer`/`consumers`) **plus** the results of
+   the relationship endpoint-lookup and use-case-membership lookup views
+   from finding 7 for feature, behavior, and use-case matches. For a
+   feature or behavior match, every relationship with that path in
+   `endpoints` is rendered under Derived inverse links regardless of
+   `declared_by` — including a relationship declared only by the other
+   endpoint — and every use-case membership with that path in `behavior`
+   is rendered. For a use-case match, every membership with that path in
+   `use_case` is rendered. Neither `compiled-relationship` nor
+   `compiled-use-case-membership` is otherwise requestable by a single
+   canonical ID; a user cannot ask for one directly, so `pml explain`
+   surfaces them only through these inverse views.
 5. On no match, exits nonzero and writes a single
    `<id>: [unknown-id] no compiled record matches this ID` line to standard
    error, with empty standard output, following the
@@ -642,8 +704,25 @@ generated-state or evidence artifact.
   `domains.core.features.f.behaviors.b.completion` where that completion
   obligation also exists. Assert that the vocabulary record and the
   obligation record are both rendered under separate category sections.
-
-### Negative conformance cases
+- **Incoming-only relationship** (finding 7, primitive 5). Given two
+  features `A` and `B` where only `B`'s authored `related_to` names `A`,
+  the compiled model produces one symmetric relationship whose `endpoints`
+  are `[A, B]` (spec 0011:476-482) and whose `declared_by` is `[B]` only
+  ([`model_builder.py:217-232`](../../src/pml/model_builder.py)). Explain
+  `A` and assert its Derived inverse links section shows that relationship
+  with endpoints `[A, B]` and `declared_by: [B]`, even though `A`'s own
+  `related_to` is empty. Explain `B` and assert its Derived inverse links
+  section shows the same relationship. Neither invocation may drop the
+  edge on the basis of `declared_by`.
+- **Both sides of a use-case membership** (finding 7, primitive 6). Given
+  a use case `U` at `domains.d.features.f.use_cases.u` whose authored
+  `behaviors` names `domains.d.features.f.behaviors.b`, explain `U` and
+  assert its authored `behaviors` list includes `b` in authored order and
+  its Derived identity/structural section shows the self-referring
+  `use_case` obligation; then explain `b` and assert its Derived inverse
+  links section shows a use-case membership `(U, b)` (equivalently, `b`'s
+  derived `use_cases` inverse contains `U`). Both directions must be
+  rendered from the same materialized memberships.
 
 - Explain an ID that is a syntactically valid semantic path but is not present
   in any category (e.g., `domains.missing.features.absent`). Assert exit
