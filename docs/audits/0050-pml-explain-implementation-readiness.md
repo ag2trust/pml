@@ -127,29 +127,63 @@ Their identity categories (spec 0011:122-149) are:
 | `obligations[]` | `id` (see below) | [`model_builder.py:385-393`](../../src/pml/model_builder.py) |
 
 **Collision analysis** (this is the load-bearing correctness question for a
-single-argument `pml explain <id>` command):
+single-argument `pml explain <id>` command). Two schema facts govern which
+strings each category can produce:
 
-1. **Across `actors`, `concepts`, `signals`, `vocabulary`**: each is a
-   separate authored namespace (spec 0011:143-145). Spec 0011 does not forbid
-   an actor ID and a concept ID from being the same string, and the compiled
-   arrays are keyed independently
+- The `#/$defs/id` regex `^[a-z][a-z0-9_]*$`
+  ([`schema/pml.schema.json:19-21`](../../schema/pml.schema.json)) restricts
+  `actor`, `concept`, and inline signal IDs to dotless lowercase snake_case,
+  and hierarchy segments to the same alphabet
+  ([`schema/pml.schema.json:47-48, 315`](../../schema/pml.schema.json)). No
+  such value can contain a `.`.
+- `vocabularyMap` at
+  [`schema/pml.schema.json:61-65`](../../schema/pml.schema.json) has no
+  `propertyNames` restriction; a vocabulary term is authored free text and
+  may contain any Unicode scalar the loader accepts (spec 0011:83-101), and
+  in particular may contain `.` and may equal a hierarchy path or an
+  obligation ID verbatim.
+
+The collision families are therefore:
+
+1. **Across `actors`, `concepts`, `signals`** (dotless IDs): each is a
+   separate authored namespace (spec 0011:143-145). Spec 0011 does not
+   forbid an actor ID and a concept ID from being the same string, and the
+   compiled arrays are keyed independently
    ([`model_builder.py:419-430`](../../src/pml/model_builder.py)). A single
    input ID string may therefore match records of more than one of these
-   categories. A `vocabulary` `term` is authored free text; an `actor`,
-   `concept`, or `signal` `id` is authored under
-   [`schema/pml.schema.json`](../../schema/pml.schema.json). Two categories
-   using the same string is an ambiguity, not a defect.
+   three categories. All three are constrained by `#/$defs/id` above, so
+   these collisions cannot spill into hierarchy or obligation shapes.
 
-2. **Hierarchy paths versus flat IDs**: hierarchy paths always contain `.`
-   segments beginning with `domains.` or `architecture.`. They cannot alias a
-   bare `actor`, `concept`, `signal`, or `vocabulary term` under the current
-   schema, but the resolver enforces this only structurally
-   ([`resolver.py:83-92`](../../src/pml/resolver.py)); the ID grammar itself
-   is not restricted from containing dots. Any dotted ID would not collide
-   with a legal hierarchy path because it lacks the required prefix segments.
+2. **Vocabulary term vs. every other category**: because a term is
+   unrestricted free text ([`schema/pml.schema.json:61-65`](../../schema/pml.schema.json)),
+   a term may equal:
+   - a bare `actor`, `concept`, or `signal` ID (e.g., the term `signal_a` and
+     an inline signal with `id: signal_a`);
+   - a domain, feature, behavior, or use-case hierarchy path (e.g., the term
+     `domains.core.features.f`), producing a same-string collision with the
+     `hierarchy paths` family below;
+   - an architecture decision path
+     (e.g., the term `architecture.database`);
+   - an obligation ID at any depth (e.g., the term
+     `domains.core.features.f.behaviors.b.completion` or
+     `domains.core.features.f.use_cases.u`).
 
-3. **Hierarchy paths versus obligation IDs**: this is the one direct collision
-   fixed by the approved obligation table
+   This means the collision surface between `vocabulary` and the
+   hierarchy/obligation families is not empty. It is not structurally
+   forbidden today by
+   [`schema/pml.schema.json:61-65`](../../schema/pml.schema.json) and is
+   therefore observable by a legitimate compiled model.
+
+3. **Hierarchy paths versus dotless IDs**: hierarchy paths always contain `.`
+   segments beginning with `domains.` or `architecture.`
+   ([`resolver.py:83-92`](../../src/pml/resolver.py);
+   [`model_builder.py:266-357, 431-447`](../../src/pml/model_builder.py)),
+   and dotless-ID categories are restricted to `^[a-z][a-z0-9_]*$` (no `.`)
+   by `#/$defs/id`. Consequently a hierarchy path cannot collide with an
+   actor, concept, or signal ID under the current schema.
+
+4. **Hierarchy paths versus obligation IDs**: this is the one direct
+   collision fixed by the approved obligation table
    ([spec 0011:494-505](../specs/0011-compiled-semantic-model.md)):
 
    - `use_case` obligation ID: `<feature-path>.use_cases.<use-case-id>`
@@ -169,14 +203,14 @@ single-argument `pml explain <id>` command):
    ([spec 0011:507-509](../specs/0011-compiled-semantic-model.md)). Both are
    legitimate reads of the same input.
 
-4. **Architecture path vs. architecture-constraint obligation**: the
+5. **Architecture path vs. architecture-constraint obligation**: the
    constraint obligation IDs extend the decision path with
    `.constraints.<constraint-id>`
    ([spec 0011:504](../specs/0011-compiled-semantic-model.md);
    [`model_builder.py:438-441`](../../src/pml/model_builder.py)). No
    collision with the flat `architecture.<decision-id>` path.
 
-5. **Behavior path vs. its behavior-scoped obligations**: obligation IDs
+6. **Behavior path vs. its behavior-scoped obligations**: obligation IDs
    inside a behavior scope extend the behavior path with
    `.conditions`, `.trigger[.<alt>]`, `.completion`, `.outcome[.<alt>]`, and
    `.failures.<failure>`
@@ -185,13 +219,13 @@ single-argument `pml explain <id>` command):
    [`model_builder.py:122-183`](../../src/pml/model_builder.py)). No
    behavior-record path equals an obligation ID.
 
-6. **Feature path vs. feature-scoped obligations**: feature `rules` obligations
+7. **Feature path vs. feature-scoped obligations**: feature `rules` obligations
    extend the feature path with `.rules.<rule-id>`
    ([spec 0011:502](../specs/0011-compiled-semantic-model.md);
    [`model_builder.py:23-27`](../../src/pml/model_builder.py)); no collision
    with the flat feature path.
 
-7. **`compiled-project.id` vs. project-scoped obligations**: project rules use
+8. **`compiled-project.id` vs. project-scoped obligations**: project rules use
    `project` as their node prefix
    ([spec 0011:506-508](../specs/0011-compiled-semantic-model.md);
    [`resolver.py:143-160`](../../src/pml/resolver.py) line 147). The
@@ -201,20 +235,32 @@ single-argument `pml explain <id>` command):
    feature path, but it is disjoint from the project record itself because
    the project record is addressed by the fixed keyword `project`.
 
-**Conclusion**: two collision families are real for a canonical-ID lookup:
+**Conclusion**: the collision families a canonical-ID lookup must handle are:
 
-- **actor / concept / signal / vocabulary-term**: same input string may match
-  up to four category records.
-- **use-case path**: same input string always denotes both a use-case record
-  and its `use_case` obligation (guaranteed identity by spec, not a bug).
+- **actor / concept / signal** (dotless namespace): one input string may match
+  up to three of these records.
+- **vocabulary-term versus every other category**: because vocabulary terms
+  are unrestricted free text
+  ([`schema/pml.schema.json:61-65`](../../schema/pml.schema.json)), a term
+  may collide with an actor/concept/signal ID, a hierarchy path
+  (`domains.<d>.features.<f>[.behaviors.<b> | .use_cases.<u>]`), an
+  architecture path (`architecture.<d>`), or any obligation ID. A minimal
+  implementation MUST NOT drop a matching vocabulary record on the basis
+  that "hierarchy paths cannot alias flat IDs"; that claim is true only for
+  dotless namespaces.
+- **use-case path**: same input string always denotes both a use-case
+  compiled record and its `use_case` obligation (guaranteed identity by
+  spec 0011:503-509, not a bug).
 
-Everything else has structurally disjoint prefixes and can be dispatched by
-prefix inspection alone.
+Prefix inspection alone is therefore insufficient: a term may syntactically
+look like a hierarchy or obligation path. Dispatch MUST probe every category
+index. Everything outside these families is structurally disjoint.
 
 Classification: **implementation detail**. Category dispatch is a
 `Category -> {id: record}` lookup that a minimal implementation must maintain
 against the compiled model it already produces; the categories and ID rules
-are approved.
+are approved. The vocabulary/hierarchy and vocabulary/obligation same-string
+cases are collisions that the dispatch must render, not new contracts.
 
 ### 3. Exact authored fields and derived links per category
 
@@ -225,37 +271,71 @@ requires additional owner approval. The remaining question for `pml explain`
 is the boundary spec 0011:670-671 requires: "It must distinguish authored
 fields from derived inverse links".
 
-The authored/derived split follows directly from the approved determinism
-tables at spec 0011:536-591. Authored arrays and scalar fields are those in
-rule 2 at spec 0011:538-547 plus the singleton authored scalars listed in the
-record grammars at spec 0011:187-363. Every array in rule 4 at
-spec 0011:571-591 is a derived record or reference. Concretely per category:
+The authored/derived split follows from the approved determinism tables at
+spec 0011:536-591 together with what `_build_compiled_model` actually
+constructs. **Every `path`, `domain`, and `feature` cross-record reference
+on a structural record is derived from the enclosing map keys, not authored
+directly**: `_build_compiled_model` synthesizes `domains.<id>` at
+[`model_builder.py:267`](../../src/pml/model_builder.py),
+`domains.<d>.features.<f>` at
+[`model_builder.py:282`](../../src/pml/model_builder.py),
+`...behaviors.<b>` at
+[`model_builder.py:312`](../../src/pml/model_builder.py), the use-case
+`path` and its self-referring `obligation` at
+[`model_builder.py:345-356`](../../src/pml/model_builder.py), and
+`architecture.<d>` at [`model_builder.py:434, 439`](../../src/pml/model_builder.py).
+The `id` field on a structural record is the authored map key of the
+enclosing mapping (spec 0011:122-149; produced by dict iteration at
+[`model_builder.py:266, 281, 311, 345, 446`](../../src/pml/model_builder.py)),
+so `id` is authored but `path` is a canonical string built from that key
+plus the parent hierarchy prefix. Likewise on a compiled behavior,
+`trigger.kind`, `outcome.kind`, every `obligation` reference inside a
+trigger/outcome/failure case, the top-level `completion_obligation`, and
+the alternative case `id` field are all generated by
+[`model_builder.py:46-95, 313-336`](../../src/pml/model_builder.py); the
+authored transition values are `statement`, the resolved `signal`
+reference, and `conditions.statements`. Concretely per category:
 
-| Category | Authored fields | Derived inverse links |
-| --- | --- | --- |
-| `compiled-project` | `id`, `name`, `purpose` ([spec 0011:180-185](../specs/0011-compiled-semantic-model.md)) | `rule_obligations`, `domains` |
-| `compiled-vocabulary-term` | `term`, `meaning`, `forbidden_synonyms` (authored sequence, rule 2 [spec 0011:538-540](../specs/0011-compiled-semantic-model.md)) | none |
-| `compiled-actor` | `id`, `meaning` | none |
-| `compiled-concept` | `id`, `meaning`, `states` (authored sequence, rule 2) | none |
-| `compiled-architecture-decision` | `id`, `path`, `category`, `selection`, `rationale` | `constraint_obligations`, `referenced_by` (rule 4 [spec 0011:578-579](../specs/0011-compiled-semantic-model.md)) |
-| `compiled-domain` | `id`, `path`, `purpose` | `rule_obligations`, `features` |
-| `compiled-feature` | `id`, `path`, `domain`, `purpose`, `actors` (rule 2), `experience` (present-or-absent, spec 0011:236-251), `related_to` (rule 2, spec 0011:539), `architecture` (rule 2, spec 0011:539) | `rule_obligations`, `use_cases`, `behaviors` (all rule 4) |
-| `compiled-behavior` | `id`, `path`, `feature`, `conditions.statements` (rule 2), `trigger`, `outcome`, `failures[]`, `related_to` (rule 2, spec 0011:540) | `rule_obligations`, `use_cases`, `completion_obligation` (a derived reference to the corresponding compiled obligation) |
-| `compiled-use-case` | `id`, `path`, `feature`, `actor`, `goal`, `behaviors` (rule 2, spec 0011:540) | `obligation` (a derived reference to its `use_case` obligation) |
-| `compiled-signal` | `id`, `meaning`, optional `subject` | `producer`, `consumers` (both derived from `outcome`/`failure` and trigger cases in the compiled behaviors, [`model_builder.py:186-214`](../../src/pml/model_builder.py); rule 4 [spec 0011:586](../specs/0011-compiled-semantic-model.md)) |
-| `compiled-relationship` | none (record itself is derived) | `endpoints`, `declared_by` (both derived from authored `related_to`, [spec 0011:476-482](../specs/0011-compiled-semantic-model.md); [`model_builder.py:217-232`](../../src/pml/model_builder.py)) |
-| `compiled-use-case-membership` | none | `use_case`, `behavior` (derived from use-case `behaviors`, spec 0011:484-488) |
-| `compiled-obligation` | records whose `definition` fields are authored (statement, signal reference, condition statements, use-case actor/goal/behaviors); the `id`, `node`, `kind` are derived stable path/kind assignments | `outcomes`, `failures`, `alternatives` inside `completion` and `outcome_exclusivity` definitions are derived from the same behavior (see spec 0011:511-515) |
+| Category | Authored values | Derived identity/structural fields | Derived inverse links |
+| --- | --- | --- | --- |
+| `compiled-project` | `id`, `name`, `purpose` ([spec 0011:180-185](../specs/0011-compiled-semantic-model.md); [`model_builder.py:400-406`](../../src/pml/model_builder.py)) | none | `rule_obligations` (rule 4), `domains` (rule 4) |
+| `compiled-vocabulary-term` | `term` (authored map key), `meaning`, `forbidden_synonyms` (authored sequence, rule 2) | none | none |
+| `compiled-actor` | `id` (authored map key), `meaning` | none | none |
+| `compiled-concept` | `id` (authored map key), `meaning`, `states` (authored sequence, rule 2) | none | none |
+| `compiled-architecture-decision` | `id` (authored map key), `category`, `selection`, `rationale` | `path` (`architecture.<id>`, derived at [`model_builder.py:434`](../../src/pml/model_builder.py)) | `constraint_obligations` (rule 4), `referenced_by` (rule 4, [spec 0011:578-579](../specs/0011-compiled-semantic-model.md)) |
+| `compiled-domain` | `id` (authored map key), `purpose` | `path` (`domains.<id>`, derived at [`model_builder.py:267`](../../src/pml/model_builder.py)) | `rule_obligations` (rule 4), `features` (rule 4) |
+| `compiled-feature` | `id` (authored map key), `purpose`, `actors` (rule 2), `experience` (present-or-absent, spec 0011:236-251), `related_to` (rule 2, spec 0011:539), `architecture` (rule 2, spec 0011:539; note that each authored decision ID is expanded to its `architecture.<d>` path at [`model_builder.py:301-304`](../../src/pml/model_builder.py)) | `path` (derived at [`model_builder.py:282`](../../src/pml/model_builder.py)), `domain` (parent hierarchy) | `rule_obligations`, `use_cases`, `behaviors` (all rule 4) |
+| `compiled-behavior` | `id` (authored map key), `conditions.statements` (rule 2), the `statement` and resolved `signal` reference values inside each trigger/outcome/failure case, `related_to` (rule 2, spec 0011:540) | `path` (derived at [`model_builder.py:312`](../../src/pml/model_builder.py)), `feature`, `trigger.kind`, `outcome.kind`, `outcome.exclusivity_obligation`, each case `obligation` and case `id`, and `completion_obligation` (all built at [`model_builder.py:46-95, 313-336`](../../src/pml/model_builder.py)) | `rule_obligations`, `use_cases` (rule 4) |
+| `compiled-use-case` | `id` (authored map key), `actor`, `goal`, `behaviors` (rule 2, spec 0011:540) | `path` (derived at [`model_builder.py:346`](../../src/pml/model_builder.py)), `feature`, and `obligation` (equals `path` per spec 0011:503-509; produced at [`model_builder.py:355`](../../src/pml/model_builder.py)) | none |
+| `compiled-signal` | `id`, `meaning`, optional `subject` (authored inside the producing completion at [`resolver.py:284-311`](../../src/pml/resolver.py)) | none | `producer`, `consumers` (both derived from `outcome`/`failure` and trigger cases, [`model_builder.py:186-214`](../../src/pml/model_builder.py); rule 4 [spec 0011:586](../specs/0011-compiled-semantic-model.md)) |
+| `compiled-relationship` | none (record itself is derived) | `kind`, `endpoints`, `declared_by` (all derived from authored `related_to`, [spec 0011:476-482](../specs/0011-compiled-semantic-model.md); [`model_builder.py:217-232`](../../src/pml/model_builder.py)) | (the record IS an inverse) |
+| `compiled-use-case-membership` | none | `use_case`, `behavior` (derived from use-case `behaviors`, spec 0011:484-488; [`model_builder.py:248-260`](../../src/pml/model_builder.py)) | (the record IS an inverse) |
+| `compiled-obligation` | inside `definition`: `statement` values, resolved `signal` reference values, condition `statements`, use-case `actor`, `goal`, `behaviors` | `id`, `node`, `kind`, and the `outcomes`/`failures`/`alternatives` reference arrays inside `completion` and `outcome_exclusivity` definitions (all built at [`model_builder.py:122-183`](../../src/pml/model_builder.py) from the approved obligation table [spec 0011:494-515](../specs/0011-compiled-semantic-model.md)) | none |
 
-Trigger, outcome, and failure sub-cases inside a compiled behavior contain
-authored `statement` or `signal` values plus derived `obligation` and `id`
-references. The trigger and outcome `case`/`cases` structures are approved as
-authored transition shape at spec 0011:432-450 and produced verbatim at
-[`model_builder.py:46-95`](../../src/pml/model_builder.py).
+The `id` field on a structural record and the `path` field derived from
+that same authored key are semantically the same identifier; only the
+authored form (the map key) is authored intent, while the canonical
+hierarchy `path` is a generated projection. `pml explain` MUST render them
+under the "authored / derived" split accordingly: the authored map key in
+the authored section, the canonical `path` in the derived section, and the
+parent hierarchy references (`domain`, `feature`) alongside `path`.
 
-Classification: **implementation detail**. The distinction is fully
-determined; a minimal implementation renders each record's authored fields in
-one section and its derived links in a clearly separated section.
+Trigger and outcome case containers are approved authored transition shapes
+(spec 0011:432-450) — but only the `statement` or resolved `signal`
+reference inside each case is authored intent. The surrounding `kind`,
+`obligation`, and alternative `id` fields are generated stable metadata.
+Rendering the whole case container as "authored" would present generated
+material as approved intent and is forbidden by spec 0011:665-671.
+
+Classification: **implementation detail**. The split is fully determined by
+the approved grammar plus what `_build_compiled_model` actually constructs;
+a minimal implementation MUST render each record's authored values in one
+section, its derived identity/structural fields (paths, hierarchy
+back-references, generated obligation references, generated `kind` labels,
+generated `case`/`alternative` metadata) in a second section, and its
+derived inverse links (obligation and cross-record inverse arrays) in a
+third section. Neither generated identity/structural fields nor generated
+transition metadata may appear inside the authored section.
 
 ### 4. Ordering: what is determined, what remains a presentation choice
 
@@ -299,16 +379,28 @@ text output without a stable machine grammar is the safe minimal slice.
 - Invalid definitions inherit the compile-level all-or-nothing boundary
   (spec 0011:104-119). The command MUST exit nonzero, write diagnostics to
   standard error, and write no explanation to standard output.
-- Unsupported compiled-model versions: spec 0011:653-656 requires every
-  consumer to check `format` and `format_version` before reading records and
-  treat unknown versions as unsupported. The current `pml explain` design
-  reads the compiled model produced in the same process from the same
-  validated definition, so the in-process model is guaranteed to satisfy the
-  `format`/`format_version` check
+- **Unsupported compiled-model versions** (spec 0011:651-656): every
+  consumer MUST check `format` and support the exact `format_version` before
+  reading records, and MUST treat unknown versions as unsupported rather
+  than guessing. This requirement is unconditional — the spec does not
+  exempt an in-process consumer. `pml explain` MUST therefore, before
+  building any category index or resolving the requested canonical ID
+  against the model, verify that `model["format"] == "pml.compiled"` and
+  `model["format_version"] == 1`
   ([`compiled_model.py:319-336`](../../src/pml/compiled_model.py) fixes both
-  values at construction). A later variant that reads a pre-serialized model
-  from disk MUST reject a model whose `format` is not `pml.compiled` or whose
-  `format_version` is not `1`. That is out of scope for the minimal slice.
+  values at production, but the check is what the consumer contract
+  requires — an inline producer sharing a process does not remove the
+  invariant). On rejection, the command MUST exit nonzero, write a single
+  `[unsupported-model] <format>@<format_version> is not supported` diagnostic
+  (following the established `[<code>] <message>` shape at
+  [`diagnostics.py`](../../src/pml/diagnostics.py); the specific code string
+  is an implementation detail), and write nothing to standard output. This
+  guard is a required seam even in the initial slice where the compiled
+  model is produced in-process, because it is the same contract the future
+  pre-serialized-model variant, `pml graph`, and the web explorer will
+  reuse. The exact spelling of the diagnostic string is an implementation
+  detail; the contractual behavior (checked before reading, nonzero exit,
+  empty stdout, stderr diagnostic) is not.
 
 **Not determined by approved text**:
 
@@ -327,10 +419,11 @@ text output without a stable machine grammar is the safe minimal slice.
   [`diagnostics.py`](../../src/pml/diagnostics.py) and does not encode
   product-language semantics.
 - The behavior for a requested ID that matches more than one category (the
-  finding-2 collision families: actor/concept/signal/vocabulary-term, and
-  the intentional use-case-path vs. use-case-obligation double). Spec 0011
-  does not disambiguate. Three alternatives are all consistent with the
-  approved text:
+  finding-2 collision families: dotless actor/concept/signal namespace,
+  vocabulary-term vs. hierarchy path or obligation ID, and the intentional
+  use-case-path vs. use-case-obligation double). Spec 0011 does not
+  disambiguate. Three alternatives are all consistent with the approved
+  text:
 
   1. Reject as ambiguous with a diagnostic and exit nonzero.
   2. Render all matching records under separate sections.
@@ -363,13 +456,22 @@ A minimal `pml explain` can be delivered without any new owner decision if:
   complete compiled model, and inherits the all-or-nothing diagnostic
   boundary already implemented by
   [`cli.py:83-99`](../../src/pml/cli.py) for `compile`.
-- The requested ID is dispatched by prefix inspection (finding 2) against
-  the compiled model's category arrays, and every category that matches is
-  rendered under its own section, so no category-priority contract is
-  introduced.
-- Each record's authored fields are rendered in one section and derived
-  inverse links in another; empty derived arrays are rendered as an empty
-  bullet list rather than as a claim of absence.
+- Before building any category index or resolving the requested ID, the
+  command asserts `model["format"] == "pml.compiled"` and
+  `model["format_version"] == 1` (spec 0011:651-656) and emits the
+  `[unsupported-model]` diagnostic + nonzero exit + empty standard output
+  described in finding 5 on failure. The check is on the compiled-model
+  seam so a later pre-serialized-model variant, `pml graph`, and the web
+  explorer share the same guard.
+- The requested ID is dispatched against every category index (finding 2)
+  so that vocabulary/hierarchy and vocabulary/obligation same-string
+  matches are not dropped, and every category that matches is rendered
+  under its own section, so no category-priority contract is introduced.
+- Each record's authored values are rendered in one section, its derived
+  identity/structural fields (paths, hierarchy back-references, generated
+  transition/case metadata, generated obligation references) in a second
+  section, and its derived inverse links in a third; empty derived arrays
+  are rendered as an empty bullet list rather than as a claim of absence.
 - Output is human-readable text on standard output with no stable
   machine-grammar claim; no `--json`, `--format`, or category filter flag is
   added.
@@ -397,8 +499,13 @@ what they will observe) are:
 
 1. **Category-typed ID index over the compiled model**. A single pass that
    builds, for each category, a `dict[str, TypedRecord]` keyed by the record's
-   identity field (`id`, `term`, or `path` per finding 2). This is a
-   read-only projection of an already-materialized model
+   identity field (`id`, `term`, or `path` per finding 2). Because vocabulary
+   terms are unrestricted free text
+   ([`schema/pml.schema.json:61-65`](../../schema/pml.schema.json)), the
+   index MUST NOT be short-circuited by prefix filtering when the input
+   string looks like a hierarchy or obligation path — every category's map
+   must be consulted. This is a read-only projection of an
+   already-materialized model
    ([`_build_compiled_model` at lines 395-456](../../src/pml/model_builder.py))
    and requires no schema change. `pml graph` reuses the same index to look
    up nodes referenced by directed producer-completion→signal→consumer-trigger
@@ -408,8 +515,10 @@ what they will observe) are:
 2. **`(canonical-id) -> [category]` reverse dispatch**. Given a canonical ID
    string, return every category whose ID index contains it, so a consumer
    can render or navigate every matching record without embedding
-   category-priority semantics. This is the primitive that lets `pml graph`
-   and the web UI share explain's dispatch without reinterpreting YAML.
+   category-priority semantics. Its return value MUST NOT depend on prefix
+   heuristics; it MUST be built by probing every category's index. This is
+   the primitive that lets `pml graph` and the web UI share explain's
+   dispatch without reinterpreting YAML.
 
 3. **Obligation-back-reference view**. For a given non-obligation record's
    canonical ID, a helper that returns every compiled obligation whose `node`
@@ -438,12 +547,13 @@ function over the compiled model.
 | Exact invocation string is derivable from convention but not printed in docs | Documentation gap (updated after implementation lands) |
 | Optional flags (JSON echo, category filter, authored-only) | Owner-decision blocker — do not add |
 | Category dispatch of a canonical ID via prefix + ID index | Implementation detail |
-| Actor/concept/signal/vocabulary-term same-string ambiguity handling | Owner-decision blocker only if minimal slice hides matches; otherwise implementation detail (render each match) |
+| Actor/concept/signal same-string ambiguity (dotless namespace) | Owner-decision blocker only if minimal slice hides matches; otherwise implementation detail (render each match) |
+| Vocabulary-term vs. hierarchy path or obligation ID same-string collision (vocabulary terms are unrestricted free text at [`schema/pml.schema.json:61-65`](../../schema/pml.schema.json)) | Implementation detail (dispatch probes every category index; dropping a matching vocabulary record would be a defect) |
 | Use-case path guaranteed to match both use-case record and use_case obligation | Approved by spec ([0011:503-509](../specs/0011-compiled-semantic-model.md)); implementation detail |
-| Authored vs. derived split per record | Implementation detail |
+| Authored values vs. derived identity/structural fields vs. derived inverse links split per record | Implementation detail (three-section rendering required so generated `path`/`kind`/case metadata is not shown as authored) |
 | Presentation ordering within a rendered record | Implementation detail (human-readable text only) |
 | Diagnostic code and message for unknown ID | Implementation detail (reuse existing `[code] message` shape) |
-| Unsupported compiled-model version handling when explain is fed a pre-serialized model | Out of scope for minimal slice; owner-approved contract already at spec 0011:653-656 for the later variant |
+| Unsupported compiled-model version check (spec 0011:651-656) | Required seam in the minimal slice; behavior fixed (checked before reading records, nonzero exit, empty stdout, `[unsupported-model]` diagnostic on stderr); message spelling remains an implementation detail |
 | Structured (e.g., JSON) explain output | Owner-decision blocker — do not add |
 | Reusable ID index and obligation-back-reference view for later `pml graph` and web explorer | Implementation detail (pure read over compiled model) |
 
@@ -457,18 +567,32 @@ that:
    ([`validator.py:404-475`](../../src/pml/validator.py)) and inherits the
    all-or-nothing diagnostic boundary already used by `compile --json`
    ([`cli.py:83-99`](../../src/pml/cli.py)).
-2. Builds a category-typed ID index over the compiled model as a private
+2. Verifies, before building any category index or resolving the requested
+   canonical ID, that `model["format"] == "pml.compiled"` and
+   `model["format_version"] == 1` (spec 0011:651-656). On rejection, exits
+   nonzero, writes a single `[unsupported-model] <observed-format>@<version> is not supported`
+   line to standard error, and writes nothing to standard output.
+3. Builds a category-typed ID index over the compiled model as a private
    helper, without changing the compiled-model schema or the
    [`compiled_model.py`](../../src/pml/compiled_model.py) closed types.
-3. Dispatches the requested ID against that index, and for every matching
+   The index probes every category rather than pre-filtering by input-string
+   shape, so vocabulary/hierarchy and vocabulary/obligation same-string
+   collisions surface as multi-category matches instead of being dropped.
+4. Dispatches the requested ID against that index, and for every matching
    category renders one section header naming the category, an "Authored"
-   subsection listing that record's authored fields, and a "Derived"
-   subsection listing the derived inverse links and obligation references.
-4. On no match, exits nonzero and writes a single
+   subsection listing that record's authored values, a "Derived
+   identity/structural" subsection listing the derived hierarchy `path`, any
+   parent hierarchy references (`domain`, `feature`), generated `kind` and
+   case metadata (for behaviors), and generated obligation references
+   (`completion_obligation`, per-case `obligation`, use-case `obligation`),
+   and a "Derived inverse links" subsection listing rule-4 back-references
+   (`rule_obligations`, `use_cases`, `behaviors`, `features`, `domains`,
+   `referenced_by`, signal `producer`/`consumers`).
+5. On no match, exits nonzero and writes a single
    `<id>: [unknown-id] no compiled record matches this ID` line to standard
    error, with empty standard output, following the
    [`cli.py:285-287`](../../src/pml/cli.py) precedent.
-5. On invalid definition input, exits nonzero and writes the standard ordered
+6. On invalid definition input, exits nonzero and writes the standard ordered
    diagnostics to standard error with empty standard output, mirroring the
    compile behavior at [`cli.py:83-99`](../../src/pml/cli.py).
 
@@ -480,26 +604,44 @@ generated-state or evidence artifact.
 
 ### Positive conformance cases
 
-- Explain an actor by ID and observe the authored `meaning` under Authored;
-  no Derived links section is required beyond the empty inverse.
-- Explain a concept by ID and observe authored `meaning` and `states`
-  (authored sequence, per rule 2).
-- Explain a feature by canonical `domains.<d>.features.<f>` and observe the
-  authored `purpose`, `actors`, `related_to`, `architecture` (authored
-  sequence for each), and derived `use_cases`, `behaviors`, `rule_obligations`
-  (each rule-4 sorted); assert that the derived `architecture` inverse
-  `referenced_by` on the referenced architecture record includes this
-  feature's path.
-- Explain a behavior and observe every trigger case (authored sequence for
-  `trigger.one_of` alternatives per rule 3 [spec 0011:566], authored
-  `statement` or resolved `signal` per case), the completion obligation
-  reference, and the derived `use_cases` inverse.
-- Explain a signal by ID and observe the authored `meaning`, optional
-  `subject`, the derived `producer` (one behavior + completion obligation),
-  and every derived `consumers` entry.
+- Explain an actor by ID and observe the authored `id` and `meaning` under
+  Authored; the "Derived identity/structural" subsection is empty because
+  actors have no derived `path`, and the "Derived inverse links" subsection
+  is empty because actors have no inverse arrays.
+- Explain a concept by ID and observe authored `id`, `meaning`, and
+  `states` (authored sequence, per rule 2).
+- Explain a feature by canonical `domains.<d>.features.<f>` and observe
+  authored `id`, `purpose`, `actors`, `related_to`, and `architecture`
+  (authored sequences retained per rule 2) under Authored; the derived
+  `path` and `domain` back-reference under Derived identity/structural; and
+  `rule_obligations`, `use_cases`, `behaviors` (each rule-4 sorted) under
+  Derived inverse links. Assert that the referenced architecture record's
+  `referenced_by` includes this feature's `path`.
+- Explain a behavior and observe under Authored only the `id`, authored
+  `conditions.statements` (if present), authored `related_to`, and each
+  case's `statement` or resolved `signal` reference value; observe under
+  Derived identity/structural the `path`, `feature` back-reference,
+  `trigger.kind`, `outcome.kind`, `outcome.exclusivity_obligation`, each
+  case's generated `id` and `obligation` reference, and
+  `completion_obligation`. Assert the "Authored" section does not include
+  `path`, `feature`, `kind`, per-case `obligation`, or `completion_obligation`.
+- Explain a signal by ID and observe under Authored `id`, `meaning`, and
+  optional `subject`; the derived `producer` (one behavior + completion
+  obligation) and every derived `consumers` entry appear under Derived
+  inverse links.
 - Explain a use-case canonical path and observe **both** the compiled
-  use-case record and its corresponding `use_case` obligation rendered under
-  separate sections; assert both sections have the same `path`/`id` value.
+  use-case record and its corresponding `use_case` obligation rendered
+  under separate sections; assert both sections have the same `path`/`id`
+  value, and that the use-case compiled record's `path`, `feature`, and
+  self-referring `obligation` appear only under Derived identity/structural.
+- Explain a vocabulary term whose exact text is `domains.core.features.f`
+  where a feature with that path also exists. Assert that both the
+  vocabulary record and the feature record are rendered under separate
+  category sections, and neither is dropped by dispatch.
+- Explain a vocabulary term whose exact text is
+  `domains.core.features.f.behaviors.b.completion` where that completion
+  obligation also exists. Assert that the vocabulary record and the
+  obligation record are both rendered under separate category sections.
 
 ### Negative conformance cases
 
@@ -520,6 +662,15 @@ generated-state or evidence artifact.
   under a labeled section, in a deterministic order (top-level array order
   from spec 0011:158-177 is the safe order because it matches the closed
   grammar; this is not a semantic priority).
+- **Unsupported model seam**: at the same seam where the minimal
+  implementation calls into its internal `explain` function, hand it a
+  compiled-model-shaped mapping whose `format` is not `pml.compiled` or
+  whose `format_version` is not `1`. Assert the function returns a nonzero
+  exit code, writes nothing to standard output, and writes a single
+  `[unsupported-model] ...` line to standard error before it consults the
+  ID index. This exercises the consumer-contract guard required by
+  spec 0011:651-656 even though the outer CLI path produces a compliant
+  model in-process.
 - Attempt `pml explain <manifest-path>` without an ID or
   `pml explain <manifest-path> <id> --something`. Assert argparse rejects
   the invocation before any I/O.
