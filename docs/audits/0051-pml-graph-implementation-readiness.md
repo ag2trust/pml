@@ -117,16 +117,20 @@ compiled-model query primitive that yields a canonical typed edge sequence:
 
 ```text
 iter_explicit_graph_edges(model or supported indexes)
-  -> directed_causal(producer_completion, signal, consumer_trigger)
+  -> producer_to_signal(producer_completion, signal) [exactly one per signal]
+  -> signal_to_consumer_trigger(signal, consumer_trigger) [one per consumer]
   -> related_to(endpoint_a, endpoint_b, declared_by)
   -> use_case_membership(use_case, behavior)
 ```
 
 It should validate support before record access, iterate canonical compiled-array
 order, preserve the two signal legs as directed, and return no edges for
-annotations. An optional adjacency wrapper belongs only after an owner selects
-root/filter behavior. No YAML loading, reference resolution, inference, or new
-compiled-model field is required.
+annotations. The producer-to-signal leg is always present, including when a
+signal has zero consumers; the second directed leg is emitted only for actual
+consumer entries. Together those two leg types are the one approved directed
+causal meaning, not two new relationship meanings. An optional adjacency wrapper
+belongs only after an owner selects root/filter behavior. No YAML loading,
+reference resolution, inference, or new compiled-model field is required.
 
 ## Gaps and classifications
 
@@ -172,11 +176,12 @@ contract ([0011:675-683](../specs/0011-compiled-semantic-model.md)).
 3. Add output tests only after the approved rendering contract is fixed.
 
 Positive tests should cover: one signal with one producer and multiple consumers;
-zero-consumer signal; each `related_to` direction authored separately but normalized
-to one symmetric edge; feature-to-feature and behavior-to-behavior relationships;
-one use case with multiple behaviors; an otherwise valid definition with zero
-explicit graph edges; lexical/deterministic ordering despite reordered source maps;
-and supported model rendering with no state reads or writes.
+a zero-consumer signal that still emits its one producer-to-signal edge and emits
+no signal-to-trigger edge; each `related_to` direction authored separately but
+normalized to one symmetric edge; feature-to-feature and behavior-to-behavior
+relationships; one use case with multiple behaviors; an otherwise valid definition
+with zero explicit graph edges; lexical/deterministic ordering despite reordered
+source maps; and supported model rendering with no state reads or writes.
 
 Negative tests should cover: invalid definitions and unsupported model versions
 produce no stdout graph; no partial graph; no edge for shared actor, concept,
