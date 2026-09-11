@@ -73,30 +73,30 @@ feature actors, architecture references, obligation ownership, authored
 
 ## Graph node boundary
 
-The approved edge endpoints identify the complete semantic node universe needed
-for an all-edges graph:
+The approved edge endpoints identify the complete semantic node universe for an
+all-edges graph. Each listed endpoint is a graph node, not merely a record that a
+renderer may annotate:
 
-| Endpoint category | Existing compiled record | Must be graph-reachable because |
+| Endpoint category | Existing compiled record | Must be a graph node because |
 | --- | --- | --- |
 | Signal | `signals[]`, by `id` | It is the middle endpoint of every directed causal path. |
-| Completion and trigger | `obligations[]`, by stable `id` | The signal producer and consumer endpoints name completion and trigger obligation IDs. |
+| Completion and trigger | `obligations[]`, by stable `id` | The signal producer and consumer endpoints name distinct completion and trigger obligation IDs. |
 | Feature and behavior | `features[]` and `behaviors[]`, by `path` | They are the only permitted `related_to` endpoints; behaviors also participate in memberships. |
 | Use case | `use_cases[]`, by `path` | It is a use-case-membership endpoint. |
 
-Everything else is annotation, if included at all: project, vocabulary, actor,
-concept, domain, architecture decision, experience/surface, conditions, outcome,
-failure, rule, architecture-constraint, and use-case obligation records that do
-not occur as an explicit graph endpoint. An edge's `meaning`, a signal's
-`subject`, a relationship's `declared_by`, and an obligation's `node`, `kind`, and
-`definition` are likewise annotations, not additional edges or nodes.
+Every other record is annotation, if included at all: project, vocabulary, actor,
+concept, domain, architecture decision, experience/surface, and every obligation
+whose ID is not a `signals[].producer.completion` or `signals[].consumers[].trigger`
+endpoint. An edge's `meaning`, a signal's `subject`, a relationship's
+`declared_by`, and an obligation's `node`, `kind`, and `definition` are likewise
+annotations, not additional edges or nodes.
 
-There is one unresolved presentation choice: spec 0011 names the directed
-endpoints as a producer *completion* and consumer *trigger*, but does not say
-whether a renderer draws their existing obligation records as visible nodes or
-draws behavior nodes with stable obligation IDs as edge annotations. Both retain
-the same explicit endpoints, but produce materially different node identity and
-filtering behavior. The implementation must not silently choose a third model,
-such as a behavior-to-behavior workflow arrow.
+Behavior records remain graph nodes only for their own `related_to` or membership
+endpoints. They must never substitute for a causal completion or trigger
+obligation node: one behavior can have multiple outcome/failure completion
+obligations and multiple trigger alternatives, so substitution would collapse
+distinct explicit causal paths. Labels, style, and layout are presentation details,
+but the causal node identities are fixed by the compiled signal endpoints.
 
 ## Reusable views and the remaining pure query primitive
 
@@ -109,7 +109,7 @@ not a presumed API, provides these reusable immutable views:
 | `reverse` and `matching_records()` | Detect canonical-ID category collisions without prefix heuristics. It is not a graph-edge source. |
 | `relationships_by_endpoint` / `relationships_for_endpoint()` | Adjacency for normalized symmetric `related_to` records. |
 | `memberships_by_use_case`, `memberships_by_behavior`, and their methods | Adjacency for membership records from either endpoint. |
-| `obligations_by_node` / `obligations_for_node()` | Optional node annotation only; it must not create owner-to-obligation edges. |
+| `obligations_by_node` / `obligations_for_node()` | Additional-obligation annotation only; it must not create owner-to-obligation edges or nodes beyond actual causal endpoints. |
 
 Signals need no reconstructed resolver view: the complete directed information is
 already on each `signals[]` record. What is missing is one graph-specific, pure
@@ -138,8 +138,8 @@ reference resolution, inference, or new compiled-model field is required.
 | --- | --- | --- |
 | Input invocation | Documentation gap | Document the convention `pml graph <manifest-path>` when delivered; do not add selectors yet. |
 | DOT, text, JSON, or rendered artifact; renderer dependency; how the three meanings are visually distinguished | Owner-decision blocker | Approve one output contract and representative output before implementation. Graphviz is permitted as a layout engine but cannot create edges ([0011:692-695](../specs/0011-compiled-semantic-model.md)). |
-| Visible node projection for completion/trigger obligations versus behavior nodes annotated with their IDs | Owner-decision blocker | Choose one representation and exact identifier/label rules. |
-| Node and edge identifiers in the selected format, including category-collision escaping | Owner-decision blocker for a stable external format; implementation detail for private in-memory keys | Use canonical IDs plus a category discriminator internally; do not collapse same strings from different categories. |
+| Causal completion/trigger node projection | Already specified consumer requirement, not an owner gap | Render the exact obligation-ID endpoints as nodes; behavior nodes cannot replace them. Labels and style remain presentation details. |
+| Node and edge encoding in the selected format, including escaping | Owner-decision blocker for a stable external format; implementation detail for private in-memory keys | Preserve the required canonical endpoint IDs and use a category discriminator internally where the selected format needs one. |
 | Root selection, filtering, depth, and whether incident edges pull in neighboring nodes | Owner-decision blocker if offered | Initial slice renders the complete unfiltered edge set only. |
 | Successful-output stream and diagnostics | Documentation gap for success; fixed requirement for invalid input | Write the selected graph to stdout by CLI convention; validation and unsupported-version failures are nonzero, diagnostic-only stderr, with empty stdout. |
 | Empty graph representation | Owner-decision blocker because it depends on output format | Specify an explicit valid empty artifact, never an error or fabricated node. |
@@ -167,9 +167,10 @@ contract ([0011:675-683](../specs/0011-compiled-semantic-model.md)).
 
 ## Recommended next slice and tests
 
-1. Obtain owner approval for one output format, visible node projection,
-   identifiers/escaping, valid empty-graph representation, and whether the first
-   command is necessarily unfiltered.
+1. Obtain owner approval for one output format, its external encoding/escaping,
+   valid empty-graph representation, and whether the first command is necessarily
+   unfiltered. Causal completion and trigger obligation nodes are already fixed by
+   spec 0011 and are not an owner choice.
 2. Add a pure, version-gated `iter_explicit_graph_edges` helper over the existing
    compiled model and an unfiltered `pml graph <manifest-path>` adapter. It should
    reuse the explain indexes and the existing load/validate diagnostic path.
@@ -177,14 +178,17 @@ contract ([0011:675-683](../specs/0011-compiled-semantic-model.md)).
 
 Positive tests should cover: one signal with one producer and multiple consumers;
 a zero-consumer signal that still emits its one producer-to-signal edge and emits
-no signal-to-trigger edge; each `related_to` direction authored separately but
-normalized to one symmetric edge; feature-to-feature and behavior-to-behavior
-relationships; one use case with multiple behaviors; an otherwise valid definition
-with zero explicit graph edges; lexical/deterministic ordering despite reordered
-source maps; and supported model rendering with no state reads or writes.
+no signal-to-trigger edge; multiple outcome/failure and trigger-alternative
+obligations on one behavior that remain distinct causal nodes and legs; each
+`related_to` direction authored separately but normalized to one symmetric edge;
+feature-to-feature and behavior-to-behavior relationships; one use case with
+multiple behaviors; an otherwise valid definition with zero explicit graph edges;
+lexical/deterministic ordering despite reordered source maps; and supported model
+rendering with no state reads or writes.
 
 Negative tests should cover: invalid definitions and unsupported model versions
 produce no stdout graph; no partial graph; no edge for shared actor, concept,
-vocabulary term, hierarchy, or signal subject; no directed arrow or workflow order
-from `related_to` or use-case membership; no technical signal transport node/edge;
-and no duplicate relationship edge for reciprocal authored declarations.
+vocabulary term, hierarchy, or signal subject; no behavior-node substitution for
+causal obligation endpoints; no directed arrow or workflow order from `related_to`
+or use-case membership; no technical signal transport node/edge; and no duplicate
+relationship edge for reciprocal authored declarations.
