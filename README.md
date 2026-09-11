@@ -29,8 +29,8 @@ documentation. The owner-approved version 1 compiled semantic model in
 [`docs/specs/0011-compiled-semantic-model.md`](docs/specs/0011-compiled-semantic-model.md)
 is implemented through canonical serialization and `pml compile --json`.
 
-`pml explain`, `pml graph`, and the future read-only web explorer are approved
-but unimplemented compiled-model consumers.
+`pml graph` and the future read-only web explorer are approved but unimplemented
+compiled-model consumers.
 
 ## Validate a manifest
 
