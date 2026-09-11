@@ -29,8 +29,8 @@ documentation. The owner-approved version 1 compiled semantic model in
 [`docs/specs/0011-compiled-semantic-model.md`](docs/specs/0011-compiled-semantic-model.md)
 is implemented through canonical serialization and `pml compile --json`.
 
-`pml explain`, `pml graph`, and the future read-only web explorer are approved
-but unimplemented compiled-model consumers.
+`pml graph` and the future read-only web explorer are approved but unimplemented
+compiled-model consumers.
 
 ## Validate a manifest
 
@@ -48,6 +48,15 @@ Compile a validated definition to the canonical compiled JSON model with:
 
 `pml compile` requires `--json`, writes the model to standard output, and does
 not write project state.
+
+Explain one canonical compiled-model ID with:
+
+```bash
+.venv/bin/pml explain pml.yaml <canonical-id>
+```
+
+`pml explain` is a read-only human-readable view of the validated compiled model;
+it does not load or modify bindings, probes, locks, evidence, or generated state.
 
 Initialize PML from an implementing product repository with:
 
