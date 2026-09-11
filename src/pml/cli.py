@@ -9,6 +9,7 @@ from typing import Sequence
 
 from pml.initialize import initialize_project
 from pml.ingest import ingest_report
+from pml.explain import explain_compiled_model
 from pml.resolver import (
     enumerate_architecture_obligations,
     enumerate_obligations,
@@ -43,6 +44,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     compile_parser.add_argument(
         "--json", action="store_true", help="write the canonical compiled JSON model"
     )
+    explain_parser = subparsers.add_parser(
+        "explain", help="explain one compiled semantic record"
+    )
+    explain_parser.add_argument("manifest", type=Path)
+    explain_parser.add_argument("canonical_id")
     obligations_parser = subparsers.add_parser(
         "obligations", help="print stable obligation IDs"
     )
@@ -97,6 +103,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         assert resolution.compiled_model is not None
         sys.stdout.buffer.write(serialize_compiled_model(resolution.compiled_model))
         return 0
+
+    if args.command == "explain":
+        document, diagnostics = load_document(args.manifest)
+        if document is not None:
+            resolution = validate_document(document)
+            diagnostics = list(resolution.diagnostics)
+        if diagnostics:
+            for diagnostic in diagnostics:
+                print(diagnostic.format(), file=sys.stderr)
+            print(f"PML INVALID: {len(diagnostics)} violation(s)", file=sys.stderr)
+            return 1
+        assert document is not None
+        assert resolution.compiled_model is not None
+        result = explain_compiled_model(resolution.compiled_model, args.canonical_id)
+        if result.diagnostic is not None:
+            print(result.diagnostic, file=sys.stderr)
+            return result.exit_code
+        assert result.output is not None
+        print(result.output, end="")
+        return result.exit_code
 
     path = args.path if args.command == "validate" else args.manifest
     diagnostics = validate_file(path)

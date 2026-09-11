@@ -49,6 +49,15 @@ Compile a validated definition to the canonical compiled JSON model with:
 `pml compile` requires `--json`, writes the model to standard output, and does
 not write project state.
 
+Explain one canonical compiled-model ID with:
+
+```bash
+.venv/bin/pml explain pml.yaml <canonical-id>
+```
+
+`pml explain` is a read-only human-readable view of the validated compiled model;
+it does not load or modify bindings, probes, locks, evidence, or generated state.
+
 Initialize PML from an implementing product repository with:
 
 ```bash
