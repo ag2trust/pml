@@ -42,7 +42,14 @@ python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 ```
 
-To make the CLI from this checkout available as `pml` on your `PATH`, run:
+To make the CLI from this checkout available as `pml` on your `PATH`, first
+configure uv's tool directory (once) and restart your shell:
+
+```bash
+uv tool update-shell
+```
+
+Then run:
 
 ```bash
 ./dev-install.sh

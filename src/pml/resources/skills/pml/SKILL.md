@@ -43,9 +43,10 @@ definition.
 
 Use `pml compile <manifest> --json` to write the validated canonical compiled
 model to standard output, and `pml explain <manifest> <canonical-id>` for a
-read-only human-readable view of one compiled record.
+read-only human-readable view of the matching compiled record or records.
 
 If `pml` is not found, first use a repository-local `.venv/bin/pml` when one is
 available. In a PML development checkout, `./dev-install.sh` (equivalent to
-`uv tool install --editable . --force`) makes that checkout's CLI available on
-`PATH`; it is not an installation of a published PML release.
+`uv tool install --editable . --force`) installs that checkout's CLI. If the uv
+tool directory is not on `PATH`, run `uv tool update-shell` and restart the
+shell before using it; this is not an installation of a published PML release.
