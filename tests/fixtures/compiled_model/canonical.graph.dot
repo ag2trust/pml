@@ -1,0 +1,23 @@
+digraph pml {
+  "domains.a_work.features.workspace" [label="domains.a_work.features.workspace"];
+  "domains.a_work.features.workspace.behaviors.a_start" [label="domains.a_work.features.workspace.behaviors.a_start"];
+  "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved" [label="domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved"];
+  "domains.a_work.features.workspace.behaviors.a_start.trigger.z_ready" [label="domains.a_work.features.workspace.behaviors.a_start.trigger.z_ready"];
+  "domains.a_work.features.workspace.behaviors.z_finish" [label="domains.a_work.features.workspace.behaviors.z_finish"];
+  "domains.a_work.features.workspace.behaviors.z_finish.outcome" [label="domains.a_work.features.workspace.behaviors.z_finish.outcome"];
+  "domains.a_work.features.workspace.use_cases.a_flow" [label="domains.a_work.features.workspace.use_cases.a_flow"];
+  "domains.a_work.features.workspace.use_cases.z_flow" [label="domains.a_work.features.workspace.use_cases.z_flow"];
+  "domains.z_archive.features.archive" [label="domains.z_archive.features.archive"];
+  "record_ready" [label="record_ready"];
+  "z_started" [label="z_started"];
+  "domains.a_work.features.workspace.behaviors.z_finish.outcome" -> "record_ready" [kind="causal", style="solid"];
+  "record_ready" -> "domains.a_work.features.workspace.behaviors.a_start.trigger.z_ready" [kind="causal", style="solid"];
+  "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved" -> "z_started" [kind="causal", style="solid"];
+  "domains.a_work.features.workspace" -> "domains.a_work.features.workspace.behaviors.z_finish" [dir="none", kind="related_to", style="dashed"];
+  "domains.a_work.features.workspace" -> "domains.z_archive.features.archive" [dir="none", kind="related_to", style="dashed"];
+  "domains.a_work.features.workspace.behaviors.a_start" -> "domains.a_work.features.workspace.behaviors.z_finish" [dir="none", kind="related_to", style="dashed"];
+  "domains.a_work.features.workspace.behaviors.a_start" -> "domains.z_archive.features.archive" [dir="none", kind="related_to", style="dashed"];
+  "domains.a_work.features.workspace.use_cases.a_flow" -> "domains.a_work.features.workspace.behaviors.a_start" [dir="none", kind="use_case_membership", style="dotted"];
+  "domains.a_work.features.workspace.use_cases.z_flow" -> "domains.a_work.features.workspace.behaviors.a_start" [dir="none", kind="use_case_membership", style="dotted"];
+  "domains.a_work.features.workspace.use_cases.z_flow" -> "domains.a_work.features.workspace.behaviors.z_finish" [dir="none", kind="use_case_membership", style="dotted"];
+}
