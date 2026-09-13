@@ -1,6 +1,6 @@
 ---
 name: pml
-description: Author, review, and maintain Product Manifest Language (PML) definitions and their owner-controlled bindings and probes. Use when defining product intent in PML, changing .pml.yaml files, resolving PML validation errors, reviewing PML semantics, or working with pml init, validate, obligations, check, status, architecture-status, validate-probes, or ingest-report.
+description: Author, review, and maintain Product Manifest Language (PML) definitions and their owner-controlled bindings and probes. Use when defining product intent in PML, changing .pml.yaml files, resolving PML validation errors, reviewing PML semantics, or working with pml init, validate, compile, explain, obligations, check, status, architecture-status, validate-probes, or ingest-report.
 ---
 
 # PML
@@ -38,3 +38,14 @@ approved source identity.
 When validation fails, report the exact diagnostic and fix the authoritative
 artifact responsible for it. Do not weaken validation merely to accept an invalid
 definition.
+
+## Command awareness
+
+Use `pml compile <manifest> --json` to write the validated canonical compiled
+model to standard output, and `pml explain <manifest> <canonical-id>` for a
+read-only human-readable view of one compiled record.
+
+If `pml` is not found, first use a repository-local `.venv/bin/pml` when one is
+available. In a PML development checkout, `./dev-install.sh` (equivalent to
+`uv tool install --editable . --force`) makes that checkout's CLI available on
+`PATH`; it is not an installation of a published PML release.
