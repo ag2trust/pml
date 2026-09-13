@@ -8,16 +8,18 @@ validator, compiler, CLI, renderer, generated state, or evidence.
 
 ## Result
 
-Spec 0011 approves `pml graph` as a read-only consumer, but fixes only its input
-semantics: it consumes three kinds of explicit compiled edges and visually
-distinguishes them ([0011:673-683](../specs/0011-compiled-semantic-model.md)). It
-does not specify a command-output contract. The delivered `pml explain` indexes
-are sufficient to locate all records and the two non-causal edge sets; a small,
-pure compiled-model edge enumerator is still needed for a graph implementation.
+Spec 0011 approves `pml graph` as a read-only consumer of three kinds of explicit
+compiled edges ([0011:673-683](../specs/0011-compiled-semantic-model.md)). The
+owner approved the deterministic Graphviz DOT output contract on 2026-09-11
+([0011:685-743](../specs/0011-compiled-semantic-model.md)), fixing the output
+format, encoding, empty-graph representation, node/edge ordering, and exact
+attribute styling. The delivered `pml explain` indexes are sufficient to locate
+all records and the two non-causal edge sets; a small, pure compiled-model edge
+enumerator is still needed for a graph implementation.
 
-The smallest safe next step is an owner-approved graph presentation contract with
-examples, followed by an unfiltered `pml graph <manifest-path>` implementation.
-It must emit only the three edge sets below and no inferred edges.
+The next step is an unfiltered `pml graph <manifest-path>` implementation with
+output tests against the approved DOT contract. It must emit only the three edge
+sets below and no inferred edges.
 
 ## Invocation and consumer boundary
 
@@ -167,14 +169,11 @@ contract ([0011:675-683](../specs/0011-compiled-semantic-model.md)).
 
 ## Recommended next slice and tests
 
-1. Obtain owner approval for one output format, its external encoding/escaping,
-   valid empty-graph representation, and whether the first command is necessarily
-   unfiltered. Causal completion and trigger obligation nodes are already fixed by
-   spec 0011 and are not an owner choice.
-2. Add a pure, version-gated `iter_explicit_graph_edges` helper over the existing
+1. Add a pure, version-gated `iter_explicit_graph_edges` helper over the existing
    compiled model and an unfiltered `pml graph <manifest-path>` adapter. It should
    reuse the explain indexes and the existing load/validate diagnostic path.
-3. Add output tests only after the approved rendering contract is fixed.
+2. Add output tests against the approved DOT rendering contract
+   ([0011:685-743](../specs/0011-compiled-semantic-model.md)).
 
 Positive tests should cover: one signal with one producer and multiple consumers;
 a zero-consumer signal that still emits its one producer-to-signal edge and emits
