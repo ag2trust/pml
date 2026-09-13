@@ -134,18 +134,18 @@ reference resolution, inference, or new compiled-model field is required.
 
 ## Gaps and classifications
 
-| Gap | Classification | Smallest safe disposition |
+| Gap | Classification | Status |
 | --- | --- | --- |
-| Input invocation | Documentation gap | Document the convention `pml graph <manifest-path>` when delivered; do not add selectors yet. |
-| DOT, text, JSON, or rendered artifact; renderer dependency; how the three meanings are visually distinguished | Owner-decision blocker | Approve one output contract and representative output before implementation. Graphviz is permitted as a layout engine but cannot create edges ([0011:692-695](../specs/0011-compiled-semantic-model.md)). |
-| Causal completion/trigger node projection | Already specified consumer requirement, not an owner gap | Render the exact obligation-ID endpoints as nodes; behavior nodes cannot replace them. Labels and style remain presentation details. |
-| Node and edge encoding in the selected format, including escaping | Owner-decision blocker for a stable external format; implementation detail for private in-memory keys | Preserve the required canonical endpoint IDs and use a category discriminator internally where the selected format needs one. |
-| Root selection, filtering, depth, and whether incident edges pull in neighboring nodes | Owner-decision blocker if offered | Initial slice renders the complete unfiltered edge set only. |
-| Successful-output stream and diagnostics | Documentation gap for success; fixed requirement for invalid input | Write the selected graph to stdout by CLI convention; validation and unsupported-version failures are nonzero, diagnostic-only stderr, with empty stdout. |
-| Empty graph representation | Owner-decision blocker because it depends on output format | Specify an explicit valid empty artifact, never an error or fabricated node. |
-| Deterministic presentation ordering | Implementation detail once format is selected | Use the model's canonical array order; define a total serialization/order for any expanded legs or renderer IDs. |
-| Unsupported `format` / `format_version` | Already specified consumer requirement, not an owner gap | Reuse the exact-version guard before indexing; reject with nonzero stderr diagnostic and no stdout. |
-| Direct edge enumeration | Implementation detail | Add the small pure typed enumerator above, covered by model-only tests. |
+| Input invocation | Documentation gap | Resolved: recorded in spec 0011 DOT output contract (owner approved 2026-09-11). |
+| DOT, text, JSON, or rendered artifact; renderer dependency; how the three meanings are visually distinguished | Owner-decision blocker | **Resolved**: owner approved deterministic Graphviz DOT output on 2026-09-11; contract with exact attributes and examples recorded in spec 0011. |
+| Causal completion/trigger node projection | Already specified consumer requirement, not an owner gap | Unchanged: exact obligation-ID endpoints as nodes. |
+| Node and edge encoding in the selected format, including escaping | Owner-decision blocker for a stable external format; implementation detail for private in-memory keys | **Resolved**: DOT double-quoted string escaping (`\"`, `\\`) specified in spec 0011 DOT output contract. |
+| Root selection, filtering, depth, and whether incident edges pull in neighboring nodes | Owner-decision blocker if offered | **Resolved**: owner approved complete unfiltered edge set only, no flags or filters. |
+| Successful-output stream and diagnostics | Documentation gap for success; fixed requirement for invalid input | Resolved: stdout for DOT output, stderr diagnostics and nonzero exit for invalid input, recorded in spec 0011. |
+| Empty graph representation | Owner-decision blocker because it depends on output format | **Resolved**: exact empty output `digraph pml {\n}\n` specified in spec 0011 DOT output contract. |
+| Deterministic presentation ordering | Implementation detail once format is selected | Resolved: node and edge ordering rules specified in spec 0011 DOT output contract. |
+| Unsupported `format` / `format_version` | Already specified consumer requirement, not an owner gap | Unchanged. |
+| Direct edge enumeration | Implementation detail | Unchanged. |
 
 ## Non-inference safety boundary
 
