@@ -49,14 +49,22 @@ normative text.
   That accurately describes current [`src/pml/ingest.py`:227-240](../../src/pml/ingest.py),
   but conflicts with proposed 0008:79-94's preserve-stale-by-allowed-lane rule.
 - The handoff correctly labels 0008 unimplemented ([`HANDOFF.md`:20-25](../../HANDOFF.md)),
-  but its broader claim that 0010 authoring documentation is implemented
-  ([`HANDOFF.md`:5-11](../../HANDOFF.md)) conflicts with the still-current stale
-  language reference documented in audit 0049 ([`docs/audits/0049-init-skill-transition-compatibility.md`:23-87](0049-init-skill-transition-compatibility.md)).
-  Initialization copies only the packaged `SKILL.md` and `agents/openai.yaml`
+  and its broader claim that 0010 authoring documentation is implemented
+  ([`HANDOFF.md`:5-11](../../HANDOFF.md)) is not contradicted by audit 0049.
+  Audit 0049 recorded a historical stale-reference finding at `8da0345` (PR #22)
+  before [PR #23](https://github.com/ag2trust/pml/pull/23) updated the README,
+  authoring guide, language reference, quickstart, and verification guidance for
+  the approved transition grammar. The current
+  [`docs/language-reference.md`:73-119, 161-174](../language-reference.md)
+  defines `conditions`, `trigger`, `outcome`, `failures`, inline signals, the
+  current use-case shape, and current obligation paths; removed transition words
+  appear there only as explicit rejections or contrasts. No current
+  language-reference correction is pending. Initialization still copies only the
+  packaged `SKILL.md` and `agents/openai.yaml`
   ([`src/pml/initialize.py`:17-20, 71-74, 94-100](../../src/pml/initialize.py)).
   The installed skill directs authors to the separately maintained language
-  reference, so this is an indirect non-normative guidance dependency rather than
-  an artifact copied by initialization.
+  reference, so this remains an indirect non-normative guidance dependency rather
+  than an artifact copied by initialization.
 
 ## Owner decisions required before any delivery
 
