@@ -1,10 +1,21 @@
+import json
+import os
 from pathlib import Path
 import shutil
 
+from jsonschema import Draft202012Validator
+import pytest
 import yaml
 
 from pml.cli import main
-from pml.probes import load_probes, missing_probe_diagnostics, probe_fingerprint
+from pml.probes import (
+    MAX_PROBE_DISCOVERY_ENTRIES,
+    MAX_PROBE_FILES,
+    MAX_PROBE_FILE_BYTES,
+    load_probes,
+    missing_probe_diagnostics,
+    probe_fingerprint,
+)
 from pml.validator import load_document
 
 
@@ -42,6 +53,38 @@ steps:
     expect: {exit: 0}
 """
     )
+
+
+def write_probe(
+    path: Path,
+    probe_id: str,
+    *,
+    steps: int = 1,
+    verifies: str = "domains.notes.features.creation.rules.preserve_content",
+) -> None:
+    steps_text = "  - session: reset\n" * steps
+    path.write_text(
+        f"""\
+pml_probe: "0.1"
+probe: {probe_id}
+verifies: {verifies}
+env: staging
+steps:
+{steps_text}"""
+    )
+
+
+def minimal_definition() -> dict:
+    definition, diagnostics = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert diagnostics == []
+    assert definition is not None
+    return definition
+
+
+def test_probe_schema_is_a_valid_metaschema_document() -> None:
+    schema = json.loads((ROOT / "schema" / "pml-probe.schema.json").read_text())
+
+    Draft202012Validator.check_schema(schema)
 
 
 def test_approved_probe_is_valid_and_bound_to_obligation() -> None:
@@ -282,3 +325,215 @@ def test_check_probes_validates_recorded_evidence(tmp_path: Path) -> None:
         "--probes",
         str(probe_path),
     ]) == 1
+
+
+def test_probe_discovery_accepts_exact_entry_and_file_limits(tmp_path: Path) -> None:
+    definition = minimal_definition()
+    entry_root = tmp_path / "entry-limit"
+    entry_root.mkdir()
+    nested = entry_root / "nested"
+    nested.mkdir()
+    write_probe(nested / "accepted.probe.yaml", "accepted")
+    for index in range(MAX_PROBE_DISCOVERY_ENTRIES - 2):
+        (entry_root / f"entry_{index}.txt").write_text("ignored\n")
+
+    probes, diagnostics = load_probes(entry_root, definition)
+
+    assert list(probes) == ["accepted"]
+    assert diagnostics == []
+
+    file_root = tmp_path / "file-limit"
+    file_root.mkdir()
+    for index in range(MAX_PROBE_FILES):
+        write_probe(file_root / f"probe_{index:02d}.probe.yaml", f"probe_{index}")
+
+    probes, diagnostics = load_probes(file_root, definition)
+
+    assert list(probes) == [f"probe_{index}" for index in range(MAX_PROBE_FILES)]
+    assert diagnostics == []
+
+
+def test_probe_discovery_rejects_entry_and_file_limit_plus_one(tmp_path: Path) -> None:
+    definition = minimal_definition()
+    entry_root = tmp_path / "entry-limit"
+    entry_root.mkdir()
+    write_probe(entry_root / "accepted.probe.yaml", "accepted")
+    for index in range(MAX_PROBE_DISCOVERY_ENTRIES):
+        (entry_root / f"entry_{index}.txt").write_text("ignored\n")
+
+    probes, diagnostics = load_probes(entry_root, definition)
+
+    assert probes == {}
+    assert [(item.code, item.path) for item in diagnostics] == [
+        ("probe-limit", str(entry_root))
+    ]
+
+    file_root = tmp_path / "file-limit"
+    file_root.mkdir()
+    for index in range(MAX_PROBE_FILES + 1):
+        write_probe(file_root / f"probe_{index:02d}.probe.yaml", f"probe_{index}")
+
+    probes, diagnostics = load_probes(file_root, definition)
+
+    assert probes == {}
+    assert [(item.code, item.path) for item in diagnostics] == [
+        ("probe-limit", str(file_root))
+    ]
+
+
+def test_probe_loader_rejects_oversized_file_before_yaml_parsing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    definition = minimal_definition()
+    root = tmp_path / "probes"
+    root.mkdir()
+    write_probe(root / "a-small.probe.yaml", "small")
+    probe = root / "z-oversized.probe.yaml"
+    probe.write_bytes(b"x" * (MAX_PROBE_FILE_BYTES + 1))
+
+    def unexpected_parse(*args, **kwargs):
+        raise AssertionError("oversized probe must not reach the YAML parser")
+
+    monkeypatch.setattr("pml.probes.yaml.load", unexpected_parse)
+    probes, diagnostics = load_probes(root, definition)
+
+    assert probes == {}
+    assert [item.code for item in diagnostics] == ["probe-size"]
+
+
+@pytest.mark.parametrize("kind", ["root", "nested", "file"])
+def test_probe_discovery_rejects_symbolic_links(tmp_path: Path, kind: str) -> None:
+    definition = minimal_definition()
+    root = tmp_path / "probes"
+    target = tmp_path / "target"
+    target.mkdir()
+    write_probe(target / "accepted.probe.yaml", "accepted")
+
+    if kind == "root":
+        root.symlink_to(target, target_is_directory=True)
+        source = root
+    elif kind == "nested":
+        root.mkdir()
+        (root / "nested").symlink_to(target, target_is_directory=True)
+        source = root
+    else:
+        root.mkdir()
+        (root / "linked.probe.yaml").symlink_to(target / "accepted.probe.yaml")
+        source = root
+
+    probes, diagnostics = load_probes(source, definition)
+
+    assert probes == {}
+    assert [item.code for item in diagnostics] == ["probe-path"]
+    assert "symbolic links" in diagnostics[0].message
+
+
+def test_probe_discovery_rejects_non_regular_probe_entries(tmp_path: Path) -> None:
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("the platform does not support FIFO conformance coverage")
+    definition = minimal_definition()
+    root = tmp_path / "probes"
+    root.mkdir()
+    fifo = root / "not-a-file.probe.yaml"
+    os.mkfifo(fifo)
+
+    probes, diagnostics = load_probes(root, definition)
+
+    assert probes == {}
+    assert [(item.code, item.path) for item in diagnostics] == [
+        ("probe-path", str(fifo))
+    ]
+    assert "regular files" in diagnostics[0].message
+
+
+def test_probe_discovery_preserves_first_duplicate_id_in_path_order(
+    tmp_path: Path,
+) -> None:
+    definition = minimal_definition()
+    root = tmp_path / "probes"
+    root.mkdir()
+    write_probe(root / "z-last.probe.yaml", "duplicate")
+    write_probe(root / "a-first.probe.yaml", "duplicate")
+
+    probes, diagnostics = load_probes(root, definition)
+
+    assert list(probes) == ["duplicate"]
+    assert [(item.code, item.path) for item in diagnostics] == [
+        ("duplicate-probe", f"{root / 'z-last.probe.yaml'}:probe")
+    ]
+
+
+def test_probe_diagnostics_are_path_ordered(tmp_path: Path) -> None:
+    definition = minimal_definition()
+    root = tmp_path / "probes"
+    root.mkdir()
+    missing = "domains.notes.features.creation.rules.unknown"
+    write_probe(root / "z-last.probe.yaml", "z_last", verifies=missing)
+    write_probe(root / "a-first.probe.yaml", "a_first", verifies=missing)
+
+    probes, diagnostics = load_probes(root, definition)
+
+    assert list(probes) == ["a_first", "z_last"]
+    assert [item.path for item in diagnostics] == [
+        f"{root / 'a-first.probe.yaml'}:verifies",
+        f"{root / 'z-last.probe.yaml'}:verifies",
+    ]
+
+
+def test_probe_schema_enforces_exact_step_limit(tmp_path: Path) -> None:
+    definition = minimal_definition()
+    accepted = tmp_path / "accepted.probe.yaml"
+    write_probe(accepted, "accepted", steps=64)
+
+    probes, diagnostics = load_probes(accepted, definition)
+
+    assert list(probes) == ["accepted"]
+    assert diagnostics == []
+
+    rejected = tmp_path / "rejected.probe.yaml"
+    write_probe(rejected, "rejected", steps=65)
+    probes, diagnostics = load_probes(rejected, definition)
+
+    assert probes == {}
+    assert [item.code for item in diagnostics] == ["schema"]
+    assert "is too long" in diagnostics[0].message
+
+
+def test_probe_limits_reject_every_probe_loading_cli_before_partial_use(
+    tmp_path: Path, capsys
+) -> None:
+    product = product_copy(tmp_path)
+    root = tmp_path / "probes"
+    root.mkdir()
+    for index in range(MAX_PROBE_FILES + 1):
+        write_probe(root / f"probe_{index}.probe.yaml", f"probe_{index}")
+    invalid_report = tmp_path / "invalid-report.yaml"
+    invalid_report.write_text("[")
+    state_path = product / ".pml/state/domains/notes/features/creation.state.yaml"
+    original_state = state_path.read_bytes()
+
+    assert main([
+        "validate-probes",
+        str(owner_definition_path(product)),
+        str(root),
+    ]) == 1
+    assert "[probe-limit]" in capsys.readouterr().out
+
+    assert main([
+        "check",
+        str(owner_definition_path(product)),
+        str(product),
+        "--probes",
+        str(root),
+    ]) == 1
+    assert "[probe-limit]" in capsys.readouterr().out
+
+    assert main([
+        "ingest-report",
+        str(owner_definition_path(product)),
+        str(product),
+        str(root),
+        str(invalid_report),
+    ]) == 1
+    assert "[probe-limit]" in capsys.readouterr().out
+    assert state_path.read_bytes() == original_state
