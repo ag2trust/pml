@@ -359,9 +359,18 @@ compiled-obligation = {
   id: obligation-id,
   node: product-node-path | architecture-decision-path,
   kind: obligation-kind,
-  definition: obligation-definition
+  definition: obligation-definition,
+  surfaces?: list[surface-state-path]
 }
+
+surface-state-path =
+  "<feature-path>.experience.surfaces.<surface-id>.states.<state-id>"
 ```
+
+The optional `surfaces` field appears only on `rule`, `outcome`, and `failure`
+obligations that are referenced by one or more `experience.surfaces.<id>.states`
+`shows` entries. Its value is the sorted list of referencing surface-state paths.
+The other obligation kinds omit it.
 
 The model has these consistency invariants:
 
@@ -508,9 +517,17 @@ Version 1 uses these closed `obligation-kind` values and definitions:
 | `use_case` | `{actor: actor-id, goal: authored-text, behaviors: list[behavior-path]}` | `<feature-path>.use_cases.<use-case-id>` |
 | `architecture_constraint` | `{statement: authored-text}` | `architecture.<decision-id>.constraints.<constraint-id>` |
 
-Every obligation object contains only the keys required by its row. Its `node` is
-the owning project, domain, feature, behavior, or architecture decision path.
-Project-wide rules use `project` as their node and ID prefix.
+Every obligation object contains only the keys required by its row, plus the
+optional `surfaces` field defined below. Its `node` is the owning project,
+domain, feature, behavior, or architecture decision path. Project-wide rules use
+`project` as their node and ID prefix.
+
+Obligations of kind `rule`, `outcome`, and `failure` MAY carry an optional
+`surfaces` field whose value is the sorted, unique list of surface-state paths
+that reference the obligation through one `experience.surfaces.<id>.states.<id>`
+`shows` entry. The field is present only when at least one such reference
+exists, and every other obligation kind omits it. This is the inverse of the
+authored `shows` reference and carries no independent obligation.
 
 The completion definition lists the direct outcome obligation or every outcome
 alternative obligation under `outcomes`, followed separately by every authored
