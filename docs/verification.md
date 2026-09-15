@@ -32,6 +32,26 @@ paths and paths that resolve outside the product repository remain invalid.
 Verification methods are deterministic probes, agent judgment, and human
 attestation. Their configured coverage for each obligation must total `1.0`.
 
+## Deterministic probe eligibility
+
+The following classification applies to the `verifies` target of every
+deterministic probe and to any bindings plan that configures `probes`. A `partial`
+kind remains probe-eligible, but a complete probe requires the supported setup
+needed to establish its preconditions.
+
+| Obligation kind | Probe-eligible | Reason |
+| --- | --- | --- |
+| Rule | yes | A probe can exercise and observe an individual rule. |
+| Behavior trigger or trigger alternative | yes | A probe can establish a specific triggering event. |
+| Behavior outcome or outcome alternative | yes | A probe can exercise and observe a specific result. |
+| Behavior failure | yes | A probe can induce and observe a specified failure result. |
+| Behavior conditions | partial | Establishing the conditions requires `setup`; setup support is defined separately. |
+| Behavior completion exclusivity | no | A finite step sequence cannot prove that every alternative completion is exclusive. |
+| Use-case goal | no | A use-case goal spans one or more behaviors and is not proved by one deterministic sequence. |
+| Architecture constraint | yes | A probe can exercise and observe an individual constraint. |
+
+Ineligible targets fail validation with `PML-E-PROBE-INELIGIBLE`.
+
 A current passing probe contributes only its assigned coverage. Agent judgment must
 include an observation and reproduction steps. Human evidence identifies the
 attester. Reading implementation may guide verification but never proves behavior.

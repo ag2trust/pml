@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from pml.diagnostics import Diagnostic
 from pml.resolver import (
     OBLIGATION_SECTIONS,
     Obligation,
@@ -12,6 +13,40 @@ from pml.resolver import (
     iter_architecture,
     iter_nodes,
 )
+
+
+# Deterministic probes can exercise an individual observable obligation, but they
+# cannot establish a behavior's exclusive completion or a use case's broader goal.
+# Keep this classification shared by probe and bindings validation.
+PROBE_ELIGIBILITY = {
+    "rules": "yes",
+    "trigger": "yes",
+    "outcome": "yes",
+    "failures": "yes",
+    "conditions": "partial",
+    "completion": "no",
+    "use_cases": "no",
+    "constraints": "yes",
+}
+PROBE_INELIGIBLE_CODE = "PML-E-PROBE-INELIGIBLE"
+PROBE_ELIGIBILITY_TABLE = "docs/verification.md#deterministic-probe-eligibility"
+
+
+def probe_eligibility(obligation: Obligation) -> str:
+    """Return the deterministic-probe eligibility for an obligation kind."""
+
+    return PROBE_ELIGIBILITY[obligation.section]
+
+
+def probe_ineligibility_diagnostic(path: str, obligation: Obligation) -> Diagnostic:
+    """Explain why a deterministic probe cannot cover ``obligation``."""
+
+    return Diagnostic(
+        path,
+        PROBE_INELIGIBLE_CODE,
+        f"deterministic probes cannot verify {obligation.section} obligations; "
+        f"see {PROBE_ELIGIBILITY_TABLE}",
+    )
 
 
 def verification_coverage(plan: dict[str, Any]) -> dict[str, float]:

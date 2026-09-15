@@ -97,7 +97,7 @@ def test_approved_probe_is_valid_and_bound_to_obligation() -> None:
     probes, probe_diagnostics = load_probes(ROOT / "examples" / "assistant-persistence.probe.yaml", definition)
 
     assert probe_diagnostics == []
-    assert probes["assistant_config_persistence"]["verifies"].endswith("use_cases.create_from_scratch")
+    assert probes["assistant_config_persistence"]["verifies"].endswith("behaviors.assistant_creation.outcome")
     assert probe_fingerprint(probes["assistant_config_persistence"]).startswith("sha256:")
 
 
@@ -131,7 +131,9 @@ steps:
     assert missing_probe_diagnostics(probes, definition, bindings) == []
 
 
-def test_probes_can_target_behavior_transition_obligations(tmp_path: Path) -> None:
+def test_probes_can_target_behavior_transition_obligations(
+    tmp_path: Path, capsys
+) -> None:
     definition, diagnostics = load_document(
         ROOT / "examples" / "behavior-one-of-output.pml.yaml"
     )
@@ -141,7 +143,7 @@ def test_probes_can_target_behavior_transition_obligations(tmp_path: Path) -> No
         "domains.email.features.triage.behaviors.importance_decision"
     )
     targets = [
-        f"{behavior_id}.completion",
+        f"{behavior_id}.outcome",
         f"{behavior_id}.failures.processing_failure",
     ]
 
@@ -163,6 +165,34 @@ steps:
 
         assert list(probes) == [f"transition_{index}"]
         assert probe_diagnostics == []
+
+    completion_path = tmp_path / "completion.probe.yaml"
+    completion_path.write_text(
+        f"""\
+pml_probe: "0.1"
+probe: completion
+verifies: {behavior_id}.completion
+env: staging
+steps:
+  - cli: [email, verify-transition]
+    expect: {{exit: 0}}
+"""
+    )
+    completion_probes, completion_diagnostics = load_probes(completion_path, definition)
+    assert list(completion_probes) == ["completion"]
+    assert [(item.code, item.message) for item in completion_diagnostics] == [
+        (
+            "PML-E-PROBE-INELIGIBLE",
+            "deterministic probes cannot verify completion obligations; "
+            "see docs/verification.md#deterministic-probe-eligibility",
+        )
+    ]
+    assert main([
+        "validate-probes",
+        str(ROOT / "examples" / "behavior-one-of-output.pml.yaml"),
+        str(completion_path),
+    ]) == 1
+    assert "[PML-E-PROBE-INELIGIBLE]" in capsys.readouterr().out
 
     legacy_path = tmp_path / "legacy-component.probe.yaml"
     legacy_path.write_text(

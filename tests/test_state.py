@@ -208,6 +208,30 @@ def test_behavior_transition_obligations_are_accepted_by_bindings_schema(
     assert {item.code for item in legacy_diagnostics} == {"schema"}
 
 
+def test_bindings_reject_probe_coverage_for_use_case_goal(tmp_path: Path) -> None:
+    document, diagnostics = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert diagnostics == []
+    assert document is not None
+    bindings_document = yaml.safe_load((ROOT / "examples" / "bindings.yaml").read_text())
+    obligation_id = "domains.notes.features.creation.use_cases.create_note"
+    bindings_document["bindings"]["domains.notes.features.creation"]["verification"][
+        obligation_id
+    ] = {"probes": {"create_note": 1.0}}
+    bindings_path = tmp_path / "bindings.yaml"
+    bindings_path.write_text(yaml.safe_dump(bindings_document, sort_keys=False))
+
+    bindings, binding_diagnostics = load_bindings(bindings_path, document)
+
+    assert bindings is None
+    assert [(item.code, item.message) for item in binding_diagnostics] == [
+        (
+            "PML-E-PROBE-INELIGIBLE",
+            "deterministic probes cannot verify use_cases obligations; "
+            "see docs/verification.md#deterministic-probe-eligibility",
+        )
+    ]
+
+
 def test_cli_lists_independently_addressable_architecture_obligations(
     capsys,
 ) -> None:
