@@ -88,10 +88,11 @@ review-record = {
 }
 ```
 
-The document and every record are closed maps. There are at most 4,096 records.
-Every target ID must resolve to the current validated review inventory. Unknown
-targets are invalid. A syntactically valid non-current digest is not invalid; it
-makes the record stale.
+The document and every record are closed maps. Review metadata does not impose a
+record-count or target-ID-length limit beyond the limits of the approved PML
+definition. Every target ID must resolve to the current validated review inventory.
+Unknown targets are invalid. A syntactically valid non-current digest is not invalid;
+it makes the record stale.
 
 The canonical review-document digest uses the same canonical UTF-8 JSON algorithm.
 Lock integration remains governed by 0007 and is outside this command slice.
@@ -174,7 +175,15 @@ records.
 
 `reviews.yaml` must be a regular non-symbolic file no larger than 1 MiB. It uses the
 same restricted YAML loading rules as other PML artifacts. Review writes never follow
-a symbolic-link destination and replace only the exact adjacent `reviews.yaml`.
+a symbolic-link destination and replace only the exact adjacent `reviews.yaml`. A
+write whose complete UTF-8 serialization would exceed 1 MiB fails before replacement,
+leaving the prior file unchanged.
+
+Review writers serialize the short read/merge/replace operation for each source.
+Each write compares the session's last saved snapshot with the current file and
+three-way merges decisions for different target IDs. Concurrent incompatible changes
+to the same target fail with a conflict diagnostic and leave the current file
+unchanged. A successful merge becomes the session's new saved snapshot.
 
 ## Required conformance coverage
 
@@ -187,4 +196,6 @@ Negative cases cover malformed and oversized YAML, duplicate or unknown targets,
 unknown keys and enum values, malformed digests, missing or misplaced rejection
 reasons, invalid definitions before prompting, missing or failing editors, invalid
 post-edit definitions, symbolic review files, and write failure without partial
-replacement.
+replacement. Concurrency coverage includes preservation of independent decisions and
+rejection of incompatible decisions for the same target. Output-size coverage proves
+that an oversized serialization leaves the prior file unchanged.

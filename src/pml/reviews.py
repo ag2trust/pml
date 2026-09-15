@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 import errno
+import fcntl
 import hashlib
 import json
 import os
@@ -39,12 +41,15 @@ class ReviewTarget:
     authored_path: tuple[str, ...]
 
 
-@dataclass(frozen=True)
+@dataclass
 class LoadedReviews:
     """One validated review document and its canonical location."""
 
     path: Path
     document: dict[str, Any]
+    saved_document: dict[str, Any]
+    target_ids: frozenset[str]
+    saved_target_ids: frozenset[str]
     exists: bool
 
 
@@ -279,27 +284,21 @@ def build_review_targets(model: Mapping[str, Any]) -> tuple[ReviewTarget, ...]:
     return tuple(sorted(targets, key=lambda target: target.id))
 
 
-def load_reviews(
-    manifest: Path, targets: Sequence[ReviewTarget]
-) -> tuple[LoadedReviews | None, list[Diagnostic]]:
-    """Load and validate optional adjacent review metadata."""
-
-    path = reviews_path(manifest)
-    document, exists, diagnostics = _load_review_yaml(path)
-    if document is None:
-        return None, diagnostics
-    schema_diagnostics: list[Diagnostic] = []
+def _review_document_diagnostics(
+    path: Path,
+    document: Mapping[str, Any],
+    target_ids: frozenset[str],
+) -> list[Diagnostic]:
+    diagnostics: list[Diagnostic] = []
     validator = Draft202012Validator(_schema())
     for error in sorted(
         validator.iter_errors(document), key=lambda item: list(item.absolute_path)
     ):
-        schema_diagnostics.append(
+        diagnostics.append(
             Diagnostic(f"{path}:{_path(error.absolute_path)}", "schema", error.message)
         )
-    diagnostics.extend(schema_diagnostics)
-    if schema_diagnostics:
-        return None, diagnostics
-    target_ids = {target.id for target in targets}
+    if diagnostics:
+        return diagnostics
     for target_id in document["reviews"]:
         if target_id not in target_ids:
             diagnostics.append(
@@ -309,9 +308,30 @@ def load_reviews(
                     f"unknown review target '{target_id}'",
                 )
             )
+    return diagnostics
+
+
+def load_reviews(
+    manifest: Path, targets: Sequence[ReviewTarget]
+) -> tuple[LoadedReviews | None, list[Diagnostic]]:
+    """Load and validate optional adjacent review metadata."""
+
+    path = reviews_path(manifest)
+    document, exists, diagnostics = _load_review_yaml(path)
+    if document is None:
+        return None, diagnostics
+    target_ids = frozenset(target.id for target in targets)
+    diagnostics.extend(_review_document_diagnostics(path, document, target_ids))
     if diagnostics:
         return None, diagnostics
-    return LoadedReviews(path=path, document=document, exists=exists), []
+    return LoadedReviews(
+        path=path,
+        document=document,
+        saved_document=copy.deepcopy(document),
+        target_ids=target_ids,
+        saved_target_ids=target_ids,
+        exists=exists,
+    ), []
 
 
 def review_state(target: ReviewTarget, reviews: Mapping[str, Any]) -> str:
@@ -340,25 +360,99 @@ def _ordered_document(document: Mapping[str, Any]) -> dict[str, Any]:
     return {"pml_reviews": "0.1", "reviews": records}
 
 
+_MISSING = object()
+
+
+def _merge_review_documents(
+    path: Path,
+    saved: Mapping[str, Any],
+    desired: Mapping[str, Any],
+    current: Mapping[str, Any],
+) -> tuple[dict[str, Any] | None, list[Diagnostic]]:
+    """Three-way merge this session's target-level changes into current metadata."""
+
+    saved_records = saved["reviews"]
+    desired_records = desired["reviews"]
+    current_records = current["reviews"]
+    merged = copy.deepcopy(current)
+    merged_records = merged["reviews"]
+    diagnostics: list[Diagnostic] = []
+    for target_id in sorted(set(saved_records) | set(desired_records)):
+        saved_record = saved_records.get(target_id, _MISSING)
+        desired_record = desired_records.get(target_id, _MISSING)
+        if saved_record == desired_record:
+            continue
+        current_record = current_records.get(target_id, _MISSING)
+        if current_record != saved_record and current_record != desired_record:
+            diagnostics.append(
+                Diagnostic(
+                    f"{path}:reviews.{target_id}",
+                    "review-conflict",
+                    f"review target '{target_id}' changed after this session loaded it",
+                )
+            )
+            continue
+        if desired_record is _MISSING:
+            merged_records.pop(target_id, None)
+        else:
+            merged_records[target_id] = copy.deepcopy(desired_record)
+    if diagnostics:
+        return None, diagnostics
+    return merged, []
+
+
 def write_reviews(loaded: LoadedReviews) -> list[Diagnostic]:
-    """Atomically replace one exact review metadata file."""
+    """Merge and atomically replace one exact review metadata file."""
 
     path = loaded.path
-    if path.is_symlink():
-        return [
-            Diagnostic(
-                str(path),
-                "review-file",
-                "reviews must be a regular non-symbolic file",
-            )
-        ]
-    ordered = _ordered_document(loaded.document)
-    encoded = yaml.safe_dump(
-        ordered, allow_unicode=True, sort_keys=False, default_flow_style=False
-    ).encode("utf-8")
+    directory_descriptor = -1
     descriptor = -1
     temporary_path: Path | None = None
     try:
+        directory_descriptor = os.open(
+            path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        )
+        fcntl.flock(directory_descriptor, fcntl.LOCK_EX)
+        if path.is_symlink():
+            return [
+                Diagnostic(
+                    str(path),
+                    "review-file",
+                    "reviews must be a regular non-symbolic file",
+                )
+            ]
+        current, _, diagnostics = _load_review_yaml(path)
+        if current is None:
+            return diagnostics
+        diagnostics.extend(
+            _review_document_diagnostics(
+                path, current, loaded.saved_target_ids | loaded.target_ids
+            )
+        )
+        if diagnostics:
+            return diagnostics
+        merged, diagnostics = _merge_review_documents(
+            path, loaded.saved_document, loaded.document, current
+        )
+        if merged is None:
+            return diagnostics
+        for removed_target_id in loaded.saved_target_ids - loaded.target_ids:
+            merged["reviews"].pop(removed_target_id, None)
+        diagnostics = _review_document_diagnostics(path, merged, loaded.target_ids)
+        if diagnostics:
+            return diagnostics
+        ordered = _ordered_document(merged)
+        encoded = yaml.safe_dump(
+            ordered, allow_unicode=True, sort_keys=False, default_flow_style=False
+        ).encode("utf-8")
+        if len(encoded) > MAX_REVIEWS_BYTES:
+            return [
+                Diagnostic(
+                    str(path),
+                    "review-size",
+                    f"reviews file would exceed {MAX_REVIEWS_BYTES} bytes",
+                )
+            ]
         descriptor, temporary_name = tempfile.mkstemp(
             prefix=".reviews.", suffix=".tmp", dir=path.parent
         )
@@ -372,6 +466,9 @@ def write_reviews(loaded: LoadedReviews) -> list[Diagnostic]:
         temporary_path = None
         loaded.document.clear()
         loaded.document.update(ordered)
+        loaded.saved_document = copy.deepcopy(ordered)
+        loaded.saved_target_ids = loaded.target_ids
+        loaded.exists = True
         return []
     except OSError as exc:
         return [Diagnostic(str(path), "review-write", str(exc))]
@@ -383,6 +480,11 @@ def write_reviews(loaded: LoadedReviews) -> list[Diagnostic]:
                 temporary_path.unlink()
             except FileNotFoundError:
                 pass
+        if directory_descriptor >= 0:
+            try:
+                fcntl.flock(directory_descriptor, fcntl.LOCK_UN)
+            finally:
+                os.close(directory_descriptor)
 
 
 def _definition_snapshot(
@@ -655,6 +757,7 @@ def review_manifest(
                 )
                 return 1
             updated = {item.id: item for item in updated_targets}
+            loaded.target_ids = frozenset(updated)
             removed = sorted(set(records).difference(updated))
             for target_id in removed:
                 del records[target_id]

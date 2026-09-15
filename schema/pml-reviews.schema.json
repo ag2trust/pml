@@ -9,11 +9,9 @@
     "pml_reviews": {"const": "0.1"},
     "reviews": {
       "type": "object",
-      "maxProperties": 4096,
       "propertyNames": {
         "type": "string",
         "minLength": 1,
-        "maxLength": 2048,
         "pattern": "^(?:project|architecture|domains)(?:\\.[a-z][a-z0-9_]*)+$"
       },
       "additionalProperties": {"$ref": "#/$defs/reviewRecord"}

@@ -11,6 +11,7 @@ import yaml
 from pml.cli import main
 from pml.reviews import (
     MAX_REVIEWS_BYTES,
+    ReviewTarget,
     _definition_snapshot,
     build_review_targets,
     load_reviews,
@@ -195,6 +196,44 @@ def test_review_record_shape_is_closed(tmp_path: Path, record: dict) -> None:
     _write_reviews(source, {_targets(source)[0].id: record})
 
     assert any(item.code == "schema" for item in validate_reviews(source))
+
+
+def test_review_metadata_accepts_more_than_former_capacity_and_id_limits(
+    tmp_path: Path,
+) -> None:
+    source = _source(tmp_path)
+    digest = "sha256:" + "0" * 64
+    target_ids = [
+        f"domains.d.features.f.behaviors.b{index}" for index in range(4097)
+    ]
+    target_ids.append("domains." + "a" * 2050 + ".features.f")
+    targets = tuple(
+        ReviewTarget(
+            id=target_id,
+            kind="behavior",
+            display_kind="behavior",
+            content={},
+            digest=digest,
+            authored_path=tuple(target_id.split(".")),
+        )
+        for target_id in target_ids
+    )
+    _write_reviews(
+        source,
+        {
+            target_id: {
+                "origin": "human",
+                "status": "approved",
+                "digest": digest,
+            }
+            for target_id in target_ids
+        },
+    )
+
+    loaded, diagnostics = load_reviews(source, targets)
+
+    assert loaded is not None and diagnostics == []
+    assert len(loaded.document["reviews"]) == 4098
 
 
 def test_review_file_must_be_bounded_regular_and_non_symbolic(tmp_path: Path) -> None:
@@ -399,6 +438,99 @@ def test_atomic_review_write_failure_preserves_existing_file(
     diagnostics = write_reviews(loaded)
 
     assert [item.code for item in diagnostics] == ["review-write"]
+    assert (source / "reviews.yaml").read_bytes() == original
+    assert list(source.glob(".reviews.*.tmp")) == []
+
+
+def test_stale_sessions_merge_decisions_for_different_targets(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    targets = _targets(source)
+    first, first_diagnostics = load_reviews(source, targets)
+    second, second_diagnostics = load_reviews(source, targets)
+    assert first is not None and first_diagnostics == []
+    assert second is not None and second_diagnostics == []
+    first_target, second_target = targets[:2]
+    first.document["reviews"][first_target.id] = {
+        "origin": "human",
+        "status": "approved",
+        "digest": first_target.digest,
+    }
+    second.document["reviews"][second_target.id] = {
+        "origin": "agent",
+        "status": "approved",
+        "digest": second_target.digest,
+    }
+
+    assert write_reviews(first) == []
+    assert write_reviews(second) == []
+
+    stored = yaml.safe_load((source / "reviews.yaml").read_text(encoding="utf-8"))
+    assert set(stored["reviews"]) == {first_target.id, second_target.id}
+    assert second.document == stored
+
+
+def test_stale_sessions_reject_conflicting_decisions_for_same_target(
+    tmp_path: Path,
+) -> None:
+    source = _source(tmp_path)
+    targets = _targets(source)
+    first, first_diagnostics = load_reviews(source, targets)
+    second, second_diagnostics = load_reviews(source, targets)
+    assert first is not None and first_diagnostics == []
+    assert second is not None and second_diagnostics == []
+    target = targets[0]
+    first.document["reviews"][target.id] = {
+        "origin": "human",
+        "status": "approved",
+        "digest": target.digest,
+    }
+    second.document["reviews"][target.id] = {
+        "origin": "human",
+        "status": "rejected",
+        "digest": target.digest,
+        "reason": "The observable outcome is unclear.",
+    }
+
+    assert write_reviews(first) == []
+    diagnostics = write_reviews(second)
+
+    assert [item.code for item in diagnostics] == ["review-conflict"]
+    stored = yaml.safe_load((source / "reviews.yaml").read_text(encoding="utf-8"))
+    assert stored["reviews"][target.id]["status"] == "approved"
+
+
+def test_oversized_review_write_preserves_existing_file(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    targets = _targets(source)
+    target = targets[0]
+    _write_reviews(
+        source,
+        {
+            target.id: {
+                "origin": "human",
+                "status": "approved",
+                "digest": target.digest,
+            }
+        },
+    )
+    original = (source / "reviews.yaml").read_bytes()
+    loaded, diagnostics = load_reviews(source, targets)
+    assert loaded is not None and diagnostics == []
+    added_ids = {
+        f"domains.d.features.f.behaviors.large{index}" for index in range(260)
+    }
+    loaded.target_ids |= added_ids
+    for target_id in added_ids:
+        loaded.document["reviews"][target_id] = {
+            "origin": "human",
+            "status": "rejected",
+            "digest": "sha256:" + "0" * 64,
+            "reason": "x" * 4096,
+        }
+
+    diagnostics = write_reviews(loaded)
+
+    assert [item.code for item in diagnostics] == ["review-size"]
     assert (source / "reviews.yaml").read_bytes() == original
     assert list(source.glob(".reviews.*.tmp")) == []
 
