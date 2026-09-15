@@ -21,6 +21,7 @@ from jsonschema import Draft202012Validator
 import yaml
 
 from pml.diagnostics import Diagnostic
+from pml.explain import is_supported_model
 from pml.serialization import canonical_definition_bytes
 from pml.validator import INDEX, SUFFIX, UniqueKeyLoader, load_document, validate_document
 
@@ -208,8 +209,17 @@ def _obligation_authored_path(record: Mapping[str, Any]) -> tuple[str, ...]:
 
 
 def build_review_targets(model: Mapping[str, Any]) -> tuple[ReviewTarget, ...]:
-    """Build the complete deterministic review inventory from compiled model v1."""
+    """Build the complete deterministic review inventory from compiled model v2.
 
+    Reject any model that is not exactly the supported ``pml.compiled`` version,
+    matching the all-consumer version-boundary rule in spec 0011.
+    """
+
+    if not is_supported_model(model):
+        raise ValueError(
+            f"unsupported compiled model: {model.get('format')!r}@"
+            f"{model.get('format_version')!r}"
+        )
     targets: list[ReviewTarget] = []
     produced_signals: dict[str, list[dict[str, Any]]] = {}
     for signal in model.get("signals", []):
