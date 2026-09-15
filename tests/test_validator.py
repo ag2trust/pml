@@ -205,6 +205,39 @@ def test_domain_rule_mentioning_a_feature_actor_has_no_scope_warning() -> None:
     assert not any(item.code == "PML-W-RULE-SCOPE" for item in resolution.diagnostics)
 
 
+def test_feature_rule_with_punctuation_bearing_vocabulary_term_warns() -> None:
+    document, feature = _cardinality_document()
+    document["vocabulary"] = {
+        "C++": {"meaning": "A supported programming language."}
+    }
+    feature["behaviors"]["note_creation"]["conditions"] = [
+        "C++ is selected for the implementation."
+    ]
+    document["domains"]["notes"]["features"]["review"] = {
+        "purpose": "Review a submitted note.",
+        "rules": {
+            "cxx_is_portable": {
+                "statement": "C++ MUST remain portable across supported environments."
+            }
+        },
+        "behaviors": {
+            "note_review": {
+                "trigger": {"statement": "A Member requests a note review."},
+                "outcome": {"statement": "The review result is visible."},
+            }
+        },
+    }
+
+    resolution = validate_document(document)
+
+    assert [(item.path, item.code) for item in resolution.diagnostics] == [
+        (
+            "domains.notes.features.review.rules.cxx_is_portable",
+            "PML-W-RULE-SCOPE",
+        )
+    ]
+
+
 def test_minimal_example_is_valid() -> None:
     assert validate_file(ROOT / "examples" / "minimal.pml.yaml") == []
 

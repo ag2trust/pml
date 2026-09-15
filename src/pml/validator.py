@@ -293,7 +293,7 @@ def _term_pattern(term: str) -> re.Pattern[str]:
     """Compile a case-insensitive whole-word pattern for one PML term."""
 
     normalized = term.casefold().replace("_", " ")
-    return re.compile(rf"\b{re.escape(normalized)}\b")
+    return re.compile(rf"(?<!\w){re.escape(normalized)}(?!\w)")
 
 
 def _mentioned_terms(text: str, terms: dict[str, re.Pattern[str]]) -> set[str]:
