@@ -98,6 +98,43 @@ domains:
     return source
 
 
+def _coupling_manifest(tmp_path: Path) -> Path:
+    source = tmp_path / "coupling.pml.yaml"
+    source.write_text(
+        """pml: "0.1-draft"
+project:
+  id: coupling_test
+  name: Coupling Test
+  purpose: Exercise derived feature coupling.
+domains:
+  core:
+    purpose: Exercise signals.
+    features:
+      producer:
+        purpose: Produce the signal.
+        behaviors:
+          produce:
+            trigger:
+              statement: Production begins.
+            outcome:
+              statement: Production completes.
+              signal:
+                id: ready
+                meaning: Production is ready.
+      consumer:
+        purpose: Consume the signal.
+        behaviors:
+          consume:
+            trigger:
+              signal: ready
+            outcome:
+              statement: Consumption completes.
+""",
+        encoding="utf-8",
+    )
+    return source
+
+
 def _compiled(source: Path):  # type: ignore[no-untyped-def]
     document, diagnostics = load_document(source)
     assert document is not None
@@ -139,6 +176,39 @@ def test_explain_surfaces_path_collisions_and_incoming_relationships_read_only(
     assert '"declared_by": ["domains.core.features.g"]' in captured.out
     assert "use_case_memberships: []" in captured.out
     assert sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*")) == before
+
+
+def test_explain_feature_coupling_section_snapshot(tmp_path: Path, capsys) -> None:
+    source = _coupling_manifest(tmp_path)
+
+    assert cli.main(["explain", str(source), "domains.core.features.consumer"]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert captured.out == """Feature
+  Authored:
+    id: "consumer"
+    purpose: "Consume the signal."
+    actors: []
+    related_to: []
+    architecture: []
+  Derived identity/structural:
+    path: "domains.core.features.consumer"
+    domain: "domains.core"
+  Derived inverse links:
+    rule_obligations: []
+    use_cases: []
+    behaviors:
+      - "domains.core.features.consumer.behaviors.consume"
+    stable_obligations: []
+    relationships: []
+    use_case_memberships: []
+  Derived coupling:
+    signals_produced: []
+    signals_consumed:
+      - {"id": "ready", "producer_feature": "domains.core.features.producer"}
+    distinct_producer_feature_count: 1
+"""
 
 
 def test_explain_renders_use_case_and_obligation_and_membership_from_both_sides(
