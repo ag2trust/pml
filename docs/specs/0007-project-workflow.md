@@ -59,6 +59,10 @@ the exact current authored artifacts. The lock records a review digest separatel
 from definition and bindings digests so review changes do not masquerade as product
 intent changes.
 
+The exact review inventory, target-digest projection, closed metadata grammar, and
+interactive human workflow are defined by the owner-approved
+[human review workflow](0012-human-review-workflow.md).
+
 ## Installation
 
 PML is distributed as an isolated Python CLI application. The documented install

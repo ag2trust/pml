@@ -1,0 +1,37 @@
+pml: "0.1-draft"
+
+project:
+  id: reviewed_product
+  name: Reviewed Product
+  purpose: Let a Member record a Note.
+
+actors:
+  member:
+    meaning: A person who records Notes.
+
+concepts:
+  note:
+    meaning: Information retained for later use.
+
+domains:
+  notes:
+    purpose: Let Members manage Notes.
+    features:
+      creation:
+        purpose: Let a Member create a Note.
+        actors: [member]
+        rules:
+          preserve_content:
+            statement: THE SYSTEM MUST preserve accepted Note content.
+        behaviors:
+          create_note:
+            trigger:
+              statement: A Member submits Note content.
+            outcome:
+              statement: The Note is available in a later session.
+        use_cases:
+          record_note:
+            actor: member
+            goal: Record information for later use.
+            behaviors:
+              - domains.notes.features.creation.behaviors.create_note

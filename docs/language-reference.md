@@ -199,6 +199,25 @@ When a node or a `related_to` node changes, sync invalidates affected obligation
 confidence. Current passing probes restore only their approved coverage; agentic or
 human verification is required for the remaining approved coverage.
 
+## Human review metadata
+
+Review decisions are stored in optional owner-controlled `reviews.yaml`, never in
+the normative definition. Features, behaviors, and stable obligations are the only
+reviewable targets. Each record declares whether its content was authored by a
+human or agent, records `pending`, `approved`, or `rejected`, and binds that decision
+to the target's canonical digest. A rejection requires a reason. Missing records are
+pending, and a digest mismatch makes a prior decision stale without making ordinary
+validation fail.
+
+Run `pml review <manifest>` to process unresolved targets interactively. Approve and
+reject decisions are saved atomically; skip writes nothing. Manual editing uses
+`VISUAL` or `EDITOR`, revalidates the complete definition, and records changed targets
+as human-authored and pending. Review metadata cannot edit the definition, supply
+verification evidence, or alter compiled semantics.
+
+See [the human review workflow](specs/0012-human-review-workflow.md) for the closed
+artifact grammar and digest projection.
+
 ## Deliberately outside PML definitions
 
 - implementation files, functions, endpoints, tables, and configuration;

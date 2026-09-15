@@ -60,6 +60,27 @@ on an outcome or failure and can trigger other behaviors. A behavior has require
 `failures`, and no nested behaviors. Use cases group behaviors that collectively
 fulfill an actor's goal; their list does not prescribe execution order.
 
+## Review product intent
+
+Review unresolved features, behaviors, and stable obligations one at a time:
+
+```bash
+pml review my-product.pml.yaml
+```
+
+The command records approvals and reasoned rejections in an adjacent
+owner-controlled `reviews.yaml`. Approvals are tied to deterministic target digests,
+so changed content becomes stale and returns to the queue. `skip` leaves a target
+pending. `edit` opens its contributing source through `VISUAL` or `EDITOR`, validates
+the complete definition afterward, and leaves changed targets pending for human
+review rather than approving them automatically.
+
+When bootstrapping content with known provenance, provide a session default:
+
+```bash
+pml review my-product.pml.yaml --origin agent
+```
+
 ## Bind an implementation
 
 Keep the approved definition and verification policy together in the
@@ -70,7 +91,7 @@ implementing product:
 sample-product-pml/          sample-product/
   sample.pml.yaml              .pml/
   bindings.yaml                  pml.lock
-                                  state/**
+  reviews.yaml                   state/**
 ```
 
 `sample-product-pml/bindings.yaml` maps semantic nodes to product paths and assigns

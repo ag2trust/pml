@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pml.dev/schema/0.1/pml-reviews.schema.json",
+  "title": "PML owner review metadata 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pml_reviews", "reviews"],
+  "properties": {
+    "pml_reviews": {"const": "0.1"},
+    "reviews": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?:project|architecture|domains)(?:\\.[a-z][a-z0-9_]*)+$"
+      },
+      "additionalProperties": {"$ref": "#/$defs/reviewRecord"}
+    }
+  },
+  "$defs": {
+    "reviewRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "status", "digest"],
+      "properties": {
+        "origin": {"enum": ["human", "agent"]},
+        "status": {"enum": ["pending", "approved", "rejected"]},
+        "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 4096}
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {"status": {"const": "rejected"}}
+          },
+          "then": {"required": ["reason"]},
+          "else": {"not": {"required": ["reason"]}}
+        }
+      ]
+    }
+  }
+}

@@ -29,6 +29,10 @@ documentation. The owner-approved version 1 compiled semantic model in
 [`docs/specs/0011-compiled-semantic-model.md`](docs/specs/0011-compiled-semantic-model.md)
 is implemented through canonical serialization and `pml compile --json`.
 
+The owner-approved human review workflow in
+[`docs/specs/0012-human-review-workflow.md`](docs/specs/0012-human-review-workflow.md)
+is implemented through adjacent review validation and `pml review`.
+
 The future read-only web explorer is an approved but unimplemented compiled-model
 consumer.
 
@@ -91,6 +95,18 @@ Write the complete explicit graph as deterministic Graphviz DOT bytes with:
 
 `pml graph` is read-only and emits only producer-completion-to-signal,
 signal-to-consumer-trigger, `related_to`, and use-case membership edges.
+
+Review every unresolved feature, behavior, and stable obligation interactively with:
+
+```bash
+pml review path/to/definition
+```
+
+The review command records digest-bound human decisions in the adjacent
+owner-controlled `reviews.yaml`. It can approve, reject with a reason, skip, or open
+the contributing source in `VISUAL`/`EDITOR` for a manual change. It never approves
+edited content automatically. Use `--origin human` or `--origin agent` to set the
+authoring origin for existing content whose provenance has not yet been recorded.
 
 Initialize PML from an implementing product repository with:
 
@@ -206,6 +222,7 @@ pml architecture-status definition.pml.yaml product/
 - [Architecture decisions](docs/specs/0006-architecture-decisions.md) — approved registry and separate conformance semantics.
 - [Behavior transition model](docs/specs/0010-behavior-transition-model.md) — approved transition grammar and migration guidance.
 - [Canonical compiled semantic model](docs/specs/0011-compiled-semantic-model.md) — approved version 1 derived model and JSON contract.
+- [Human review workflow](docs/specs/0012-human-review-workflow.md) — digest-bound review metadata and interactive review.
 
 Examples:
 
@@ -216,6 +233,8 @@ Examples:
 - [Verification report](examples/verification-report.yaml)
 - [Probe definition](examples/assistant-persistence.probe.yaml)
 - [Owner-controlled bindings](examples/bindings.yaml)
+- [Owner review metadata](examples/reviewed-product/reviews.yaml)
+- [Invalid review schema](examples/invalid-reviews-schema.yaml) and [unresolved review target](examples/reviewed-product-invalid/reviews.yaml)
 - [Product lock](examples/product-repository/.pml/pml.lock)
 - [Product-local state](examples/product-repository/.pml/state/domains/notes/features/creation.state.yaml)
 

@@ -1,6 +1,6 @@
 ---
 name: pml
-description: Author, review, and maintain Product Manifest Language (PML) definitions and their owner-controlled bindings and probes. Use when defining product intent in PML, changing .pml.yaml files, resolving PML validation errors, reviewing PML semantics, or working with pml init, validate, compile, explain, obligations, check, status, architecture-status, validate-probes, or ingest-report.
+description: Author, review, and maintain Product Manifest Language (PML) definitions and their owner-controlled reviews, bindings, and probes. Use when defining product intent in PML, changing .pml.yaml files, resolving PML validation errors, reviewing PML semantics, or working with pml init, validate, compile, explain, graph, review, obligations, check, status, architecture-status, validate-probes, or ingest-report.
 ---
 
 # PML
@@ -25,6 +25,8 @@ closed language, not as an extensible documentation format.
 - State observable product outcomes, not filenames, functions, endpoints, framework
   components, classes, or tests in normative definitions.
 - Keep authored definitions separate from generated state and evidence.
+- Keep `reviews.yaml` separate from the definition. Agents may propose edits but
+  must never approve their own content or represent themselves as human authors.
 - Never interpret implementation existence as evidence of conformance.
 - Never let generated state or evidence silently change approved definitions.
 
@@ -44,6 +46,10 @@ definition.
 Use `pml compile <manifest> --json` to write the validated canonical compiled
 model to standard output, and `pml explain <manifest> <canonical-id>` for a
 read-only human-readable view of the matching compiled record or records.
+
+Use `pml review <manifest>` only for an interactive human review session. The human
+may approve, reject with a reason, skip, or open the contributing definition source
+for a manual edit. A changed target remains pending until the human reviews it again.
 
 If `pml` is not found, first use a repository-local `.venv/bin/pml` when one is
 available. In a PML development checkout, ensure uv's tool directory is on
