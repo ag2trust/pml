@@ -296,7 +296,7 @@ def ingest_report(
             if (
                 check["result"] == "inconclusive"
                 and prior is not None
-                and prior.get("result") == "passed"
+                and prior.get("result") in {"passed", "failed", "blocked"}
                 and prior.get("probe_fingerprint") == record["probe_fingerprint"]
                 and prior.get("input_fingerprint") == current_input
             ):

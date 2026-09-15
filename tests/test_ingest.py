@@ -500,6 +500,84 @@ def test_inconclusive_probe_result_preserves_prior_passing_evidence(
     ) == []
 
 
+def _ingest_first_then_inconclusive(
+    tmp_path: Path, initial_result: str
+) -> tuple[dict, dict]:
+    definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
+    assert definition is not None
+    product = product_copy(tmp_path)
+    probe_path = tmp_path / "preserve.probe.yaml"
+    write_probe(probe_path)
+    probes, _ = load_probes(probe_path, definition)
+    first_path = tmp_path / "first.yaml"
+    write_report(first_path)
+    first = yaml.safe_load(first_path.read_text())
+    first["verification"] = f"{initial_result}_run"
+    first["verdict"] = "verified" if initial_result == "passed" else "failed"
+    first["checks"][0]["result"] = initial_result
+    first["checks"][0]["observation"] = f"Probe {initial_result}."
+    first_path.write_text(yaml.safe_dump(first, sort_keys=False))
+
+    assert ingest_report(
+        first_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
+
+    state_path = (
+        product / ".pml/state/domains/notes/features/creation.state.yaml"
+    )
+    before = yaml.safe_load(state_path.read_text())
+    prior_record = before["obligations"][OBLIGATION]["evidence"][
+        "deterministic_probe"
+    ]["preserve_content"]
+
+    followup_path = tmp_path / "followup.yaml"
+    write_report(followup_path)
+    followup = yaml.safe_load(followup_path.read_text())
+    followup["verification"] = "followup_run"
+    followup["verdict"] = "incomplete"
+    followup["recorded"] = "2026-08-01T10:00:00Z"
+    followup["checks"][0]["result"] = "inconclusive"
+    followup["checks"][0]["observation"] = "Setup precondition failed."
+    followup_path.write_text(yaml.safe_dump(followup, sort_keys=False))
+
+    assert ingest_report(
+        followup_path,
+        product,
+        definition,
+        probes,
+        definition_source=owner_definition_path(product),
+    ) == []
+
+    after = yaml.safe_load(state_path.read_text())
+    return prior_record, after
+
+
+def test_inconclusive_probe_result_preserves_prior_failed_evidence(
+    tmp_path: Path,
+) -> None:
+    prior, after = _ingest_first_then_inconclusive(tmp_path, "failed")
+    preserved = after["obligations"][OBLIGATION]["evidence"][
+        "deterministic_probe"
+    ]["preserve_content"]
+    assert preserved == prior
+    assert preserved["result"] == "failed"
+
+
+def test_inconclusive_probe_result_preserves_prior_blocked_evidence(
+    tmp_path: Path,
+) -> None:
+    prior, after = _ingest_first_then_inconclusive(tmp_path, "blocked")
+    preserved = after["obligations"][OBLIGATION]["evidence"][
+        "deterministic_probe"
+    ]["preserve_content"]
+    assert preserved == prior
+    assert preserved["result"] == "blocked"
+
+
 def test_agent_and_human_evidence_store_report_origin(tmp_path: Path) -> None:
     definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
     assert definition is not None
