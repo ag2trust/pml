@@ -7,6 +7,7 @@ from typing import Any, TYPE_CHECKING, cast
 
 from pml.compiled_model import CompiledModel, CompiledObligation
 from pml.serialization import definition_digest
+from pml.validator import _eligible_show_targets, resolve_show_entry
 
 if TYPE_CHECKING:
     from pml.resolver import Obligation, ReferenceResolver, ResolvedDefinition
@@ -95,7 +96,9 @@ def _compiled_outcome(behavior_path: str, definition: Mapping[str, Any]) -> dict
 
 
 def _compiled_experience(
-    definition: Mapping[str, Any], feature_path: str
+    definition: Mapping[str, Any],
+    feature_path: str,
+    eligible: set[str],
 ) -> dict[str, Any]:
     surfaces = []
     for surface_id, surface in sorted(
@@ -107,7 +110,7 @@ def _compiled_experience(
             shows = state.get("shows")
             if isinstance(shows, list):
                 compiled_state["shows"] = [
-                    _resolve_show_path(feature_path, entry)
+                    resolve_show_entry(entry, feature_path, eligible)
                     for entry in shows
                 ]
             contains = state.get("contains")
@@ -126,12 +129,6 @@ def _compiled_experience(
             }
         )
     return {"surfaces": surfaces}
-
-
-def _resolve_show_path(feature_path: str, entry: str) -> str:
-    if entry.startswith(("domains.", "project.", "architecture.")):
-        return entry
-    return f"{feature_path}.{entry}"
 
 
 def _compiled_obligation(obligation: Obligation) -> CompiledObligation:
@@ -230,7 +227,7 @@ def _signal_consumers(
 
 
 def _surface_references(
-    document: Mapping[str, Any],
+    document: Mapping[str, Any], eligible: set[str]
 ) -> dict[str, list[str]]:
     """Return a map from obligation path to the surface state paths that show it."""
 
@@ -263,7 +260,11 @@ def _surface_references(
                     for entry in shows:
                         if not isinstance(entry, str):
                             continue
-                        obligation = _resolve_show_path(feature_path, entry)
+                        obligation = resolve_show_entry(
+                            entry, feature_path, eligible
+                        )
+                        if obligation is None:
+                            continue
                         references.setdefault(obligation, []).append(state_path)
     return references
 
@@ -298,6 +299,7 @@ def _build_compiled_model(
 
     domains_definition = _mapping(document.get("domains"))
     project_definition = _mapping(document.get("project"))
+    eligible_shows = _eligible_show_targets(dict(document))
 
     memberships = sorted(
         (
@@ -360,7 +362,7 @@ def _build_compiled_model(
             experience = feature.get("experience")
             if isinstance(experience, dict):
                 compiled_feature["experience"] = _compiled_experience(
-                    experience, feature_path
+                    experience, feature_path, eligible_shows
                 )
             features.append(compiled_feature)
 
@@ -438,7 +440,7 @@ def _build_compiled_model(
             compiled_signal["subject"] = subject
         signals.append(compiled_signal)
 
-    surface_references = _surface_references(document)
+    surface_references = _surface_references(document, eligible_shows)
     product_obligations = list(resolver.enumerate_obligations())
     architecture_obligations = list(resolver.enumerate_architecture_obligations())
     compiled_obligations = []

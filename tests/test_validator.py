@@ -1176,10 +1176,59 @@ def test_surface_string_with_normative_marker_is_rejected(
     )
 
 
-def test_surface_shows_bare_id_resolves_within_feature(tmp_path: Path) -> None:
-    manifest = _surface_manifest(
-        tmp_path, {"shows": ["behaviors.note_creation.failures.rejected"]}
-    )
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "rejected",
+        "note_creation.failures.rejected",
+        "behaviors.note_creation.failures.rejected",
+        "domains.notes.features.creation.behaviors.note_creation.failures.rejected",
+    ],
+)
+def test_surface_shows_resolves_bare_relative_and_full_forms(
+    tmp_path: Path, entry: str
+) -> None:
+    manifest = _surface_manifest(tmp_path, {"shows": [entry]})
+
+    assert validate_file(manifest) == []
+
+
+def test_surface_shows_resolves_full_path_in_another_feature(
+    tmp_path: Path,
+) -> None:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    domain = document["domains"]["notes"]
+    domain["features"]["retrieval"] = {
+        "purpose": "Allow a Member to retrieve a Note.",
+        "actors": ["member"],
+        "behaviors": {
+            "note_view": {
+                "trigger": {"statement": "The Member selects a Note."},
+                "outcome": {"statement": "The Note is displayed."},
+                "failures": {
+                    "unavailable": {
+                        "statement": "The Member is told the Note is unavailable."
+                    }
+                },
+            }
+        },
+        "experience": {
+            "surfaces": {
+                "reader": {
+                    "contains": ["A Note viewer."],
+                    "states": {
+                        "shared_error": {
+                            "shows": [
+                                "domains.notes.features.creation.behaviors.note_creation.failures.rejected"
+                            ]
+                        }
+                    },
+                }
+            }
+        },
+    }
+    manifest = tmp_path / "cross-feature.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
 
     assert validate_file(manifest) == []
 
@@ -1192,6 +1241,57 @@ def test_surface_shows_unresolved_path_is_rejected(tmp_path: Path) -> None:
     assert any(
         item.code == "undefined-reference"
         and item.path.endswith(".states.target.shows[0]")
+        for item in diagnostics
+    )
+
+
+def test_surface_shows_ambiguous_bare_id_is_rejected(tmp_path: Path) -> None:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    feature = document["domains"]["notes"]["features"]["creation"]
+    feature["behaviors"]["note_creation"]["failures"]["duplicate"] = {
+        "statement": "The submission is a duplicate."
+    }
+    feature["rules"]["duplicate"] = {
+        "statement": "THE SYSTEM MUST reject duplicate submissions."
+    }
+    feature["experience"] = {
+        "surfaces": {
+            "flow": {
+                "contains": ["An input."],
+                "states": {"target": {"shows": ["duplicate"]}},
+            }
+        }
+    }
+    manifest = tmp_path / "ambiguous-bare-id.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    diagnostics = validate_file(manifest)
+
+    assert any(
+        item.code == "undefined-reference"
+        and item.path.endswith(".states.target.shows[0]")
+        for item in diagnostics
+    )
+
+
+def test_surface_shows_duplicate_resolved_paths_are_rejected(
+    tmp_path: Path,
+) -> None:
+    manifest = _surface_manifest(
+        tmp_path,
+        {
+            "shows": [
+                "rules.preserve_content",
+                "domains.notes.features.creation.rules.preserve_content",
+            ]
+        },
+    )
+
+    diagnostics = validate_file(manifest)
+
+    assert any(
+        item.code == "duplicate-reference"
+        and item.path.endswith(".states.target.shows[1]")
         for item in diagnostics
     )
 

@@ -272,39 +272,8 @@ def _keys(value: Any) -> list[str]:
     return list(_mapping(value).keys())
 
 
-def _feature_show_targets(
-    feature_path: str, feature: dict[str, Any]
-) -> set[str]:
+def _eligible_show_targets(document: dict[str, Any]) -> set[str]:
     """Return every obligation path a surface `shows` may resolve to."""
-
-    targets: set[str] = set()
-    for rule_id in _keys(feature.get("rules")):
-        targets.add(f"{feature_path}.rules.{rule_id}")
-    for behavior_id, behavior in _mapping(feature.get("behaviors")).items():
-        if not isinstance(behavior, dict):
-            continue
-        behavior_path = f"{feature_path}.behaviors.{behavior_id}"
-        for rule_id in _keys(behavior.get("rules")):
-            targets.add(f"{behavior_path}.rules.{rule_id}")
-        outcome = behavior.get("outcome")
-        if isinstance(outcome, dict):
-            alternatives = outcome.get("one_of")
-            if isinstance(alternatives, dict):
-                for alternative_id in alternatives:
-                    targets.add(
-                        f"{behavior_path}.outcome.{alternative_id}"
-                    )
-            elif "statement" in outcome:
-                targets.add(f"{behavior_path}.outcome")
-        failures = behavior.get("failures")
-        if isinstance(failures, dict):
-            for failure_id in failures:
-                targets.add(f"{behavior_path}.failures.{failure_id}")
-    return targets
-
-
-def _project_show_targets(document: dict[str, Any]) -> set[str]:
-    """Return every project- or domain-scope rule obligation path."""
 
     targets: set[str] = set()
     for rule_id in _keys(document.get("rules")):
@@ -314,14 +283,71 @@ def _project_show_targets(document: dict[str, Any]) -> set[str]:
             continue
         for rule_id in _keys(domain.get("rules")):
             targets.add(f"domains.{domain_id}.rules.{rule_id}")
+        for feature_id, feature in _mapping(domain.get("features")).items():
+            if not isinstance(feature, dict):
+                continue
+            feature_path = f"domains.{domain_id}.features.{feature_id}"
+            for rule_id in _keys(feature.get("rules")):
+                targets.add(f"{feature_path}.rules.{rule_id}")
+            for behavior_id, behavior in _mapping(feature.get("behaviors")).items():
+                if not isinstance(behavior, dict):
+                    continue
+                behavior_path = f"{feature_path}.behaviors.{behavior_id}"
+                for rule_id in _keys(behavior.get("rules")):
+                    targets.add(f"{behavior_path}.rules.{rule_id}")
+                outcome = behavior.get("outcome")
+                if isinstance(outcome, dict):
+                    alternatives = outcome.get("one_of")
+                    if isinstance(alternatives, dict):
+                        for alternative_id in alternatives:
+                            targets.add(
+                                f"{behavior_path}.outcome.{alternative_id}"
+                            )
+                    elif "statement" in outcome:
+                        targets.add(f"{behavior_path}.outcome")
+                failures = behavior.get("failures")
+                if isinstance(failures, dict):
+                    for failure_id in failures:
+                        targets.add(f"{behavior_path}.failures.{failure_id}")
     return targets
 
 
+def resolve_show_entry(
+    entry: str, feature_path: str, eligible: set[str]
+) -> str | None:
+    """Resolve one authored `shows` entry to a canonical obligation path.
+
+    Accepted forms, tried in order:
+      1. Full obligation path already present in ``eligible``.
+      2. Feature-relative path prepended to ``feature_path``.
+      3. Behavior-relative path (missing the leading ``behaviors.``).
+      4. Bare last-segment ID with exactly one match within the feature.
+    """
+
+    if entry in eligible:
+        return entry
+    prefixed = f"{feature_path}.{entry}"
+    if prefixed in eligible:
+        return prefixed
+    behavior_prefixed = f"{feature_path}.behaviors.{entry}"
+    if behavior_prefixed in eligible:
+        return behavior_prefixed
+    feature_prefix = f"{feature_path}."
+    bare_matches = [
+        target
+        for target in eligible
+        if target.startswith(feature_prefix) and target.rsplit(".", 1)[-1] == entry
+    ]
+    if len(bare_matches) == 1:
+        return bare_matches[0]
+    return None
+
+
 def _surface_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
-    """Reject normative markers and unresolved `shows` paths in surfaces."""
+    """Reject normative markers, unresolved paths, and duplicate `shows`."""
 
     diagnostics: list[Diagnostic] = []
-    project_targets = _project_show_targets(document)
+    eligible = _eligible_show_targets(document)
     domains = _mapping(document.get("domains"))
     for domain_id, domain in domains.items():
         if not isinstance(domain, dict):
@@ -336,7 +362,6 @@ def _surface_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
             surfaces = experience.get("surfaces")
             if not isinstance(surfaces, dict):
                 continue
-            feature_targets = _feature_show_targets(feature_path, feature)
             for surface_id, surface in surfaces.items():
                 if not isinstance(surface, dict):
                     continue
@@ -368,22 +393,35 @@ def _surface_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                     state_path = (
                         f"{surface_path}.states.{state_id}.shows"
                     )
+                    resolved_by_index: dict[int, str] = {}
                     for index, entry in enumerate(shows):
                         if not isinstance(entry, str):
                             continue
-                        resolved = (
-                            entry
-                            if entry.startswith(("domains.", "project.", "architecture."))
-                            else f"{feature_path}.{entry}"
+                        resolved = resolve_show_entry(
+                            entry, feature_path, eligible
                         )
-                        if resolved not in feature_targets and resolved not in project_targets:
+                        if resolved is None:
                             diagnostics.append(
                                 Diagnostic(
                                     f"{state_path}[{index}]",
                                     "undefined-reference",
-                                    f"'{entry}' does not resolve to a rule, outcome, outcome alternative, or failure",
+                                    f"'{entry}' does not resolve to a rule, outcome, outcome alternative, or failure in the enclosing feature or the definition",
                                 )
                             )
+                            continue
+                        resolved_by_index[index] = resolved
+                    seen: dict[str, int] = {}
+                    for index, resolved in resolved_by_index.items():
+                        if resolved in seen:
+                            diagnostics.append(
+                                Diagnostic(
+                                    f"{state_path}[{index}]",
+                                    "duplicate-reference",
+                                    f"'{shows[index]}' resolves to the same obligation as '{shows[seen[resolved]]}'",
+                                )
+                            )
+                        else:
+                            seen[resolved] = index
     return diagnostics
 
 

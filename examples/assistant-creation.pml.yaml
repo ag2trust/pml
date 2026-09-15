@@ -96,4 +96,4 @@ domains:
                     - Duplicate-submission guard.
                 failure:
                   shows:
-                    - behaviors.assistant_creation.failures.rejected
+                    - rejected

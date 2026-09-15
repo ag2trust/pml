@@ -133,9 +133,12 @@ experience:
             - behaviors.assistant_creation.failures.rejected
 ```
 
-Paths in `shows` resolve as suffixes beneath the enclosing feature; use a full
-`domains.<domain>.features.<feature>...` path to reference a rule, outcome,
-outcome alternative, or failure declared elsewhere.
+Each `shows` entry may be a fully qualified obligation path anywhere in the
+definition, a feature-relative path (e.g. `rules.<rule-id>` or
+`behaviors.<behavior-id>.failures.<failure-id>`), a behavior-relative path
+(dropping the leading `behaviors.`), or a bare last-segment ID that
+unambiguously names one obligation in the enclosing feature. Two entries that
+resolve to the same obligation are rejected as duplicates.
 
 ## State use-case goals
 

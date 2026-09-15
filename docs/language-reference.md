@@ -135,14 +135,17 @@ surfaces do not have `actions` or a repetitive `purpose`.
 Each `experience.surfaces.<surface_id>.states.<state_id>` is an object with
 optional `shows` and optional `contains`; at least one is required. `shows` is a
 unique list of one through seven obligation paths resolving to a rule, an outcome,
-an outcome alternative, or a failure. A path that does not start with `domains.`,
-`project.`, or `architecture.` resolves as a suffix beneath the enclosing feature.
-`contains` is a unique list of one through seven descriptive strings that names
-information or controls perceivable in that state. Surface strings never restate
-obligations; a `MUST`, `MUST NOT`, `SHALL`, or `SHOULD` inside a surface value is
-an error (`PML-E-SURFACE-NORMATIVE`). The compiler resolves every `shows` entry
-to a full obligation path and records the referencing surface state on the
-referenced obligation so `pml explain` shows where an obligation is perceived.
+an outcome alternative, or a failure. Each entry may be a fully qualified
+obligation path anywhere in the definition, a feature-relative path, a
+behavior-relative path, or a bare last-segment ID that unambiguously names one
+obligation in the enclosing feature. Distinct entries that resolve to the same
+canonical obligation are rejected as duplicates. `contains` is a unique list of
+one through seven descriptive strings that names information or controls
+perceivable in that state. Surface strings never restate obligations; a `MUST`,
+`MUST NOT`, `SHALL`, or `SHOULD` inside a surface value is an error
+(`PML-E-SURFACE-NORMATIVE`). The compiler resolves every `shows` entry to a full
+obligation path and records the referencing surface state on the referenced
+obligation so `pml explain` shows where an obligation is perceived.
 
 ## Architecture
 
