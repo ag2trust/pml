@@ -16,6 +16,8 @@ import yaml
 
 from pml.formats import FORMAT_CHECKER
 from pml.obligations import (
+    probe_eligibility,
+    probe_ineligibility_diagnostic,
     required_methods,
     verification_coverage,
     verification_plan,
@@ -716,10 +718,10 @@ def _bindings_semantic_diagnostics(
             ))
             continue
         expected = {
-            item.id for item in enumerate_obligations(definition, node_id)
+            item.id: item for item in enumerate_obligations(definition, node_id)
         }
         configured = set(binding.get("verification", {}))
-        for obligation_id in sorted(expected.difference(configured)):
+        for obligation_id in sorted(set(expected).difference(configured)):
             diagnostics.append(Diagnostic(
                 f"{path}:bindings.{node_id}.verification",
                 "missing-verification-plan",
@@ -731,7 +733,7 @@ def _bindings_semantic_diagnostics(
                 "undefined-reference",
                 f"unknown obligation '{obligation_id}'",
             ))
-        for obligation_id in sorted(expected.intersection(configured)):
+        for obligation_id in sorted(set(expected).intersection(configured)):
             plan = binding["verification"][obligation_id]
             total = sum(verification_coverage(plan).values())
             if abs(total - 1.0) > 1e-9:
@@ -739,6 +741,11 @@ def _bindings_semantic_diagnostics(
                     f"{path}:bindings.{node_id}.verification.{obligation_id}",
                     "coverage-total",
                     f"verification coverage must total 1.0, got {total:g}",
+                ))
+            if plan.get("probes") and probe_eligibility(expected[obligation_id]) == "no":
+                diagnostics.append(probe_ineligibility_diagnostic(
+                    f"{path}:bindings.{node_id}.verification.{obligation_id}.probes",
+                    expected[obligation_id],
                 ))
 
     for node_id in nodes:
@@ -759,11 +766,11 @@ def _bindings_semantic_diagnostics(
             ))
             continue
         expected = {
-            item.id
+            item.id: item
             for item in enumerate_architecture_obligations(definition, node_id)
         }
         configured = set(binding.get("verification", {}))
-        for obligation_id in sorted(expected.difference(configured)):
+        for obligation_id in sorted(set(expected).difference(configured)):
             diagnostics.append(Diagnostic(
                 f"{path}:architecture.{decision_id}.verification",
                 "missing-verification-plan",
@@ -775,7 +782,7 @@ def _bindings_semantic_diagnostics(
                 "undefined-reference",
                 f"unknown architecture constraint '{obligation_id}'",
             ))
-        for obligation_id in sorted(expected.intersection(configured)):
+        for obligation_id in sorted(set(expected).intersection(configured)):
             plan = binding["verification"][obligation_id]
             total = sum(verification_coverage(plan).values())
             if abs(total - 1.0) > 1e-9:
@@ -783,6 +790,11 @@ def _bindings_semantic_diagnostics(
                     f"{path}:architecture.{decision_id}.verification.{obligation_id}",
                     "coverage-total",
                     f"verification coverage must total 1.0, got {total:g}",
+                ))
+            if plan.get("probes") and probe_eligibility(expected[obligation_id]) == "no":
+                diagnostics.append(probe_ineligibility_diagnostic(
+                    f"{path}:architecture.{decision_id}.verification.{obligation_id}.probes",
+                    expected[obligation_id],
                 ))
 
     for node_id, decision in decisions.items():

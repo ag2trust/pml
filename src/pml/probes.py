@@ -19,6 +19,8 @@ from pml.resolver import (
     enumerate_obligations,
 )
 from pml.obligations import (
+    probe_eligibility,
+    probe_ineligibility_diagnostic,
     verification_plan,
 )
 from pml.project_state import canonical_hash
@@ -335,6 +337,12 @@ def load_probes(
             if obligation is None:
                 diagnostics.append(
                     Diagnostic(f"{source.path}:verifies", "undefined-reference", f"unknown obligation '{probe['verifies']}'")
+                )
+            elif probe_eligibility(obligation) == "no":
+                diagnostics.append(
+                    probe_ineligibility_diagnostic(
+                        f"{source.path}:verifies", obligation
+                    )
                 )
             elif bindings is not None:
                 configured = verification_plan(bindings, obligation).get("probes", {})
