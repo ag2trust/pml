@@ -314,6 +314,72 @@ def test_schema_rejects_exclusivity_parent_and_alternative_paths_in_wrong_positi
     assert any("does not match" in message or "is not valid under any" in message for message in _messages(_validator().iter_errors(model)))
 
 
+@pytest.mark.parametrize(
+    "kind",
+    ["conditions", "trigger", "completion", "outcome_exclusivity", "use_case", "architecture_constraint"],
+)
+def test_schema_rejects_surfaces_on_ineligible_obligation_kinds(kind: str) -> None:
+    model = _model()
+    behavior = "domains.notes.features.handling.behaviors.handle_note"
+    feature = "domains.notes.features.handling"
+    surface = feature + ".experience.surfaces.notes.states.empty"
+    if kind == "conditions":
+        record = {"id": behavior + ".conditions", "node": behavior, "kind": "conditions", "definition": {"statements": ["A condition."]}}
+    elif kind == "trigger":
+        record = {"id": behavior + ".trigger", "node": behavior, "kind": "trigger", "definition": {"statement": "A trigger."}}
+    elif kind == "completion":
+        record = {"id": behavior + ".completion", "node": behavior, "kind": "completion", "definition": {"outcomes": [behavior + ".outcome"], "failures": []}}
+    elif kind == "outcome_exclusivity":
+        record = {"id": behavior + ".outcome", "node": behavior, "kind": "outcome_exclusivity", "definition": {"alternatives": [behavior + ".outcome.a", behavior + ".outcome.b"]}}
+    elif kind == "use_case":
+        record = {"id": feature + ".use_cases.handle", "node": feature, "kind": "use_case", "definition": {"actor": "member", "goal": "Handle.", "behaviors": [behavior]}}
+    else:
+        record = {"id": "architecture.runtime.constraints.available", "node": "architecture.runtime", "kind": "architecture_constraint", "definition": {"statement": "Available MUST hold."}}
+    record["surfaces"] = [surface]
+    model["obligations"] = [record]
+    if kind == "outcome_exclusivity":
+        model["obligations"].append({"id": behavior + ".outcome.a", "node": behavior, "kind": "outcome", "definition": {"statement": "A."}})
+        model["obligations"].append({"id": behavior + ".outcome.b", "node": behavior, "kind": "outcome", "definition": {"statement": "B."}})
+
+    assert any(
+        "not valid" in message
+        or "unevaluated" in message
+        or "not allowed" in message
+        for message in _messages(_validator().iter_errors(model))
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "domains.notes.features.handling.behaviors.handle_note.trigger",
+        "domains.notes.features.handling.behaviors.handle_note.conditions",
+        "domains.notes.features.handling.behaviors.handle_note.completion",
+        "domains.notes.features.handling.use_cases.handle",
+        "architecture.runtime.constraints.available",
+    ],
+)
+def test_schema_rejects_shows_paths_for_ineligible_obligation_kinds(path: str) -> None:
+    model = _model()
+    feature = "domains.notes.features.handling"
+    model["features"][0]["experience"] = {  # type: ignore[index]
+        "surfaces": [
+            {
+                "id": "notes",
+                "contains": ["Notes."],
+                "states": [{"id": "empty", "shows": [path]}],
+                "accessibility": [],
+                "responsive_behavior": [],
+            }
+        ]
+    }
+
+    assert any(
+        "does not match" in message or "not valid under" in message
+        for message in _messages(_validator().iter_errors(model))
+    )
+
+
 def test_schema_accepts_newline_suffixed_nested_ids_accepted_by_source_schema() -> None:
     model = _model()
     replacements = {
