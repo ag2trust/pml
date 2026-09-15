@@ -94,17 +94,26 @@ def _compiled_outcome(behavior_path: str, definition: Mapping[str, Any]) -> dict
     }
 
 
-def _compiled_experience(definition: Mapping[str, Any]) -> dict[str, Any]:
+def _compiled_experience(
+    definition: Mapping[str, Any], feature_path: str
+) -> dict[str, Any]:
     surfaces = []
     for surface_id, surface in sorted(
         _mapping(definition.get("surfaces")).items()
     ):
-        states = [
-            {"id": state_id, "statements": list(statements)}
-            for state_id, statements in sorted(
-                _mapping(surface.get("states")).items()
-            )
-        ]
+        states = []
+        for state_id, state in sorted(_mapping(surface.get("states")).items()):
+            compiled_state: dict[str, Any] = {"id": state_id}
+            shows = state.get("shows")
+            if isinstance(shows, list):
+                compiled_state["shows"] = [
+                    _resolve_show_path(feature_path, entry)
+                    for entry in shows
+                ]
+            contains = state.get("contains")
+            if isinstance(contains, list):
+                compiled_state["contains"] = list(contains)
+            states.append(compiled_state)
         surfaces.append(
             {
                 "id": surface_id,
@@ -117,6 +126,12 @@ def _compiled_experience(definition: Mapping[str, Any]) -> dict[str, Any]:
             }
         )
     return {"surfaces": surfaces}
+
+
+def _resolve_show_path(feature_path: str, entry: str) -> str:
+    if entry.startswith(("domains.", "project.", "architecture.")):
+        return entry
+    return f"{feature_path}.{entry}"
 
 
 def _compiled_obligation(obligation: Obligation) -> CompiledObligation:
@@ -214,6 +229,45 @@ def _signal_consumers(
     return consumers
 
 
+def _surface_references(
+    document: Mapping[str, Any],
+) -> dict[str, list[str]]:
+    """Return a map from obligation path to the surface state paths that show it."""
+
+    references: dict[str, list[str]] = {}
+    for domain_id, domain in _mapping(document.get("domains")).items():
+        if not isinstance(domain, dict):
+            continue
+        for feature_id, feature in _mapping(domain.get("features")).items():
+            if not isinstance(feature, dict):
+                continue
+            feature_path = f"domains.{domain_id}.features.{feature_id}"
+            experience = feature.get("experience")
+            if not isinstance(experience, dict):
+                continue
+            for surface_id, surface in _mapping(
+                experience.get("surfaces")
+            ).items():
+                if not isinstance(surface, dict):
+                    continue
+                for state_id, state in _mapping(surface.get("states")).items():
+                    if not isinstance(state, dict):
+                        continue
+                    shows = state.get("shows")
+                    if not isinstance(shows, list):
+                        continue
+                    state_path = (
+                        f"{feature_path}.experience.surfaces."
+                        f"{surface_id}.states.{state_id}"
+                    )
+                    for entry in shows:
+                        if not isinstance(entry, str):
+                            continue
+                        obligation = _resolve_show_path(feature_path, entry)
+                        references.setdefault(obligation, []).append(state_path)
+    return references
+
+
 def _relationships(
     resolution: ResolvedDefinition,
 ) -> list[dict[str, Any]]:
@@ -305,7 +359,9 @@ def _build_compiled_model(
             }
             experience = feature.get("experience")
             if isinstance(experience, dict):
-                compiled_feature["experience"] = _compiled_experience(experience)
+                compiled_feature["experience"] = _compiled_experience(
+                    experience, feature_path
+                )
             features.append(compiled_feature)
 
             for behavior_id, behavior in sorted(behavior_definitions.items()):
@@ -382,14 +438,18 @@ def _build_compiled_model(
             compiled_signal["subject"] = subject
         signals.append(compiled_signal)
 
+    surface_references = _surface_references(document)
     product_obligations = list(resolver.enumerate_obligations())
     architecture_obligations = list(resolver.enumerate_architecture_obligations())
+    compiled_obligations = []
+    for obligation in product_obligations + architecture_obligations:
+        compiled = _compiled_obligation(obligation)
+        surfaces = surface_references.get(compiled["id"])
+        if surfaces:
+            compiled["surfaces"] = sorted(surfaces)
+        compiled_obligations.append(compiled)
     obligations = sorted(
-        (
-            _compiled_obligation(obligation)
-            for obligation in product_obligations + architecture_obligations
-        ),
-        key=lambda obligation: obligation["id"],
+        compiled_obligations, key=lambda obligation: obligation["id"]
     )
 
     model = {

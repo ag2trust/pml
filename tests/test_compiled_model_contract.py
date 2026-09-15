@@ -85,7 +85,7 @@ def test_schema_accepts_every_v1_variant() -> None:
     feature = "domains.notes.features.handling"
     behavior = feature + ".behaviors.handle_note"
     model["architecture"] = [{"id": "runtime", "path": "architecture.runtime", "category": "runtime", "selection": "Managed runtime.", "rationale": "A rationale.", "constraint_obligations": ["architecture.runtime.constraints.available"], "referenced_by": [feature]}]
-    model["features"][0]["experience"] = {"surfaces": [{"id": "notes", "contains": ["Notes."], "states": [{"id": "empty", "statements": ["No notes are present."]}], "accessibility": [], "responsive_behavior": []}]}  # type: ignore[index]
+    model["features"][0]["experience"] = {"surfaces": [{"id": "notes", "contains": ["Notes."], "states": [{"id": "empty", "contains": ["No notes are present."]}], "accessibility": [], "responsive_behavior": []}]}  # type: ignore[index]
     model["features"][0]["architecture"] = ["architecture.runtime"]  # type: ignore[index]
     model["behaviors"][0]["conditions"] = {"statements": ["A condition."], "obligation": behavior + ".conditions"}  # type: ignore[index]
     model["behaviors"][0]["trigger"] = {"kind": "one_of", "cases": [{"id": "request", "obligation": behavior + ".trigger.request", "statement": "A request occurs."}, {"id": "ready", "obligation": behavior + ".trigger.ready", "signal": "note_ready"}]}  # type: ignore[index]

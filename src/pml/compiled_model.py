@@ -56,7 +56,8 @@ class CompiledDomain(TypedDict):
 
 class CompiledSurfaceState(TypedDict):
     id: str
-    statements: list[str]
+    shows: NotRequired[list[ObligationId]]
+    contains: NotRequired[list[str]]
 
 
 class CompiledSurface(TypedDict):
@@ -281,16 +282,19 @@ class OutcomeExclusivityObligation(_Obligation):
 class OutcomeObligation(_Obligation):
     kind: Literal["outcome"]
     definition: SignalDefinition
+    surfaces: NotRequired[list[Path]]
 
 
 class FailureObligation(_Obligation):
     kind: Literal["failure"]
     definition: SignalDefinition
+    surfaces: NotRequired[list[Path]]
 
 
 class RuleObligation(_Obligation):
     kind: Literal["rule"]
     definition: StatementDefinition
+    surfaces: NotRequired[list[Path]]
 
 
 class UseCaseObligation(_Obligation):

@@ -27,6 +27,7 @@ other components through `related_to`.
 - `owns` and concept `owned_by`
 - `updates`, `displays`, `protects`, and `blocks`
 - Experience `actions` and surface `purpose`
+- Surface state values as free-text normative statements
 - `operations`
 - Nested components
 - Top-level `policies`
@@ -43,6 +44,9 @@ other components through `related_to`.
 - Actor definitions use one `meaning`.
 - Concepts use one `meaning`; `lifecycle` became unordered `states`.
 - Project-wide policies use the canonical `rules` term.
+- Surface `states` values became objects with optional `shows` obligation
+  references and optional descriptive `contains`. Normative markers inside any
+  surface string are rejected.
 
 ## Verification boundary
 

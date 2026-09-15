@@ -351,7 +351,7 @@ def _obligation_fields(
         _prefixed(definition, "definition", *authored_keys),
         _selected(record, "id", "node", "kind")
         + _prefixed(definition, "definition", *derived_keys),
-        [],
+        _selected(record, "surfaces"),
     )
 
 

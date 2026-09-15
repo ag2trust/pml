@@ -27,6 +27,7 @@ AMBIGUOUS_WORDS = (
     "should",
 )
 NORMATIVE_MARKER = re.compile(r"\b(MUST|MUST NOT)\b")
+SURFACE_NORMATIVE_MARKER = re.compile(r"\b(MUST NOT|MUST|SHALL|SHOULD)\b")
 ARCHITECTURE_IMPLEMENTATION_DETAIL = re.compile(
     r"(?:\b(?:file|filename|function|class|table|endpoint|topology|cluster|service)\b|(?-i:\bnode\b)|"
     r"\b(?:get|post|put|patch|delete)\s+/|(?-i:\b[a-z0-9_-]+\.(?:py|js|ts|java|go|rb|sql|ya?ml|json)\b)|"
@@ -263,6 +264,129 @@ def _is_transition_text(parts: tuple[Any, ...]) -> bool:
     )
 
 
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _keys(value: Any) -> list[str]:
+    return list(_mapping(value).keys())
+
+
+def _feature_show_targets(
+    feature_path: str, feature: dict[str, Any]
+) -> set[str]:
+    """Return every obligation path a surface `shows` may resolve to."""
+
+    targets: set[str] = set()
+    for rule_id in _keys(feature.get("rules")):
+        targets.add(f"{feature_path}.rules.{rule_id}")
+    for behavior_id, behavior in _mapping(feature.get("behaviors")).items():
+        if not isinstance(behavior, dict):
+            continue
+        behavior_path = f"{feature_path}.behaviors.{behavior_id}"
+        for rule_id in _keys(behavior.get("rules")):
+            targets.add(f"{behavior_path}.rules.{rule_id}")
+        outcome = behavior.get("outcome")
+        if isinstance(outcome, dict):
+            alternatives = outcome.get("one_of")
+            if isinstance(alternatives, dict):
+                for alternative_id in alternatives:
+                    targets.add(
+                        f"{behavior_path}.outcome.{alternative_id}"
+                    )
+            elif "statement" in outcome:
+                targets.add(f"{behavior_path}.outcome")
+        failures = behavior.get("failures")
+        if isinstance(failures, dict):
+            for failure_id in failures:
+                targets.add(f"{behavior_path}.failures.{failure_id}")
+    return targets
+
+
+def _project_show_targets(document: dict[str, Any]) -> set[str]:
+    """Return every project- or domain-scope rule obligation path."""
+
+    targets: set[str] = set()
+    for rule_id in _keys(document.get("rules")):
+        targets.add(f"project.rules.{rule_id}")
+    for domain_id, domain in _mapping(document.get("domains")).items():
+        if not isinstance(domain, dict):
+            continue
+        for rule_id in _keys(domain.get("rules")):
+            targets.add(f"domains.{domain_id}.rules.{rule_id}")
+    return targets
+
+
+def _surface_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
+    """Reject normative markers and unresolved `shows` paths in surfaces."""
+
+    diagnostics: list[Diagnostic] = []
+    project_targets = _project_show_targets(document)
+    domains = _mapping(document.get("domains"))
+    for domain_id, domain in domains.items():
+        if not isinstance(domain, dict):
+            continue
+        for feature_id, feature in _mapping(domain.get("features")).items():
+            if not isinstance(feature, dict):
+                continue
+            feature_path = f"domains.{domain_id}.features.{feature_id}"
+            experience = feature.get("experience")
+            if not isinstance(experience, dict):
+                continue
+            surfaces = experience.get("surfaces")
+            if not isinstance(surfaces, dict):
+                continue
+            feature_targets = _feature_show_targets(feature_path, feature)
+            for surface_id, surface in surfaces.items():
+                if not isinstance(surface, dict):
+                    continue
+                surface_path = (
+                    f"{feature_path}.experience.surfaces.{surface_id}"
+                )
+                for parts, value in _walk(surface, (surface_path,)):
+                    if not isinstance(value, str):
+                        continue
+                    if len(parts) > 1 and parts[-2] == "shows":
+                        continue
+                    if SURFACE_NORMATIVE_MARKER.search(value):
+                        diagnostics.append(
+                            Diagnostic(
+                                _path(parts),
+                                "PML-E-SURFACE-NORMATIVE",
+                                "surfaces reference obligations instead of restating them; remove normative markers",
+                            )
+                        )
+                states = surface.get("states")
+                if not isinstance(states, dict):
+                    continue
+                for state_id, state in states.items():
+                    if not isinstance(state, dict):
+                        continue
+                    shows = state.get("shows")
+                    if not isinstance(shows, list):
+                        continue
+                    state_path = (
+                        f"{surface_path}.states.{state_id}.shows"
+                    )
+                    for index, entry in enumerate(shows):
+                        if not isinstance(entry, str):
+                            continue
+                        resolved = (
+                            entry
+                            if entry.startswith(("domains.", "project.", "architecture."))
+                            else f"{feature_path}.{entry}"
+                        )
+                        if resolved not in feature_targets and resolved not in project_targets:
+                            diagnostics.append(
+                                Diagnostic(
+                                    f"{state_path}[{index}]",
+                                    "undefined-reference",
+                                    f"'{entry}' does not resolve to a rule, outcome, outcome alternative, or failure",
+                                )
+                            )
+    return diagnostics
+
+
 def _semantic_diagnostics(
     document: dict[str, Any],
     resolution: ResolvedDefinition | None = None,
@@ -328,6 +452,8 @@ def _semantic_diagnostics(
                         "behavior transitions must describe observable product semantics, not implementation details",
                     )
                 )
+
+    diagnostics.extend(_surface_diagnostics(document))
 
     if resolution is None:
         resolution = resolve_references(document)

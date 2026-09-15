@@ -109,6 +109,34 @@ Do not put architecture on a behavior or use `applies_to`, `supports`, inline
 definitions, or recursive decisions. Architecture does not name files, functions,
 classes, tables, endpoints, configuration syntax, or topology.
 
+## Point surfaces at obligations
+
+`experience.surfaces` describes where actors perceive product state. Each
+`states.<id>` value is an object with optional `shows` and optional `contains`;
+at least one is required. Use `shows` to reference the obligation the state
+reflects, so the surface never repeats a `MUST`, `MUST NOT`, `SHALL`, or `SHOULD`
+statement:
+
+```yaml
+experience:
+  surfaces:
+    creation_flow:
+      contains:
+        - Assistant identity input.
+        - Creation action.
+      states:
+        submitting:
+          contains:
+            - Progress indication.
+        failure:
+          shows:
+            - behaviors.assistant_creation.failures.rejected
+```
+
+Paths in `shows` resolve as suffixes beneath the enclosing feature; use a full
+`domains.<domain>.features.<feature>...` path to reference a rule, outcome,
+outcome alternative, or failure declared elsewhere.
+
 ## State use-case goals
 
 Use cases remain at feature scope. Each has only an `actor`, a `goal`, and a

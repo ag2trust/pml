@@ -132,6 +132,18 @@ able to perceive or access. Surfaces may also define observable `states`,
 `accessibility`, and `responsive_behavior`. Actor behavior belongs in use cases, so
 surfaces do not have `actions` or a repetitive `purpose`.
 
+Each `experience.surfaces.<surface_id>.states.<state_id>` is an object with
+optional `shows` and optional `contains`; at least one is required. `shows` is a
+unique list of one through seven obligation paths resolving to a rule, an outcome,
+an outcome alternative, or a failure. A path that does not start with `domains.`,
+`project.`, or `architecture.` resolves as a suffix beneath the enclosing feature.
+`contains` is a unique list of one through seven descriptive strings that names
+information or controls perceivable in that state. Surface strings never restate
+obligations; a `MUST`, `MUST NOT`, `SHALL`, or `SHOULD` inside a surface value is
+an error (`PML-E-SURFACE-NORMATIVE`). The compiler resolves every `shows` entry
+to a full obligation path and records the referencing surface state on the
+referenced obligation so `pml explain` shows where an obligation is perceived.
+
 ## Architecture
 
 `architecture` is a flat, optional registry of owner-approved technical decisions.

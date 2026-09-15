@@ -91,8 +91,9 @@ domains:
                 - Creation action.
               states:
                 submitting:
-                  - Progress MUST be visible.
-                  - Duplicate submission MUST be prevented.
+                  contains:
+                    - Progress indication.
+                    - Duplicate-submission guard.
                 failure:
-                  - Entered information MUST be preserved.
-                  - A retry action MUST be available.
+                  shows:
+                    - behaviors.assistant_creation.failures.rejected

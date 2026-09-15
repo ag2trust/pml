@@ -1135,3 +1135,94 @@ def test_verification_report_enforces_ids_utc_and_closed_check_types() -> None:
         irrelevant_evidence,
     ):
         assert list(validator.iter_errors(invalid))
+
+
+def _surface_manifest(tmp_path: Path, state: dict) -> Path:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    feature = document["domains"]["notes"]["features"]["creation"]
+    feature["experience"] = {
+        "surfaces": {
+            "creation_flow": {
+                "contains": ["An input."],
+                "states": {"target": state},
+            }
+        }
+    }
+    manifest = tmp_path / "surface.pml.yaml"
+    manifest.write_text(yaml.safe_dump(document, sort_keys=False))
+    return manifest
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Duplicate submission MUST be prevented.",
+        "A retry action SHOULD be available.",
+        "The banner SHALL announce success.",
+        "Sensitive data MUST NOT appear.",
+    ],
+)
+def test_surface_string_with_normative_marker_is_rejected(
+    tmp_path: Path, value: str
+) -> None:
+    manifest = _surface_manifest(tmp_path, {"contains": [value]})
+
+    diagnostics = validate_file(manifest)
+
+    assert any(
+        item.code == "PML-E-SURFACE-NORMATIVE"
+        and item.path.endswith(".states.target.contains[0]")
+        for item in diagnostics
+    )
+
+
+def test_surface_shows_bare_id_resolves_within_feature(tmp_path: Path) -> None:
+    manifest = _surface_manifest(
+        tmp_path, {"shows": ["behaviors.note_creation.failures.rejected"]}
+    )
+
+    assert validate_file(manifest) == []
+
+
+def test_surface_shows_unresolved_path_is_rejected(tmp_path: Path) -> None:
+    manifest = _surface_manifest(tmp_path, {"shows": ["behaviors.missing"]})
+
+    diagnostics = validate_file(manifest)
+
+    assert any(
+        item.code == "undefined-reference"
+        and item.path.endswith(".states.target.shows[0]")
+        for item in diagnostics
+    )
+
+
+def test_surface_state_requires_shows_or_contains(tmp_path: Path) -> None:
+    manifest = _surface_manifest(tmp_path, {})
+
+    diagnostics = validate_file(manifest)
+
+    assert any(item.code == "schema" for item in diagnostics)
+
+
+def test_compiled_model_records_surfaces_inverse_on_referenced_failure(
+    tmp_path: Path,
+) -> None:
+    from pml.validator import validate_document
+
+    manifest = _surface_manifest(
+        tmp_path, {"shows": ["behaviors.note_creation.failures.rejected"]}
+    )
+    document, load_diagnostics = load_document(manifest)
+    assert load_diagnostics == []
+    resolution = validate_document(document)
+    assert resolution.diagnostics == ()
+
+    referenced = next(
+        obligation
+        for obligation in resolution.compiled_model["obligations"]
+        if obligation["id"]
+        == "domains.notes.features.creation.behaviors.note_creation.failures.rejected"
+    )
+    assert referenced["surfaces"] == [
+        "domains.notes.features.creation.experience.surfaces.creation_flow.states.target"
+    ]

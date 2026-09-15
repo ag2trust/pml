@@ -247,7 +247,8 @@ compiled-surface = {
 
 compiled-surface-state = {
   id: state-id,
-  statements: list[authored-text]
+  shows?: list[obligation-id],
+  contains?: list[authored-text]
 }
 
 compiled-behavior = {
@@ -420,7 +421,11 @@ and architecture references point to existing records in the same compiled model
 Empty arrays normalize absent optional collections without inventing members. An
 optional authored object such as `experience` or `conditions` remains omitted when
 absent. Within a present experience definition, absent optional surface lists and
-state maps compile to empty arrays.
+state maps compile to empty arrays. Each surface state omits `shows` or
+`contains` when the corresponding authored key is absent; at least one is always
+present. A `rule`, `outcome`, or `failure` obligation referenced by one or more
+surface `shows` entries records the sorted list of referencing surface-state
+paths in its optional `surfaces` field.
 
 Architecture remains separate from product behavior. `referenced_by` is the
 derived inverse of feature `architecture` references and may contain only feature
@@ -539,7 +544,8 @@ The rules are:
    `features[].experience.surfaces[].contains`,
    `features[].experience.surfaces[].accessibility`,
    `features[].experience.surfaces[].responsive_behavior`,
-   `features[].experience.surfaces[].states[].statements`,
+   `features[].experience.surfaces[].states[].shows`,
+   `features[].experience.surfaces[].states[].contains`,
    `behaviors[].conditions.statements`, and `use_cases[].behaviors`. The
    `conditions` and `use_case` obligation definitions preserve the same source
    sequence order. Consumers MUST still obey the approved semantics of each list;
@@ -589,6 +595,7 @@ The rules are:
    | `completion` obligation `definition.outcomes` | obligation ID |
    | `completion` obligation `definition.failures` | obligation ID |
    | `outcome_exclusivity` obligation `definition.alternatives` | obligation ID |
+   | obligation `surfaces` (rule/outcome/failure) | surface-state path |
 
    The authored reference arrays named in rule 2 retain authored order instead;
    this table does not reorder them merely because their entries are references.
