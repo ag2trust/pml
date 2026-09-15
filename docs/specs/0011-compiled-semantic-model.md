@@ -481,6 +481,33 @@ is considered once for that occurrence, and failed conditions do not cause later
 re-evaluation. The JSON adds no payload, transport, delivery, persistence, or
 technical event interpretation.
 
+### Signal coupling diagnostics
+
+The owner-approved signal-coupling checks are advisory diagnostics derived only
+from a complete version-1 compiled model. They add neither a PML construct nor a
+compiled-model field, relationship, obligation, or causal edge. Warnings do not
+prevent compilation or any read-only compiled-model consumer from receiving the
+complete model.
+
+For these diagnostics, a behavior's feature is its compiled `feature` path. A
+feature consumes a signal when one of its behaviors is named by an entry in that
+signal's `consumers` array. A signal's producer feature is the feature of its
+`producer.behavior`.
+
+- `PML-W-SIGNAL-FAN-IN` is a warning at a feature path when its behaviors
+  consume signals produced by more than three distinct *other* features. A
+  signal produced and consumed within the same feature is retained as a causal
+  edge but never contributes to this count. Repeated behaviors or signals from
+  one producer feature count once.
+- `PML-W-SIGNAL-FAN-OUT` is a warning at a signal's
+  `producer.completion` obligation path when that signal is consumed by
+  behaviors in more than five distinct features. Each consumer feature counts
+  once, including the producer's own feature when it consumes the signal.
+
+Each qualifying feature or signal produces one warning. Coupling diagnostics are
+ordered by diagnostic path and then code, using the compiled model's resolved
+feature and behavior ownership rather than authored layout.
+
 ### Relationships and use-case membership
 
 Feature and behavior `related_to` arrays preserve their resolved authored targets.
@@ -678,6 +705,20 @@ the authored text plus direct semantic links: owning hierarchy, transition cases
 producer or consumer signals, use-case memberships, symmetric relationships, and
 stable obligations. It must distinguish authored fields from derived inverse
 links and must not present a generated summary as approved intent.
+
+For a feature record, explain also renders a `Derived coupling` section after the
+derived inverse links. It is a read-only projection, not a field in the compiled
+JSON model, with these fields in this order:
+
+1. `signals_produced`: one entry per signal whose producer behavior belongs to
+   the feature, ordered by signal ID, with `id` and `producer_behavior`.
+2. `signals_consumed`: one entry per signal consumed by any behavior in the
+   feature, ordered by signal ID, with `id` and `producer_feature`. A signal is
+   listed once even if several behaviors in the feature consume it.
+3. `distinct_producer_feature_count`: the number of distinct producer features
+   in `signals_consumed`, excluding the explained feature itself. Thus this count
+   is the fan-in count used by `PML-W-SIGNAL-FAN-IN`; same-feature consumption is
+   visible in `signals_consumed` but does not increase the count.
 
 ### `pml graph`
 
