@@ -12,6 +12,8 @@ import json
 from types import MappingProxyType
 from typing import Any
 
+from pml.coupling import feature_coupling
+
 
 Record = Mapping[str, Any]
 
@@ -47,6 +49,7 @@ _REQUESTABLE_CATEGORIES = (
 class CompiledModelIndexes:
     """Pure read-only indexes over one supported compiled model."""
 
+    model: Mapping[str, Any]
     categories: Mapping[str, Mapping[str, Record]]
     reverse: Mapping[str, tuple[str, ...]]
     obligations_by_node: Mapping[str, tuple[Record, ...]]
@@ -140,6 +143,7 @@ def build_compiled_model_indexes(model: Mapping[str, Any]) -> CompiledModelIndex
         memberships_by_behavior.setdefault(membership["behavior"], []).append(membership)
 
     return CompiledModelIndexes(
+        model=model,
         categories=MappingProxyType(category_indexes),
         reverse=MappingProxyType(
             {canonical_id: tuple(categories) for canonical_id, categories in reverse.items()}
@@ -205,12 +209,17 @@ def _render_record(
 ) -> str:
     label = next(item.label for item in _REQUESTABLE_CATEGORIES if item.name == category)
     authored, structural, inverse = _record_fields(category, record, indexes)
-    return "\n".join(
+    sections = (
         [label]
         + _render_section("Authored", authored)
         + _render_section("Derived identity/structural", structural)
         + _render_section("Derived inverse links", inverse)
     )
+    if category == "features":
+        sections += _render_section(
+            "Derived coupling", list(feature_coupling(indexes.model, record["path"]).items())
+        )
+    return "\n".join(sections)
 
 
 def _record_fields(

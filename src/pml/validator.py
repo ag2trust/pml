@@ -13,6 +13,7 @@ from typing import Any, Iterable
 from jsonschema import Draft202012Validator
 import yaml
 
+from pml.coupling import signal_coupling_warnings
 from pml.diagnostics import Diagnostic
 from pml.resolver import ReferenceResolver, ResolvedDefinition, resolve_references
 
@@ -528,8 +529,10 @@ def validate_document(document: dict[str, Any]) -> ResolvedDefinition:
 
     from pml.model_builder import _build_compiled_model
 
+    compiled_model = _build_compiled_model(resolver.document, resolver, resolution)
+    diagnostics.extend(signal_coupling_warnings(compiled_model))
     return replace(
         resolution,
         diagnostics=tuple(diagnostics),
-        compiled_model=_build_compiled_model(resolver.document, resolver, resolution),
+        compiled_model=compiled_model,
     )
