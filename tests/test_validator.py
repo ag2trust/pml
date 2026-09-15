@@ -139,12 +139,70 @@ def test_feature_with_ten_behaviors_is_an_error() -> None:
     assert resolution.compiled_model is None
 
 
-def test_project_manifest_is_valid() -> None:
-    assert validate_file(ROOT / "pml.yaml") == []
+def test_project_manifest_has_rule_scope_warnings() -> None:
+    diagnostics = validate_file(ROOT / "pml.yaml")
+
+    assert [(item.path, item.code, item.severity) for item in diagnostics] == [
+        (
+            "domains.language.features.conformance_monitoring.rules.protected_probes",
+            "PML-W-RULE-SCOPE",
+            "warning",
+        ),
+        (
+            "domains.language.features.definition_authoring.rules.approval_boundary",
+            "PML-W-RULE-SCOPE",
+            "warning",
+        ),
+    ]
 
 
-def test_assistant_creation_example_is_valid() -> None:
-    assert validate_file(ROOT / "examples" / "assistant-creation.pml.yaml") == []
+def test_assistant_creation_example_has_rule_scope_warnings() -> None:
+    diagnostics = validate_file(ROOT / "examples" / "assistant-creation.pml.yaml")
+
+    assert [(item.path, item.code, item.message, item.severity) for item in diagnostics] == [
+        (
+            "domains.assistants.features.creation.rules.credentials_not_exposed",
+            "PML-W-RULE-SCOPE",
+            "rule mentions no term used in this feature; consider domain or project scope",
+            "warning",
+        ),
+        (
+            "domains.assistants.features.creation.rules.customer_ownership",
+            "PML-W-RULE-SCOPE",
+            "rule mentions no term used in this feature; consider domain or project scope",
+            "warning",
+        ),
+    ]
+
+
+def test_feature_rule_mentioning_a_local_concept_has_no_scope_warning() -> None:
+    document, feature = _cardinality_document()
+    document["concepts"] = {
+        "feedback_request": {"meaning": "A request for product feedback."}
+    }
+    feature["rules"] = {
+        "feedback_visible": {
+            "statement": "A Feedback Request MUST remain visible to the Member."
+        }
+    }
+    feature["behaviors"]["note_creation"]["conditions"] = [
+        "A Feedback Request has been submitted by the Member."
+    ]
+
+    resolution = validate_document(document)
+
+    assert not any(item.code == "PML-W-RULE-SCOPE" for item in resolution.diagnostics)
+
+
+def test_domain_rule_mentioning_a_feature_actor_has_no_scope_warning() -> None:
+    document, _ = _cardinality_document()
+    document["domains"]["notes"]["rules"] = {
+        "member_access": {"statement": "A Member MUST retain access to Notes."}
+    }
+
+    resolution = validate_document(document)
+
+    assert not any(item.code == "PML-W-RULE-SCOPE" for item in resolution.diagnostics)
 
 
 def test_minimal_example_is_valid() -> None:
