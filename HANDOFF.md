@@ -1,6 +1,6 @@
 # PML handoff
 
-Updated: 2026-09-10
+Updated: 2026-09-15
 
 ## Current implementation status
 
@@ -14,10 +14,14 @@ The owner-approved version 1 compiled semantic model in
 [`docs/specs/0011-compiled-semantic-model.md`](docs/specs/0011-compiled-semantic-model.md)
 is implemented through canonical serialization and `pml compile --json`.
 
-`pml explain`, `pml graph`, and the future read-only web explorer described in
-0011 are approved but remain unimplemented consumers of the compiled model. The
-`pml graph` DOT output contract was owner approved on 2026-09-11 and is recorded
-in spec 0011.
+`pml explain` and `pml graph` are implemented read-only consumers of the compiled
+model. The future read-only web explorer described in 0011 remains unimplemented.
+
+The owner-approved human review workflow in
+[`docs/specs/0012-human-review-workflow.md`](docs/specs/0012-human-review-workflow.md)
+is implemented through the closed `reviews.yaml` schema, semantic validation,
+digest-bound review targets, and interactive `pml review` command. Agent context
+export and agent-harness execution remain deferred.
 
 ## Approval boundary
 
@@ -26,8 +30,9 @@ in spec 0011.
   is Proposed. It is not authorization to implement its detailed `lock`, `sync`,
   `verify`, execution-environment, or probe-execution semantics.
 - [0010 behavior transition model](docs/specs/0010-behavior-transition-model.md)
-  and [0011 canonical compiled semantic model](docs/specs/0011-compiled-semantic-model.md)
-  are Owner approved.
+  [0011 canonical compiled semantic model](docs/specs/0011-compiled-semantic-model.md),
+  and [0012 human review workflow](docs/specs/0012-human-review-workflow.md) are
+  Owner approved.
 
 Approved PML definitions remain authoritative. Generated state and evidence do not
 alter an approved definition.
@@ -36,5 +41,6 @@ alter an approved definition.
 
 - The checked-out history includes PR #41, which preserves concurrent generated
   state during report ingestion.
-- `pml compile --json` is the implemented compiled-model inspection command.
-- Do not represent the unimplemented consumers as available commands.
+- `pml compile --json`, `pml explain`, and `pml graph` are implemented compiled-model
+  inspection commands.
+- `pml review` is implemented; `pml web` remains unavailable.

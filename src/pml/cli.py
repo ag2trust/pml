@@ -17,6 +17,7 @@ from pml.resolver import (
     iter_architecture,
     iter_nodes,
 )
+from pml.reviews import build_review_targets, load_reviews, review_manifest
 from pml.probes import load_probes, missing_probe_diagnostics
 from pml.project_state import (
     load_bindings,
@@ -59,6 +60,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     obligations_parser.add_argument("manifest", type=Path)
     obligations_parser.add_argument("node_id", nargs="?")
+    review_parser = subparsers.add_parser(
+        "review", help="review unresolved feature, behavior, and obligation targets"
+    )
+    review_parser.add_argument("manifest", type=Path)
+    review_parser.add_argument(
+        "--origin",
+        choices=("human", "agent"),
+        help="default authoring origin for content without current provenance",
+    )
     check_parser = subparsers.add_parser("check", help="validate product-local PML state")
     check_parser.add_argument("manifest", type=Path)
     check_parser.add_argument("product_root", type=Path)
@@ -149,7 +159,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stdout.buffer.write(result.output)
         return result.exit_code
 
-    path = args.path if args.command == "validate" else args.manifest
+    if args.command == "review":
+        return review_manifest(args.manifest, default_origin=args.origin)
+
+    if args.command == "validate":
+        document, diagnostics = load_document(args.path)
+        if document is not None:
+            resolution = validate_document(document)
+            diagnostics = list(resolution.diagnostics)
+            if not diagnostics:
+                assert resolution.compiled_model is not None
+                _, review_diagnostics = load_reviews(
+                    args.path, build_review_targets(resolution.compiled_model)
+                )
+                diagnostics.extend(review_diagnostics)
+        for diagnostic in diagnostics:
+            print(diagnostic.format())
+        if diagnostics:
+            print(f"PML INVALID: {len(diagnostics)} violation(s)")
+            return 1
+        print(f"PML VALID: {args.path}")
+        return 0
+
+    path = args.manifest
     diagnostics = validate_file(path)
     for diagnostic in diagnostics:
         print(diagnostic.format())

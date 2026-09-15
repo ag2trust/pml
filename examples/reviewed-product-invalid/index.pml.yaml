@@ -1,0 +1,22 @@
+pml: "0.1-draft"
+
+project:
+  id: reviewed_product_invalid
+  name: Invalid Reviewed Product
+  purpose: Demonstrate invalid review metadata.
+
+domains:
+  notes:
+    purpose: Let people manage Notes.
+    features:
+      creation:
+        purpose: Let a person create a Note.
+        rules:
+          preserve_content:
+            statement: THE SYSTEM MUST preserve accepted Note content.
+        behaviors:
+          create_note:
+            trigger:
+              statement: A person submits Note content.
+            outcome:
+              statement: The Note is available later.

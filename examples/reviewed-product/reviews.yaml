@@ -1,0 +1,19 @@
+pml_reviews: "0.1"
+reviews:
+  domains.notes.features.creation:
+    origin: human
+    status: approved
+    digest: sha256:a31b1eba5407c3bcdddb956d92de1607c03c5cdf22c4beb953add8707f3393b1
+  domains.notes.features.creation.behaviors.create_note:
+    origin: agent
+    status: pending
+    digest: sha256:e01077adc2d3331ae77f78de0bf77556bb88966e69a64377534eda9da3589942
+  domains.notes.features.creation.behaviors.create_note.completion:
+    origin: agent
+    status: approved
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  domains.notes.features.creation.rules.preserve_content:
+    origin: human
+    status: rejected
+    digest: sha256:7def2ca09fcca717353d1d4a8b1222fe5dba0aa41b93b5321e01d3b752d95c29
+    reason: State what happens when preserving the content fails.
