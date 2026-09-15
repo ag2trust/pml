@@ -456,7 +456,7 @@ def _build_compiled_model(
 
     model = {
         "format": "pml.compiled",
-        "format_version": 1,
+        "format_version": 2,
         "language_version": "0.1-draft",
         "definition_digest": definition_digest(document),
         "project": {

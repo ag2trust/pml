@@ -42,8 +42,8 @@ def _compact(value: Any) -> str:
 def _pretty(value: Any, depth: int = 0) -> str:
     if isinstance(value, str):
         return _encoded_string(value)
-    if type(value) is int and value == 1:
-        return "1"
+    if type(value) is int and value == 2:
+        return "2"
     if isinstance(value, Mapping):
         items = _sorted_items(value)
         if not items:
@@ -63,7 +63,7 @@ def _pretty(value: Any, depth: int = 0) -> str:
         )
         return f"[\n{body}\n{'  ' * depth}]"
     raise TypeError(
-        "compiled-model JSON contains only objects, arrays, strings, and format version 1"
+        "compiled-model JSON contains only objects, arrays, strings, and format version 2"
     )
 
 

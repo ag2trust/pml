@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pml.dev/schema/compiled/1/pml-compiled-model.schema.json",
-  "title": "PML compiled semantic model version 1",
+  "$id": "https://pml.dev/schema/compiled/2/pml-compiled-model.schema.json",
+  "title": "PML compiled semantic model version 2",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "format_version", "language_version", "definition_digest", "project", "vocabulary", "actors", "concepts", "architecture", "domains", "features", "behaviors", "use_cases", "signals", "relationships", "use_case_memberships", "obligations"],
   "properties": {
     "format": {"const": "pml.compiled"},
-    "format_version": {"const": 1},
+    "format_version": {"const": 2},
     "language_version": {"const": "0.1-draft"},
     "definition_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$(?![\\s\\S])"},
     "project": {"$ref": "#/$defs/project"},

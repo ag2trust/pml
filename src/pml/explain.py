@@ -96,7 +96,7 @@ def is_supported_model(model: Mapping[str, Any]) -> bool:
     return (
         model.get("format") == "pml.compiled"
         and type(model.get("format_version")) is int
-        and model.get("format_version") == 1
+        and model.get("format_version") == 2
     )
 
 

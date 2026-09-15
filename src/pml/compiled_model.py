@@ -322,7 +322,7 @@ CompiledObligation: TypeAlias = (
 
 class CompiledModel(TypedDict):
     format: Literal["pml.compiled"]
-    format_version: Literal[1]
+    format_version: Literal[2]
     language_version: Literal["0.1-draft"]
     definition_digest: str
     project: CompiledProject

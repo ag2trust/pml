@@ -4,9 +4,12 @@ Status: Owner approved on 2026-08-13
 
 ## Approved decision
 
-Version 1 of the read-only compiled semantic model defined here is approved as the
+Version 2 of the read-only compiled semantic model defined here is approved as the
 single derived representation shared by PML reference resolution, obligation
-enumeration, and downstream inspection tools.
+enumeration, and downstream inspection tools. Version 2 supersedes the previously
+approved version 1 to carry the surface-state and obligation shape changes owner
+approved for task 16 (see the version 2 delta below); no other format-version 1
+producers or consumers remain supported.
 
 This specification does not change the PML language. It uses the behavior,
 transition, signal, relationship, use-case, and obligation semantics approved in
@@ -148,7 +151,27 @@ Paths name semantic objects, not files. The compiled model contains no source fi
 paths or YAML layout metadata, so compiling the same merged definition as one file
 or as an equivalent modular directory produces the same model.
 
-## Version 1 JSON structure
+## Version 2 delta
+
+Version 2 replaces the previously approved version 1 grammar. Independent
+compilers and consumers MUST emit and accept `format_version: 2` and MUST NOT
+accept `format_version: 1` as a synonym; the two versions describe incompatible
+`experience.surfaces` and obligation shapes. The version-2 changes are:
+
+- `compiled-surface-state` is an object with optional `shows: list[obligation-id]`
+  and optional `contains: list[authored-text]`, at least one of which is present.
+  Version 1's mandatory `statements` list is removed.
+- `compiled-obligation` gains an optional `surfaces: list[surface-state-path]`
+  field that appears only on obligations of kind `rule`, `outcome`, or
+  `failure`, and only when at least one surface state references the obligation
+  through `shows`. All other obligation kinds omit it.
+- Determinism adds one sort key: obligation `surfaces` lists are sorted by
+  surface-state path.
+
+Every other version-1 rule (identity, ordering, canonical JSON encoding,
+definition digest, obligation inventory, closed enums) remains as approved.
+
+## Version 2 JSON structure
 
 Every object below is closed: implementations MUST NOT add unlisted properties.
 Properties marked `?` are omitted when their authored value is absent; they are not
@@ -158,7 +181,7 @@ strings preserve authored Unicode text exactly.
 ```text
 compiled-model = {
   format: "pml.compiled",
-  format_version: 1,
+  format_version: 2,
   language_version: "0.1-draft",
   definition_digest: sha256-digest,
   project: compiled-project,
@@ -391,7 +414,7 @@ The model has these consistency invariants:
   or another compiled edge.
 
 The `definition_digest` uses the already approved definition-digest algorithm,
-made fully explicit here for the version 1 byte contract. After complete schema
+made fully explicit here for the version 2 byte contract. After complete schema
 and semantic validation, encode the merged definition with this compact canonical
 definition JSON algorithm:
 
@@ -503,7 +526,7 @@ use-case goal.
 
 ## Stable obligations
 
-Version 1 uses these closed `obligation-kind` values and definitions:
+Version 2 uses these closed `obligation-kind` values and definitions:
 
 | `kind` | `definition` | Stable ID |
 | --- | --- | --- |
@@ -619,11 +642,11 @@ The rules are:
 5. Sort each symmetric relationship's two `endpoints` lexically before using the
    endpoint tuple as its identity and sort `declared_by` lexically by semantic
    path. Emit only one relationship record per endpoint pair.
-6. These rules exhaust every array in version 1. A future format change that adds
+6. These rules exhaust every array in version 2. A future format change that adds
    an array MUST assign it either source-sequence preservation or an explicit total
    sort key before that format version is approved.
 7. Serialize the ordered model with the canonical JSON algorithm below. No other
-   JSON layout or escape spelling conforms to version 1.
+   JSON layout or escape spelling conforms to version 2.
 8. Do not include timestamps, source paths, machine paths, random identifiers,
    generated state, or environment-dependent values.
 
@@ -644,8 +667,8 @@ trailing spaces, and ends with exactly one line feed after the top-level value.
 
 Emit values as follows:
 
-- The version-1 model's only number is `format_version`, emitted as the single
-  ASCII byte `1`. The model contains no booleans or nulls; absent optional
+- The version-2 model's only number is `format_version`, emitted as the single
+  ASCII byte `2`. The model contains no booleans or nulls; absent optional
   properties are omitted as specified above.
 - An empty object is `{}` and an empty array is `[]`.
 - A non-empty object begins with `{`. For each property in Unicode scalar-value
