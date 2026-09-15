@@ -21,6 +21,7 @@ from pml.validator import load_document, validate_document
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "compiled_model"
+REFERENCE_FIXTURES = ROOT / "tests" / "fixtures" / "reference-normalization"
 COMPILED_SCHEMA = json.loads(
     (ROOT / "schema" / "pml-compiled-model.schema.json").read_text(encoding="utf-8")
 )
@@ -107,6 +108,18 @@ def test_reordered_monolithic_and_modular_inputs_are_byte_equivalent() -> None:
         modular_model
     )
     assert monolithic_model["definition_digest"] == modular_model["definition_digest"]
+
+
+def test_bare_and_fully_qualified_same_feature_references_are_equivalent() -> None:
+    bare_document, bare_model = _compile(REFERENCE_FIXTURES / "bare.pml.yaml")
+    full_document, full_model = _compile(REFERENCE_FIXTURES / "full.pml.yaml")
+
+    assert canonical_definition_bytes(bare_document) == canonical_definition_bytes(
+        full_document
+    )
+    assert definition_digest(bare_document) == definition_digest(full_document)
+    assert bare_model == full_model
+    assert bare_model["definition_digest"] == full_model["definition_digest"]
 
 
 def test_map_materialized_and_derived_arrays_use_their_total_sort_keys() -> None:
