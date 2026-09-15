@@ -4,8 +4,14 @@ pml_probe: "0.1"
 probe: assistant_config_persistence
 verifies: domains.assistants.features.creation.use_cases.create_from_scratch
 env: staging
+setup:
+  - http: POST /workspaces
+    as: member
+    body_from: fixtures/workspace.json
+    expect: {status: 201, body_has: [id]}
+    capture: {workspace_id: body.id}
 steps:
-  - http: POST /assistants
+  - http: POST /workspaces/{workspace_id}/assistants
     as: member
     body_from: fixtures/assistant.json
     expect: {status: 201, body_has: [id]}
