@@ -32,11 +32,36 @@ is implemented through canonical serialization and `pml compile --json`.
 The future read-only web explorer is an approved but unimplemented compiled-model
 consumer.
 
-## Validate a manifest
+## Development installation
+
+Contributors can use an isolated environment for development and tests; a global
+installation is not required:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
+```
+
+To make the CLI from this checkout available as `pml` on your `PATH`, first
+configure uv's tool directory (once) and restart your shell:
+
+```bash
+uv tool update-shell
+```
+
+Then run:
+
+```bash
+./dev-install.sh
+```
+
+The script runs `uv tool install --editable . --force`. This is an editable
+development installation of this repository, not an installation of a published
+PML release.
+
+## Validate a manifest
+
+```bash
 .venv/bin/pml validate pml.yaml
 ```
 
