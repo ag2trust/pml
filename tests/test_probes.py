@@ -12,9 +12,11 @@ from pml.probes import (
     MAX_PROBE_DISCOVERY_ENTRIES,
     MAX_PROBE_FILES,
     MAX_PROBE_FILE_BYTES,
+    StepOutcome,
     load_probes,
     missing_probe_diagnostics,
     probe_fingerprint,
+    run_probe,
 )
 from pml.validator import load_document
 
@@ -497,6 +499,291 @@ def test_probe_schema_enforces_exact_step_limit(tmp_path: Path) -> None:
     assert probes == {}
     assert [item.code for item in diagnostics] == ["schema"]
     assert "is too long" in diagnostics[0].message
+
+
+def test_probe_setup_captures_are_visible_to_steps(tmp_path: Path) -> None:
+    definition = minimal_definition()
+    probe = tmp_path / "with-setup.probe.yaml"
+    probe.write_text(
+        """\
+pml_probe: "0.1"
+probe: with_setup
+verifies: domains.notes.features.creation.rules.preserve_content
+env: staging
+setup:
+  - http: POST /notes
+    as: member
+    expect: {status: 201, body_has: [id]}
+    capture: {note_id: body.id}
+steps:
+  - http: GET /notes/{note_id}
+    as: member
+    expect: {status: 200}
+"""
+    )
+
+    probes, diagnostics = load_probes(probe, definition)
+
+    assert diagnostics == []
+    assert list(probes) == ["with_setup"]
+    assert probes["with_setup"]["setup"][0]["capture"] == {"note_id": "body.id"}
+
+
+def test_probe_setup_rejects_unknown_actor_and_forward_variable(
+    tmp_path: Path,
+) -> None:
+    definition = minimal_definition()
+    probe = tmp_path / "invalid-setup.probe.yaml"
+    probe.write_text(
+        """\
+pml_probe: "0.1"
+probe: invalid_setup
+verifies: domains.notes.features.creation.rules.preserve_content
+env: staging
+setup:
+  - http: GET /notes/{note_id}
+    as: stranger
+    expect: {status: 200}
+steps:
+  - session: reset
+"""
+    )
+
+    _, diagnostics = load_probes(probe, definition)
+
+    assert {item.code for item in diagnostics} == {
+        "undefined-variable",
+        "undefined-reference",
+    }
+    assert all("setup[0]" in item.path for item in diagnostics)
+
+
+def test_probe_setup_duplicate_capture_across_setup_and_steps(
+    tmp_path: Path,
+) -> None:
+    definition = minimal_definition()
+    probe = tmp_path / "duplicate-capture.probe.yaml"
+    probe.write_text(
+        """\
+pml_probe: "0.1"
+probe: duplicate_capture
+verifies: domains.notes.features.creation.rules.preserve_content
+env: staging
+setup:
+  - http: POST /notes
+    as: member
+    expect: {status: 201, body_has: [id]}
+    capture: {note_id: body.id}
+steps:
+  - http: POST /notes
+    as: member
+    expect: {status: 201, body_has: [id]}
+    capture: {note_id: body.id}
+"""
+    )
+
+    _, diagnostics = load_probes(probe, definition)
+
+    assert [item.code for item in diagnostics] == ["duplicate-capture"]
+    assert "steps[0].capture.note_id" in diagnostics[0].path
+
+
+def test_probe_schema_accepts_maximum_setup_items(tmp_path: Path) -> None:
+    definition = minimal_definition()
+    setup_lines = "  - session: reset\n" * 32
+    accepted = tmp_path / "accepted-setup.probe.yaml"
+    accepted.write_text(
+        f"""\
+pml_probe: "0.1"
+probe: accepted_setup
+verifies: domains.notes.features.creation.rules.preserve_content
+env: staging
+setup:
+{setup_lines}steps:
+  - session: reset
+"""
+    )
+    probes, diagnostics = load_probes(accepted, definition)
+    assert diagnostics == []
+    assert list(probes) == ["accepted_setup"]
+
+    setup_lines = "  - session: reset\n" * 33
+    rejected = tmp_path / "rejected-setup.probe.yaml"
+    rejected.write_text(
+        f"""\
+pml_probe: "0.1"
+probe: rejected_setup
+verifies: domains.notes.features.creation.rules.preserve_content
+env: staging
+setup:
+{setup_lines}steps:
+  - session: reset
+"""
+    )
+    probes, diagnostics = load_probes(rejected, definition)
+    assert probes == {}
+    assert [item.code for item in diagnostics] == ["schema"]
+    assert "is too long" in diagnostics[0].message
+
+
+def test_probe_schema_rejects_empty_setup(tmp_path: Path) -> None:
+    definition = minimal_definition()
+    probe = tmp_path / "empty-setup.probe.yaml"
+    probe.write_text(
+        """\
+pml_probe: "0.1"
+probe: empty_setup
+verifies: domains.notes.features.creation.rules.preserve_content
+env: staging
+setup: []
+steps:
+  - session: reset
+"""
+    )
+    probes, diagnostics = load_probes(probe, definition)
+    assert probes == {}
+    assert [item.code for item in diagnostics] == ["schema"]
+
+
+def test_validate_probes_accepts_setup_block(tmp_path: Path) -> None:
+    probe = tmp_path / "setup.probe.yaml"
+    probe.write_text(
+        """\
+pml_probe: "0.1"
+probe: preserve_content
+verifies: domains.notes.features.creation.rules.preserve_content
+env: staging
+setup:
+  - cli: [notes, seed]
+    as: member
+    expect: {exit: 0}
+steps:
+  - cli: [notes, verify-content]
+    as: member
+    expect: {exit: 0}
+"""
+    )
+    assert main([
+        "validate-probes",
+        str(ROOT / "examples" / "minimal.pml.yaml"),
+        str(probe),
+        "--bindings",
+        str(ROOT / "examples" / "bindings.yaml"),
+        "--require-complete",
+    ]) == 0
+
+
+def test_verification_report_schema_accepts_inconclusive_probe_result() -> None:
+    schema = json.loads(
+        (ROOT / "schema" / "verification-report.schema.json").read_text()
+    )
+    assert "inconclusive" in schema["$defs"]["result"]["enum"]
+
+
+def test_state_schema_accepts_inconclusive_probe_result() -> None:
+    schema = json.loads((ROOT / "schema" / "pml-state.schema.json").read_text())
+    assert "inconclusive" in schema["$defs"]["result"]["enum"]
+
+
+def _probe_with_setup() -> dict:
+    return {
+        "pml_probe": "0.1",
+        "probe": "runner_case",
+        "verifies": "domains.notes.features.creation.rules.preserve_content",
+        "env": "staging",
+        "setup": [
+            {
+                "http": "POST /notes",
+                "as": "member",
+                "expect": {"status": 201, "body_has": ["id"]},
+                "capture": {"note_id": "body.id"},
+            }
+        ],
+        "steps": [
+            {
+                "http": "GET /notes/{note_id}",
+                "as": "member",
+                "expect": {"status": 200},
+            }
+        ],
+    }
+
+
+def test_run_probe_executes_setup_before_steps_and_threads_captures() -> None:
+    probe = _probe_with_setup()
+    executions: list[tuple[str, dict[str, str]]] = []
+
+    def executor(step: dict, captures: dict[str, str]) -> StepOutcome:
+        executions.append((step.get("http") or step.get("cli") or step["session"], dict(captures)))
+        if step.get("capture"):
+            return StepOutcome(True, "captured", {"note_id": "abc123"})
+        return StepOutcome(True, "matched")
+
+    result = run_probe(probe, executor)
+
+    assert result.result == "passed"
+    assert [call[0] for call in executions] == [
+        "POST /notes",
+        "GET /notes/{note_id}",
+    ]
+    assert executions[0][1] == {}
+    assert executions[1][1] == {"note_id": "abc123"}
+    assert [(report.section, report.index, report.ok) for report in result.steps] == [
+        ("setup", 0, True),
+        ("steps", 0, True),
+    ]
+    assert result.captures == {"note_id": "abc123"}
+
+
+def test_run_probe_setup_failure_yields_inconclusive_and_skips_steps() -> None:
+    probe = _probe_with_setup()
+    executed_sections: list[str] = []
+
+    def executor(step: dict, captures: dict[str, str]) -> StepOutcome:
+        # First call is the setup step; force it to fail.
+        if not executed_sections:
+            executed_sections.append("setup")
+            return StepOutcome(False, "status 500")
+        executed_sections.append("steps")
+        return StepOutcome(True, "matched")
+
+    result = run_probe(probe, executor)
+
+    assert result.result == "inconclusive"
+    assert executed_sections == ["setup"]
+    assert result.steps[0].section == "setup"
+    assert result.steps[0].ok is False
+    assert "setup step 0" in result.observation
+
+
+def test_run_probe_step_failure_yields_failed() -> None:
+    probe = _probe_with_setup()
+
+    def executor(step: dict, captures: dict[str, str]) -> StepOutcome:
+        if step.get("capture"):
+            return StepOutcome(True, "captured", {"note_id": "abc123"})
+        return StepOutcome(False, "status 500")
+
+    result = run_probe(probe, executor)
+
+    assert result.result == "failed"
+    assert [report.ok for report in result.steps] == [True, False]
+    assert "trigger step 0" in result.observation
+
+
+def test_run_probe_without_setup_still_returns_passed() -> None:
+    probe = {
+        "pml_probe": "0.1",
+        "probe": "no_setup",
+        "verifies": "domains.notes.features.creation.rules.preserve_content",
+        "env": "staging",
+        "steps": [
+            {"cli": ["notes", "verify"], "expect": {"exit": 0}},
+        ],
+    }
+    result = run_probe(probe, lambda step, captures: StepOutcome(True, "ok"))
+    assert result.result == "passed"
+    assert len(result.steps) == 1
 
 
 def test_probe_limits_reject_every_probe_loading_cli_before_partial_use(

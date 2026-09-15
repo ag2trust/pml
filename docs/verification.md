@@ -46,6 +46,12 @@ their bindings, state, and derived status are separate from product conformance.
 Architecture evidence cannot establish product behavior, and product evidence cannot
 establish an architecture decision.
 
+A probe may declare an optional `setup` array of steps that runs before `steps`.
+Setup expectations are asserted and captured values are visible to `steps`. A
+failing setup step marks the probe result `inconclusive` rather than `failed`:
+inconclusive results contribute no coverage and do not invalidate prior evidence
+for the obligation. Only `steps` produce `passed` or `failed` outcomes.
+
 Reports conform to
 [`schema/verification-report.schema.json`](../schema/verification-report.schema.json)
 and are validated before state is updated. Probe execution and state synchronization

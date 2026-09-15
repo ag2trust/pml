@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import errno
 import json
 import os
 from pathlib import Path
 import re
 import stat
-from typing import Any
+from typing import Any, Callable
 
 from jsonschema import Draft202012Validator
 import yaml
@@ -344,27 +344,108 @@ def load_probes(
                     )
 
             captured: set[str] = set()
-            for index, step in enumerate(probe["steps"]):
-                serialized = json.dumps(step)
-                for variable in VARIABLE.findall(serialized):
-                    if variable not in captured:
+            for section in ("setup", "steps"):
+                for index, step in enumerate(probe.get(section, [])):
+                    serialized = json.dumps(step)
+                    for variable in VARIABLE.findall(serialized):
+                        if variable not in captured:
+                            diagnostics.append(
+                                Diagnostic(f"{source.path}:{section}[{index}]", "undefined-variable", f"variable '{variable}' is used before capture")
+                            )
+                    actor = step.get("as")
+                    if actor is not None and actor not in actors:
                         diagnostics.append(
-                            Diagnostic(f"{source.path}:steps[{index}]", "undefined-variable", f"variable '{variable}' is used before capture")
+                            Diagnostic(f"{source.path}:{section}[{index}].as", "undefined-reference", f"unknown actor '{actor}'")
                         )
-                actor = step.get("as")
-                if actor is not None and actor not in actors:
-                    diagnostics.append(
-                        Diagnostic(f"{source.path}:steps[{index}].as", "undefined-reference", f"unknown actor '{actor}'")
-                    )
-                for variable in step.get("capture", {}):
-                    if variable in captured:
-                        diagnostics.append(
-                            Diagnostic(f"{source.path}:steps[{index}].capture.{variable}", "duplicate-capture", f"variable '{variable}' is already captured")
-                    )
-                    captured.add(variable)
+                    for variable in step.get("capture", {}):
+                        if variable in captured:
+                            diagnostics.append(
+                                Diagnostic(f"{source.path}:{section}[{index}].capture.{variable}", "duplicate-capture", f"variable '{variable}' is already captured")
+                        )
+                        captured.add(variable)
         return probes, diagnostics
     finally:
         _close_probe_sources(sources)
+
+
+@dataclass(frozen=True)
+class StepOutcome:
+    """Result of executing one probe step against the deployed system."""
+
+    ok: bool
+    observation: str
+    captures: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class StepReport:
+    """Per-step record produced by :func:`run_probe`."""
+
+    section: str
+    index: int
+    ok: bool
+    observation: str
+
+
+@dataclass(frozen=True)
+class ProbeRun:
+    """Outcome of one probe execution: setup precondition then trigger sequence."""
+
+    result: str
+    steps: tuple[StepReport, ...]
+    captures: dict[str, str]
+    observation: str
+
+
+StepExecutor = Callable[[dict[str, Any], dict[str, str]], StepOutcome]
+
+
+def run_probe(probe: dict[str, Any], executor: StepExecutor) -> ProbeRun:
+    """Run a probe's setup precondition, then its trigger steps.
+
+    Setup steps run before any trigger step; captures from setup are visible to
+    later setup entries and to every trigger step. A failing setup step aborts
+    execution and yields ``inconclusive`` — the probe never reaches its trigger
+    sequence, so it cannot pass or fail. Only trigger steps produce ``passed``
+    or ``failed``.
+    """
+
+    captures: dict[str, str] = {}
+    reports: list[StepReport] = []
+    for index, step in enumerate(probe.get("setup", [])):
+        outcome = executor(step, dict(captures))
+        reports.append(StepReport("setup", index, outcome.ok, outcome.observation))
+        if not outcome.ok:
+            return ProbeRun(
+                result="inconclusive",
+                steps=tuple(reports),
+                captures=dict(captures),
+                observation=(
+                    f"setup step {index} did not meet its expectation: "
+                    f"{outcome.observation}"
+                ),
+            )
+        captures.update(outcome.captures)
+    for index, step in enumerate(probe.get("steps", [])):
+        outcome = executor(step, dict(captures))
+        reports.append(StepReport("steps", index, outcome.ok, outcome.observation))
+        if not outcome.ok:
+            return ProbeRun(
+                result="failed",
+                steps=tuple(reports),
+                captures=dict(captures),
+                observation=(
+                    f"trigger step {index} did not meet its expectation: "
+                    f"{outcome.observation}"
+                ),
+            )
+        captures.update(outcome.captures)
+    return ProbeRun(
+        result="passed",
+        steps=tuple(reports),
+        captures=dict(captures),
+        observation="Probe completed all setup and trigger steps.",
+    )
 
 
 def missing_probe_diagnostics(

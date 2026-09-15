@@ -41,7 +41,7 @@
       "minLength": 1,
       "maxLength": 4096
     },
-    "result": {"enum": ["passed", "failed", "not_evaluated", "blocked"]},
+    "result": {"enum": ["passed", "failed", "inconclusive", "not_evaluated", "blocked"]},
     "recordedTime": {
       "type": "string",
       "format": "date-time",
