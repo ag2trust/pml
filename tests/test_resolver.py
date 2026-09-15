@@ -68,6 +68,24 @@ def test_resolver_normalizes_bare_same_feature_behavior_references() -> None:
     assert resolution.use_cases[use_case]["behaviors"] == [creation, visibility]
 
 
+def test_resolver_rejects_a_missing_bare_use_case_behavior() -> None:
+    document = _reference_document("bare.pml.yaml")
+    document["domains"]["notes"]["features"]["creation"]["use_cases"][
+        "create_note"
+    ]["behaviors"] = ["missing_behavior"]
+
+    resolution = resolve_references(document)
+
+    assert [(item.path, item.code, item.message) for item in resolution.diagnostics] == [
+        (
+            "domains.notes.features.creation.use_cases.create_note.behaviors",
+            "undefined-reference",
+            "unknown behavior "
+            "'domains.notes.features.creation.behaviors.missing_behavior'",
+        )
+    ]
+
+
 def test_resolver_rejects_bare_related_to_self_reference() -> None:
     document = _reference_document("bare.pml.yaml")
     behavior = document["domains"]["notes"]["features"]["creation"]["behaviors"][

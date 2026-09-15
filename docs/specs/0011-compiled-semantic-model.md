@@ -10,7 +10,8 @@ enumeration, and downstream inspection tools.
 
 This specification does not change the PML language. It uses the behavior,
 transition, signal, relationship, use-case, and obligation semantics approved in
-[0010](0010-behavior-transition-model.md) exactly. It also approves the Unicode
+[0010](0010-behavior-transition-model.md), as amended by
+[0013](0013-bare-behavior-reference-normalization.md). It also approves the Unicode
 scalar-string and string-key loading preconditions required for deterministic JSON
 tooling; those preconditions are input well-formedness, not product meaning. It
 does not authorize schema, validator, compiler, command, formatter, bindings,
@@ -53,8 +54,9 @@ restricted-YAML loading and modular-document merge rules. The required pipeline 
    accepted source fragments.
 2. Apply the exact schema and local language checks approved for the document's
    PML language version.
-3. Resolve declared identities and references against that same in-memory
-   document while collecting the approved reference diagnostics.
+3. Apply the approved in-memory reference canonicalization from [0013](0013-bare-behavior-reference-normalization.md),
+   then resolve declared identities and references while collecting the approved
+   reference diagnostics.
 4. Apply any remaining approved semantic checks that depend on the resolved
    graph.
 5. Materialize and serialize the compiled model only when the complete diagnostic
@@ -382,8 +384,9 @@ The model has these consistency invariants:
 
 The `definition_digest` uses the already approved definition-digest algorithm,
 made fully explicit here for the version 1 byte contract. After complete schema
-and semantic validation, encode the merged definition with this compact canonical
-definition JSON algorithm:
+and semantic validation, apply the approved reference canonicalization from
+[0013](0013-bare-behavior-reference-normalization.md), then encode the resulting
+canonical definition with this compact canonical definition JSON algorithm:
 
 - A valid PML definition contains only objects, arrays, and strings. A value of
   any other JSON kind has already failed schema validation and MUST NOT be hashed.
@@ -406,9 +409,10 @@ definition JSON algorithm:
 Hash those exact bytes with SHA-256. The field value is `sha256:` followed by the
 lowercase hexadecimal digest. This matches the established definition-digest
 behavior while making it normative across independent compilers. It identifies
-the authoritative input snapshot; it does not make the compiled model
-authoritative. The string-key and scalar-string loading checks precede this
-encoding, so every diagnostic-free definition has a defined digest input.
+the authoritative input snapshot after its approved canonical reference
+derivation; it does not make the compiled model authoritative. The string-key and
+scalar-string loading checks precede this encoding, so every diagnostic-free
+definition has a defined digest input.
 
 ### Structural records
 
