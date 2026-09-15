@@ -4,9 +4,12 @@ Status: Owner approved on 2026-08-13
 
 ## Approved decision
 
-Version 1 of the read-only compiled semantic model defined here is approved as the
+Version 2 of the read-only compiled semantic model defined here is approved as the
 single derived representation shared by PML reference resolution, obligation
-enumeration, and downstream inspection tools.
+enumeration, and downstream inspection tools. Version 2 supersedes the previously
+approved version 1 to carry the surface-state and obligation shape changes owner
+approved for task 16 (see the version 2 delta below); no other format-version 1
+producers or consumers remain supported.
 
 This specification does not change the PML language. It uses the behavior,
 transition, signal, relationship, use-case, and obligation semantics approved in
@@ -155,7 +158,27 @@ Paths name semantic objects, not files. The compiled model contains no source fi
 paths or YAML layout metadata, so compiling the same merged definition as one file
 or as an equivalent modular directory produces the same model.
 
-## Version 1 JSON structure
+## Version 2 delta
+
+Version 2 replaces the previously approved version 1 grammar. Independent
+compilers and consumers MUST emit and accept `format_version: 2` and MUST NOT
+accept `format_version: 1` as a synonym; the two versions describe incompatible
+`experience.surfaces` and obligation shapes. The version-2 changes are:
+
+- `compiled-surface-state` is an object with optional `shows: list[obligation-id]`
+  and optional `contains: list[authored-text]`, at least one of which is present.
+  Version 1's mandatory `statements` list is removed.
+- `compiled-obligation` gains an optional `surfaces: list[surface-state-path]`
+  field that appears only on obligations of kind `rule`, `outcome`, or
+  `failure`, and only when at least one surface state references the obligation
+  through `shows`. All other obligation kinds omit it.
+- Determinism adds one sort key: obligation `surfaces` lists are sorted by
+  surface-state path.
+
+Every other version-1 rule (identity, ordering, canonical JSON encoding,
+definition digest, obligation inventory, closed enums) remains as approved.
+
+## Version 2 JSON structure
 
 Every object below is closed: implementations MUST NOT add unlisted properties.
 Properties marked `?` are omitted when their authored value is absent; they are not
@@ -165,7 +188,7 @@ strings preserve authored Unicode text exactly.
 ```text
 compiled-model = {
   format: "pml.compiled",
-  format_version: 1,
+  format_version: 2,
   language_version: "0.1-draft",
   definition_digest: sha256-digest,
   project: compiled-project,
@@ -254,7 +277,8 @@ compiled-surface = {
 
 compiled-surface-state = {
   id: state-id,
-  statements: list[authored-text]
+  shows?: list[obligation-id],
+  contains?: list[authored-text]
 }
 
 compiled-behavior = {
@@ -365,9 +389,18 @@ compiled-obligation = {
   id: obligation-id,
   node: product-node-path | architecture-decision-path,
   kind: obligation-kind,
-  definition: obligation-definition
+  definition: obligation-definition,
+  surfaces?: list[surface-state-path]
 }
+
+surface-state-path =
+  "<feature-path>.experience.surfaces.<surface-id>.states.<state-id>"
 ```
+
+The optional `surfaces` field appears only on `rule`, `outcome`, and `failure`
+obligations that are referenced by one or more `experience.surfaces.<id>.states`
+`shows` entries. Its value is the sorted list of referencing surface-state paths.
+The other obligation kinds omit it.
 
 The model has these consistency invariants:
 
@@ -388,7 +421,7 @@ The model has these consistency invariants:
   or another compiled edge.
 
 The `definition_digest` uses the already approved definition-digest algorithm,
-made fully explicit here for the version 1 byte contract. After complete schema
+made fully explicit here for the version 2 byte contract. After complete schema
 and semantic validation, apply the approved reference canonicalization from
 [0013](0013-bare-behavior-reference-normalization.md), then encode the resulting
 canonical definition with this compact canonical definition JSON algorithm:
@@ -429,7 +462,11 @@ and architecture references point to existing records in the same compiled model
 Empty arrays normalize absent optional collections without inventing members. An
 optional authored object such as `experience` or `conditions` remains omitted when
 absent. Within a present experience definition, absent optional surface lists and
-state maps compile to empty arrays.
+state maps compile to empty arrays. Each surface state omits `shows` or
+`contains` when the corresponding authored key is absent; at least one is always
+present. A `rule`, `outcome`, or `failure` obligation referenced by one or more
+surface `shows` entries records the sorted list of referencing surface-state
+paths in its optional `surfaces` field.
 
 Architecture remains separate from product behavior. `referenced_by` is the
 derived inverse of feature `architecture` references and may contain only feature
@@ -498,7 +535,7 @@ use-case goal.
 
 ## Stable obligations
 
-Version 1 uses these closed `obligation-kind` values and definitions:
+Version 2 uses these closed `obligation-kind` values and definitions:
 
 | `kind` | `definition` | Stable ID |
 | --- | --- | --- |
@@ -512,9 +549,17 @@ Version 1 uses these closed `obligation-kind` values and definitions:
 | `use_case` | `{actor: actor-id, goal: authored-text, behaviors: list[behavior-path]}` | `<feature-path>.use_cases.<use-case-id>` |
 | `architecture_constraint` | `{statement: authored-text}` | `architecture.<decision-id>.constraints.<constraint-id>` |
 
-Every obligation object contains only the keys required by its row. Its `node` is
-the owning project, domain, feature, behavior, or architecture decision path.
-Project-wide rules use `project` as their node and ID prefix.
+Every obligation object contains only the keys required by its row, plus the
+optional `surfaces` field defined below. Its `node` is the owning project,
+domain, feature, behavior, or architecture decision path. Project-wide rules use
+`project` as their node and ID prefix.
+
+Obligations of kind `rule`, `outcome`, and `failure` MAY carry an optional
+`surfaces` field whose value is the sorted, unique list of surface-state paths
+that reference the obligation through one `experience.surfaces.<id>.states.<id>`
+`shows` entry. The field is present only when at least one such reference
+exists, and every other obligation kind omits it. This is the inverse of the
+authored `shows` reference and carries no independent obligation.
 
 The completion definition lists the direct outcome obligation or every outcome
 alternative obligation under `outcomes`, followed separately by every authored
@@ -548,7 +593,8 @@ The rules are:
    `features[].experience.surfaces[].contains`,
    `features[].experience.surfaces[].accessibility`,
    `features[].experience.surfaces[].responsive_behavior`,
-   `features[].experience.surfaces[].states[].statements`,
+   `features[].experience.surfaces[].states[].shows`,
+   `features[].experience.surfaces[].states[].contains`,
    `behaviors[].conditions.statements`, and `use_cases[].behaviors`. The
    `conditions` and `use_case` obligation definitions preserve the same source
    sequence order. Consumers MUST still obey the approved semantics of each list;
@@ -598,17 +644,18 @@ The rules are:
    | `completion` obligation `definition.outcomes` | obligation ID |
    | `completion` obligation `definition.failures` | obligation ID |
    | `outcome_exclusivity` obligation `definition.alternatives` | obligation ID |
+   | obligation `surfaces` (rule/outcome/failure) | surface-state path |
 
    The authored reference arrays named in rule 2 retain authored order instead;
    this table does not reorder them merely because their entries are references.
 5. Sort each symmetric relationship's two `endpoints` lexically before using the
    endpoint tuple as its identity and sort `declared_by` lexically by semantic
    path. Emit only one relationship record per endpoint pair.
-6. These rules exhaust every array in version 1. A future format change that adds
+6. These rules exhaust every array in version 2. A future format change that adds
    an array MUST assign it either source-sequence preservation or an explicit total
    sort key before that format version is approved.
 7. Serialize the ordered model with the canonical JSON algorithm below. No other
-   JSON layout or escape spelling conforms to version 1.
+   JSON layout or escape spelling conforms to version 2.
 8. Do not include timestamps, source paths, machine paths, random identifiers,
    generated state, or environment-dependent values.
 
@@ -629,8 +676,8 @@ trailing spaces, and ends with exactly one line feed after the top-level value.
 
 Emit values as follows:
 
-- The version-1 model's only number is `format_version`, emitted as the single
-  ASCII byte `1`. The model contains no booleans or nulls; absent optional
+- The version-2 model's only number is `format_version`, emitted as the single
+  ASCII byte `2`. The model contains no booleans or nulls; absent optional
   properties are omitted as specified above.
 - An empty object is `{}` and an empty array is `[]`.
 - A non-empty object begins with `{`. For each property in Unicode scalar-value

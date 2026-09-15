@@ -339,10 +339,28 @@
           "type": "object",
           "maxProperties": 25,
           "propertyNames": {"$ref": "#/$defs/id"},
-          "additionalProperties": {"$ref": "#/$defs/stringList"}
+          "additionalProperties": {"$ref": "#/$defs/surfaceState"}
         },
         "accessibility": {"$ref": "#/$defs/stringList"},
         "responsive_behavior": {"$ref": "#/$defs/stringList"}
+      }
+    },
+    "surfaceState": {
+      "type": "object",
+      "additionalProperties": false,
+      "anyOf": [
+        {"required": ["shows"]},
+        {"required": ["contains"]}
+      ],
+      "properties": {
+        "shows": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/nonEmpty"}
+        },
+        "contains": {"$ref": "#/$defs/stringList"}
       }
     }
   }

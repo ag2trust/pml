@@ -29,7 +29,7 @@ def _model() -> dict[str, object]:
     feature = "domains.notes.features.handling"
     return {
         "format": "pml.compiled",
-        "format_version": 1,
+        "format_version": 2,
         "language_version": "0.1-draft",
         "definition_digest": "sha256:" + "0" * 64,
         "project": {
@@ -85,7 +85,7 @@ def test_schema_accepts_every_v1_variant() -> None:
     feature = "domains.notes.features.handling"
     behavior = feature + ".behaviors.handle_note"
     model["architecture"] = [{"id": "runtime", "path": "architecture.runtime", "category": "runtime", "selection": "Managed runtime.", "rationale": "A rationale.", "constraint_obligations": ["architecture.runtime.constraints.available"], "referenced_by": [feature]}]
-    model["features"][0]["experience"] = {"surfaces": [{"id": "notes", "contains": ["Notes."], "states": [{"id": "empty", "statements": ["No notes are present."]}], "accessibility": [], "responsive_behavior": []}]}  # type: ignore[index]
+    model["features"][0]["experience"] = {"surfaces": [{"id": "notes", "contains": ["Notes."], "states": [{"id": "empty", "contains": ["No notes are present."]}], "accessibility": [], "responsive_behavior": []}]}  # type: ignore[index]
     model["features"][0]["architecture"] = ["architecture.runtime"]  # type: ignore[index]
     model["behaviors"][0]["conditions"] = {"statements": ["A condition."], "obligation": behavior + ".conditions"}  # type: ignore[index]
     model["behaviors"][0]["trigger"] = {"kind": "one_of", "cases": [{"id": "request", "obligation": behavior + ".trigger.request", "statement": "A request occurs."}, {"id": "ready", "obligation": behavior + ".trigger.ready", "signal": "note_ready"}]}  # type: ignore[index]
@@ -114,7 +114,7 @@ def test_schema_accepts_every_v1_variant() -> None:
     ("mutate", "expected"),
     [
         (lambda model: model.pop("signals"), "'signals' is a required property"),
-        (lambda model: model.__setitem__("format_version", 2), "1 was expected"),
+        (lambda model: model.__setitem__("format_version", 1), "2 was expected"),
         (lambda model: model["project"].__setitem__("extra", "no"), "Additional properties are not allowed"),  # type: ignore[union-attr]
         (lambda model: model["features"][0].__setitem__("experience", None), "None is not of type 'object'"),  # type: ignore[index,union-attr]
         (lambda model: model["behaviors"][0]["trigger"].__setitem__("case", {"obligation": "x", "statement": "x", "signal": "s"}), "is not valid under any of the given schemas"),  # type: ignore[index,union-attr]
@@ -312,6 +312,72 @@ def test_schema_rejects_exclusivity_parent_and_alternative_paths_in_wrong_positi
     model = _model()
     mutate(model)
     assert any("does not match" in message or "is not valid under any" in message for message in _messages(_validator().iter_errors(model)))
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["conditions", "trigger", "completion", "outcome_exclusivity", "use_case", "architecture_constraint"],
+)
+def test_schema_rejects_surfaces_on_ineligible_obligation_kinds(kind: str) -> None:
+    model = _model()
+    behavior = "domains.notes.features.handling.behaviors.handle_note"
+    feature = "domains.notes.features.handling"
+    surface = feature + ".experience.surfaces.notes.states.empty"
+    if kind == "conditions":
+        record = {"id": behavior + ".conditions", "node": behavior, "kind": "conditions", "definition": {"statements": ["A condition."]}}
+    elif kind == "trigger":
+        record = {"id": behavior + ".trigger", "node": behavior, "kind": "trigger", "definition": {"statement": "A trigger."}}
+    elif kind == "completion":
+        record = {"id": behavior + ".completion", "node": behavior, "kind": "completion", "definition": {"outcomes": [behavior + ".outcome"], "failures": []}}
+    elif kind == "outcome_exclusivity":
+        record = {"id": behavior + ".outcome", "node": behavior, "kind": "outcome_exclusivity", "definition": {"alternatives": [behavior + ".outcome.a", behavior + ".outcome.b"]}}
+    elif kind == "use_case":
+        record = {"id": feature + ".use_cases.handle", "node": feature, "kind": "use_case", "definition": {"actor": "member", "goal": "Handle.", "behaviors": [behavior]}}
+    else:
+        record = {"id": "architecture.runtime.constraints.available", "node": "architecture.runtime", "kind": "architecture_constraint", "definition": {"statement": "Available MUST hold."}}
+    record["surfaces"] = [surface]
+    model["obligations"] = [record]
+    if kind == "outcome_exclusivity":
+        model["obligations"].append({"id": behavior + ".outcome.a", "node": behavior, "kind": "outcome", "definition": {"statement": "A."}})
+        model["obligations"].append({"id": behavior + ".outcome.b", "node": behavior, "kind": "outcome", "definition": {"statement": "B."}})
+
+    assert any(
+        "not valid" in message
+        or "unevaluated" in message
+        or "not allowed" in message
+        for message in _messages(_validator().iter_errors(model))
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "domains.notes.features.handling.behaviors.handle_note.trigger",
+        "domains.notes.features.handling.behaviors.handle_note.conditions",
+        "domains.notes.features.handling.behaviors.handle_note.completion",
+        "domains.notes.features.handling.use_cases.handle",
+        "architecture.runtime.constraints.available",
+    ],
+)
+def test_schema_rejects_shows_paths_for_ineligible_obligation_kinds(path: str) -> None:
+    model = _model()
+    feature = "domains.notes.features.handling"
+    model["features"][0]["experience"] = {  # type: ignore[index]
+        "surfaces": [
+            {
+                "id": "notes",
+                "contains": ["Notes."],
+                "states": [{"id": "empty", "shows": [path]}],
+                "accessibility": [],
+                "responsive_behavior": [],
+            }
+        ]
+    }
+
+    assert any(
+        "does not match" in message or "not valid under" in message
+        for message in _messages(_validator().iter_errors(model))
+    )
 
 
 def test_schema_accepts_newline_suffixed_nested_ids_accepted_by_source_schema() -> None:

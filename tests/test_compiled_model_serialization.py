@@ -232,9 +232,8 @@ def test_authored_sequence_arrays_retain_source_order() -> None:
         "Keep the action visible.",
         "Keep the status readable.",
     ]
-    assert state["statements"] == [
-        "The ready state is visible.",
-        "The next action is visible.",
+    assert state["shows"] == [
+        "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved",
     ]
     assert behavior["conditions"]["statements"] == [
         "The participant may create a record.",

@@ -285,3 +285,19 @@ def test_explain_preserves_authored_and_derived_classification(capsys) -> None:
     assert "completion_obligation" not in authored
     assert "    trigger.kind:" in structural
     assert "stable_obligations:" in inverse
+
+
+def test_explain_lists_referencing_surface_state_on_obligation(capsys) -> None:
+    obligation = (
+        "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved"
+    )
+
+    assert cli.main(["explain", str(CANONICAL), obligation]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    _, inverse = captured.out.split("  Derived inverse links:\n", maxsplit=1)
+    assert (
+        "domains.a_work.features.workspace.experience.surfaces.a_workspace.states.z_ready"
+        in inverse
+    )
