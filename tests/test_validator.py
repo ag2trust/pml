@@ -12,6 +12,9 @@ from pml.validator import load_document, validate_document, validate_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
+COMPILED_SCHEMA = json.loads(
+    (ROOT / "schema" / "pml-compiled-model.schema.json").read_text()
+)
 
 
 def _cardinality_document() -> tuple[dict, dict]:
@@ -51,6 +54,55 @@ def test_feature_with_eight_rules_emits_a_warning_and_compiles() -> None:
         )
     ]
     assert resolution.compiled_model is not None
+
+
+@pytest.mark.parametrize(
+    ("scope", "path"),
+    [
+        ("project", "rules"),
+        ("domain", "domains.notes.rules"),
+        ("feature", "domains.notes.features.creation.rules"),
+        (
+            "behavior",
+            "domains.notes.features.creation.behaviors.note_creation.rules",
+        ),
+        ("architecture", "architecture.runtime.constraints"),
+    ],
+)
+def test_warning_rule_maps_produce_schema_valid_models(scope: str, path: str) -> None:
+    document, feature = _cardinality_document()
+    rules = {
+        f"rule_{index}": {"statement": f"The system MUST meet requirement {index}."}
+        for index in range(8)
+    }
+    if scope == "project":
+        document["rules"] = rules
+    elif scope == "domain":
+        document["domains"]["notes"]["rules"] = rules
+    elif scope == "feature":
+        feature["rules"] = rules
+    elif scope == "behavior":
+        feature["behaviors"]["note_creation"]["rules"] = rules
+    else:
+        document["architecture"] = {
+            "runtime": {
+                "category": "runtime",
+                "selection": "Managed runtime.",
+                "rationale": "The runtime requires owner approval.",
+                "constraints": rules,
+            }
+        }
+        feature["architecture"] = ["runtime"]
+
+    resolution = validate_document(document)
+
+    assert [(item.path, item.code, item.severity) for item in resolution.diagnostics] == [
+        (path, "PML-W-RULE-COUNT", "warning")
+    ]
+    assert resolution.compiled_model is not None
+    assert list(
+        Draft202012Validator(COMPILED_SCHEMA).iter_errors(resolution.compiled_model)
+    ) == []
 
 
 def test_feature_with_eight_behaviors_emits_a_warning_and_compiles() -> None:
