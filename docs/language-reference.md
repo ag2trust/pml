@@ -70,6 +70,9 @@ purpose, actors, rules, use_cases, behaviors, experience, related_to, architectu
 Features do not have generic inputs or outputs: those fields tend to restate use
 cases or drift into API design.
 
+A feature may define at most nine behaviors. Tooling emits a warning when a
+feature defines more than seven behaviors.
+
 ### `behaviors.<id>`
 
 A behavior is one bounded, independently addressable transition. It requires
@@ -109,6 +112,8 @@ that apply across scenarios. Security requirements are ordinary rules rather tha
 separate language section.
 
 The location of a rule determines its scope: top-level, domain, feature, or behavior.
+Rules are not hard-capped, but tooling emits a warning when a rules map at any
+scope contains more than seven rules.
 
 ### `use_cases.<id>`
 

@@ -973,8 +973,8 @@ def test_architecture_state_rejects_duplicate_and_nested_state_paths(
     }
     assert main(["check", str(manifest), str(product)]) == 1
     check_output = capsys.readouterr().out
-    assert "duplicate.state.yaml: [state-path]" in check_output
-    assert "nested: [state-path]" in check_output
+    assert "duplicate.state.yaml: [error] [state-path]" in check_output
+    assert "nested: [error] [state-path]" in check_output
 
 
 def test_architecture_state_limits_candidate_files(tmp_path: Path) -> None:

@@ -6,11 +6,137 @@ from jsonschema import Draft202012Validator
 import pytest
 import yaml
 
+from pml.diagnostics import Diagnostic
 from pml.formats import FORMAT_CHECKER
-from pml.validator import load_document, validate_file
+from pml.validator import load_document, validate_document, validate_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
+COMPILED_SCHEMA = json.loads(
+    (ROOT / "schema" / "pml-compiled-model.schema.json").read_text()
+)
+
+
+def _cardinality_document() -> tuple[dict, dict]:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    feature = document["domains"]["notes"]["features"]["creation"]
+    return document, feature
+
+
+def _behavior(index: int) -> dict[str, dict[str, str]]:
+    return {
+        "trigger": {"statement": f"A Member starts action {index}."},
+        "outcome": {"statement": f"Action {index} is visibly complete."},
+    }
+
+
+def test_diagnostic_severity_defaults_to_error() -> None:
+    diagnostic = Diagnostic("path", "code", "message")
+
+    assert diagnostic.severity == "error"
+    assert diagnostic.format() == "path: [error] [code] message"
+
+
+def test_feature_with_eight_rules_emits_a_warning_and_compiles() -> None:
+    document, feature = _cardinality_document()
+    feature["rules"] = {
+        f"rule_{index}": {"statement": f"The system MUST meet requirement {index}."}
+        for index in range(8)
+    }
+
+    resolution = validate_document(document)
+
+    assert [(item.path, item.code, item.severity) for item in resolution.diagnostics] == [
+        (
+            "domains.notes.features.creation.rules",
+            "PML-W-RULE-COUNT",
+            "warning",
+        )
+    ]
+    assert resolution.compiled_model is not None
+
+
+@pytest.mark.parametrize(
+    ("scope", "path"),
+    [
+        ("project", "rules"),
+        ("domain", "domains.notes.rules"),
+        ("feature", "domains.notes.features.creation.rules"),
+        (
+            "behavior",
+            "domains.notes.features.creation.behaviors.note_creation.rules",
+        ),
+        ("architecture", "architecture.runtime.constraints"),
+    ],
+)
+def test_warning_rule_maps_produce_schema_valid_models(scope: str, path: str) -> None:
+    document, feature = _cardinality_document()
+    rules = {
+        f"rule_{index}": {"statement": f"The system MUST meet requirement {index}."}
+        for index in range(8)
+    }
+    if scope == "project":
+        document["rules"] = rules
+    elif scope == "domain":
+        document["domains"]["notes"]["rules"] = rules
+    elif scope == "feature":
+        feature["rules"] = rules
+    elif scope == "behavior":
+        feature["behaviors"]["note_creation"]["rules"] = rules
+    else:
+        document["architecture"] = {
+            "runtime": {
+                "category": "runtime",
+                "selection": "Managed runtime.",
+                "rationale": "The runtime requires owner approval.",
+                "constraints": rules,
+            }
+        }
+        feature["architecture"] = ["runtime"]
+
+    resolution = validate_document(document)
+
+    assert [(item.path, item.code, item.severity) for item in resolution.diagnostics] == [
+        (path, "PML-W-RULE-COUNT", "warning")
+    ]
+    assert resolution.compiled_model is not None
+    assert list(
+        Draft202012Validator(COMPILED_SCHEMA).iter_errors(resolution.compiled_model)
+    ) == []
+
+
+def test_feature_with_eight_behaviors_emits_a_warning_and_compiles() -> None:
+    document, feature = _cardinality_document()
+    behaviors = feature["behaviors"]
+    behaviors.update({f"action_{index}": _behavior(index) for index in range(1, 8)})
+
+    resolution = validate_document(document)
+
+    assert [(item.path, item.code, item.severity) for item in resolution.diagnostics] == [
+        (
+            "domains.notes.features.creation.behaviors",
+            "PML-W-BEHAVIOR-COUNT",
+            "warning",
+        )
+    ]
+    assert resolution.compiled_model is not None
+
+
+def test_feature_with_ten_behaviors_is_an_error() -> None:
+    document, feature = _cardinality_document()
+    behaviors = feature["behaviors"]
+    behaviors.update({f"action_{index}": _behavior(index) for index in range(1, 10)})
+
+    resolution = validate_document(document)
+
+    assert any(
+        item.path == "domains.notes.features.creation.behaviors"
+        and item.code == "schema"
+        and item.severity == "error"
+        for item in resolution.diagnostics
+    )
+    assert any(item.code == "PML-W-BEHAVIOR-COUNT" for item in resolution.diagnostics)
+    assert resolution.compiled_model is None
 
 
 def test_project_manifest_is_valid() -> None:
@@ -805,45 +931,6 @@ def test_rule_and_architecture_statements_named_output_require_normative_markers
         "domains.notes.features.creation.rules.output.statement",
         "architecture.approved_runtime.constraints.output.statement",
     }
-
-
-def test_rejects_overloaded_rule_map(tmp_path: Path) -> None:
-    rules = "\n".join(
-        f"""\
-          rule_{index}:
-            statement: THE SYSTEM MUST accept input {index}."""
-        for index in range(8)
-    )
-    manifest = tmp_path / "overloaded.pml.yaml"
-    manifest.write_text(
-        f"""\
-pml: 0.1-draft
-project:
-  id: sample
-  name: Sample
-  purpose: Sample product.
-actors:
-  someone:
-    meaning: Any participant.
-domains:
-  core:
-    purpose: Sample domain.
-    features:
-      sample:
-        purpose: Sample feature.
-        rules:
-{rules}
-        use_cases:
-          run:
-            actor: someone
-            goal: Run.
-            given: [Ready.]
-            when: [Runs.]
-            then: [Done.]
-"""
-    )
-    diagnostics = validate_file(manifest)
-    assert any(item.code == "schema" and "too many properties" in item.message for item in diagnostics)
 
 
 def test_validates_signals_relationships_behaviors_and_architecture(tmp_path: Path) -> None:
