@@ -107,7 +107,6 @@
     },
     "ruleMap": {
       "type": "object",
-      "maxProperties": 7,
       "propertyNames": {"$ref": "#/$defs/id"},
       "additionalProperties": {"$ref": "#/$defs/rule"}
     },
@@ -192,7 +191,7 @@
     "behaviorMap": {
       "type": "object",
       "minProperties": 1,
-      "maxProperties": 25,
+      "maxProperties": 9,
       "propertyNames": {"$ref": "#/$defs/id"},
       "additionalProperties": {"$ref": "#/$defs/behavior"}
     },
