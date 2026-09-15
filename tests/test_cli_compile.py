@@ -6,10 +6,22 @@ import io
 from pathlib import Path
 
 import pml.cli as cli
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "compiled_model"
+
+
+def _warning_manifest(tmp_path: Path) -> Path:
+    document = yaml.safe_load((ROOT / "examples" / "minimal.pml.yaml").read_text())
+    document["domains"]["notes"]["features"]["creation"]["rules"] = {
+        f"rule_{index}": {"statement": f"The system MUST meet requirement {index}."}
+        for index in range(8)
+    }
+    source = tmp_path / "warning.pml.yaml"
+    source.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    return source
 
 
 def test_compile_json_writes_the_exact_canonical_model_to_stdout(capsys) -> None:
@@ -79,3 +91,16 @@ def test_compile_requires_json_output_mode(capsys) -> None:
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == "pml compile requires --json\n"
+
+
+def test_compile_warnings_do_not_prevent_json_output(tmp_path: Path, capsys) -> None:
+    source = _warning_manifest(tmp_path)
+
+    assert cli.main(["compile", str(source), "--json"]) == 0
+
+    captured = capsys.readouterr()
+    assert '"format": "pml.compiled"' in captured.out
+    assert captured.err == (
+        "domains.notes.features.creation.rules: [warning] [PML-W-RULE-COUNT] "
+        "rules maps should contain no more than 7 rules\n"
+    )

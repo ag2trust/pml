@@ -92,8 +92,9 @@ outcome alternatives, and failures into separate ID-keyed entries.
 ## Relate behavior without inventing control flow
 
 Use `related_to` for a broader, symmetric association or change-impact relation
-between a feature or behavior and another feature or behavior. Use fully qualified
-semantic paths. It does not imply causality or execution order; signals and
+between a feature or behavior and another feature or behavior. Use a bare behavior
+ID for a target in the same feature, and a fully qualified semantic path otherwise.
+It does not imply causality or execution order; signals and
 triggers express causal relationships.
 
 Keep `architecture` at feature scope. It records an owner-approved technical
@@ -143,8 +144,9 @@ resolve to the same obligation are rejected as duplicates.
 ## State use-case goals
 
 Use cases remain at feature scope. Each has only an `actor`, a `goal`, and a
-unique `behaviors` list of one through seven fully qualified behavior paths. The
-listed behaviors are members of the actor's end-to-end goal, not ordered steps.
+unique `behaviors` list of one through seven behavior references. Use bare IDs for
+behaviors in the same feature and fully qualified paths across features. The listed
+behaviors are members of the actor's end-to-end goal, not ordered steps.
 
 ```yaml
 use_cases:
@@ -152,9 +154,9 @@ use_cases:
     actor: member
     goal: Handle an Inbox Item requiring attention.
     behaviors:
-      - domains.inbox.features.attention.behaviors.inbox_item_opening
-      - domains.inbox.features.attention.behaviors.attention_handling
-      - domains.inbox.features.attention.behaviors.attention_view_update
+      - inbox_item_opening
+      - attention_handling
+      - attention_view_update
 ```
 
 Do not use the superseded `given`, `when`, `then`, or `otherwise` scenario fields.

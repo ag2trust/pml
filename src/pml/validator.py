@@ -229,6 +229,66 @@ def _walk(value: Any, path: tuple[Any, ...] = ()) -> Iterable[tuple[tuple[Any, .
             yield from _walk(child, path + (index,))
 
 
+def _cardinality_warnings(document: dict[str, Any]) -> list[Diagnostic]:
+    """Return deterministic advisory diagnostics for authored map sizes."""
+
+    warnings: list[Diagnostic] = []
+    for parts, value in _walk(document):
+        if not isinstance(value, dict):
+            continue
+        is_rules_map = (
+            parts == ("rules",)
+            or (
+                len(parts) == 3
+                and parts[0] == "domains"
+                and parts[2] == "rules"
+            )
+            or (
+                len(parts) == 5
+                and parts[0] == "domains"
+                and parts[2] == "features"
+                and parts[4] == "rules"
+            )
+            or (
+                len(parts) == 7
+                and parts[0] == "domains"
+                and parts[2] == "features"
+                and parts[4] == "behaviors"
+                and parts[6] == "rules"
+            )
+            or (
+                len(parts) == 3
+                and parts[0] == "architecture"
+                and parts[2] == "constraints"
+            )
+        )
+        if is_rules_map and len(value) > 7:
+            warnings.append(
+                Diagnostic(
+                    _path(parts),
+                    "PML-W-RULE-COUNT",
+                    "rules maps should contain no more than 7 rules",
+                    severity="warning",
+                )
+            )
+        if (
+            len(parts) == 5
+            and parts[0] == "domains"
+            and parts[2] == "features"
+            and parts[4] == "behaviors"
+            and len(value) > 7
+        ):
+            warnings.append(
+                Diagnostic(
+                    _path(parts),
+                    "PML-W-BEHAVIOR-COUNT",
+                    "features should contain no more than 7 behaviors",
+                    severity="warning",
+                )
+            )
+    return sorted(warnings, key=lambda diagnostic: diagnostic.path)
+
+
 def _is_transition_text(parts: tuple[Any, ...]) -> bool:
     """Return whether text is normative by its position in a behavior transition."""
 
@@ -606,7 +666,7 @@ def validate_file(path: Path) -> list[Diagnostic]:
 
 
 def validate_document(document: dict[str, Any]) -> ResolvedDefinition:
-    """Validate and resolve one loaded snapshot, compiling only a clean result."""
+    """Validate and resolve one loaded snapshot, compiling without errors."""
 
     diagnostics: list[Diagnostic] = []
     validator = Draft202012Validator(_schema())
@@ -620,7 +680,8 @@ def validate_document(document: dict[str, Any]) -> ResolvedDefinition:
     resolver = ReferenceResolver(document)
     resolution = resolver.resolve()
     diagnostics.extend(_semantic_diagnostics(document, resolution))
-    if diagnostics:
+    diagnostics.extend(_cardinality_warnings(document))
+    if any(diagnostic.severity == "error" for diagnostic in diagnostics):
         return replace(
             resolution,
             diagnostics=tuple(diagnostics),
@@ -631,6 +692,6 @@ def validate_document(document: dict[str, Any]) -> ResolvedDefinition:
 
     return replace(
         resolution,
-        diagnostics=(),
-        compiled_model=_build_compiled_model(document, resolver, resolution),
+        diagnostics=tuple(diagnostics),
+        compiled_model=_build_compiled_model(resolver.document, resolver, resolution),
     )

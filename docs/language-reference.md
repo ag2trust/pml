@@ -70,6 +70,9 @@ purpose, actors, rules, use_cases, behaviors, experience, related_to, architectu
 Features do not have generic inputs or outputs: those fields tend to restate use
 cases or drift into API design.
 
+A feature may define at most nine behaviors. Tooling emits a warning when a
+feature defines more than seven behaviors.
+
 ### `behaviors.<id>`
 
 A behavior is one bounded, independently addressable transition. It requires
@@ -109,21 +112,25 @@ that apply across scenarios. Security requirements are ordinary rules rather tha
 separate language section.
 
 The location of a rule determines its scope: top-level, domain, feature, or behavior.
+Rules are not hard-capped, but tooling emits a warning when a rules map at any
+scope contains more than seven rules.
 
 ### `use_cases.<id>`
 
-A use case contains `actor`, `goal`, and a unique list of one through seven fully
-qualified behavior paths in `behaviors`. The listed behaviors collectively fulfill
-the goal; the list states membership, not execution order. A use-case goal is independently
+A use case contains `actor`, `goal`, and a unique list of one through seven behavior
+references in `behaviors`. For a behavior in the enclosing feature, use its bare ID;
+use a fully qualified behavior path for a cross-feature behavior. The listed behaviors
+collectively fulfill the goal; the list states membership, not execution order. A use-case goal is independently
 verifiable, so conformance of each behavior alone does not prove the actor can
 accomplish it.
 
 ### `related_to`
 
-`related_to` is an untyped list of unique semantic paths resolving to features or
-behaviors. It establishes a symmetric behavioral relationship without declaring a
-dependency direction. Tooling treats changes to either node as relevant to the
-other node's verification freshness.
+`related_to` is an untyped list of unique references resolving to features or
+behaviors. For a behavior in the enclosing feature, use its bare ID; feature and
+cross-feature references are fully qualified paths. It establishes a symmetric
+behavioral relationship without declaring a dependency direction. Tooling treats
+changes to either node as relevant to the other node's verification freshness.
 
 ### `experience`
 

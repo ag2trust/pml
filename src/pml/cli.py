@@ -39,6 +39,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     init_parser.add_argument("--name", required=True, dest="project_name")
     validate_parser = subparsers.add_parser("validate", help="validate a PML definition")
     validate_parser.add_argument("path", type=Path)
+    validate_parser.add_argument(
+        "--strict", action="store_true", help="treat warnings as validation failures"
+    )
     compile_parser = subparsers.add_parser(
         "compile", help="compile a validated PML definition"
     )
@@ -106,10 +109,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         if document is not None:
             resolution = validate_document(document)
             diagnostics = list(resolution.diagnostics)
-        if diagnostics:
-            for diagnostic in diagnostics:
+        errors = [diagnostic for diagnostic in diagnostics if diagnostic.severity == "error"]
+        warnings = [diagnostic for diagnostic in diagnostics if diagnostic.severity == "warning"]
+        for diagnostic in warnings:
+            print(diagnostic.format(), file=sys.stderr)
+        if errors:
+            for diagnostic in errors:
                 print(diagnostic.format(), file=sys.stderr)
-            print(f"PML INVALID: {len(diagnostics)} violation(s)", file=sys.stderr)
+            print(f"PML INVALID: {len(errors)} violation(s)", file=sys.stderr)
             return 1
         if not args.json:
             print("pml compile requires --json", file=sys.stderr)
@@ -167,16 +174,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         if document is not None:
             resolution = validate_document(document)
             diagnostics = list(resolution.diagnostics)
-            if not diagnostics:
+            if resolution.compiled_model is not None:
                 assert resolution.compiled_model is not None
                 _, review_diagnostics = load_reviews(
                     args.path, build_review_targets(resolution.compiled_model)
                 )
                 diagnostics.extend(review_diagnostics)
-        for diagnostic in diagnostics:
+        errors = [diagnostic for diagnostic in diagnostics if diagnostic.severity == "error"]
+        warnings = [diagnostic for diagnostic in diagnostics if diagnostic.severity == "warning"]
+        for diagnostic in errors:
             print(diagnostic.format())
-        if diagnostics:
-            print(f"PML INVALID: {len(diagnostics)} violation(s)")
+        for diagnostic in warnings:
+            print(diagnostic.format(), file=sys.stderr)
+        failures = errors + warnings if args.strict else errors
+        if failures:
+            print(f"PML INVALID: {len(failures)} violation(s)")
             return 1
         print(f"PML VALID: {args.path}")
         return 0

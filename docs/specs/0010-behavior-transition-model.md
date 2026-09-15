@@ -211,8 +211,10 @@ behaviors.
 
 `related_to` remains a valid optional behavior field. It preserves the approved
 untyped, symmetric relationship semantics and may reference features or other
-behaviors using their fully qualified semantic paths. It expresses broader product
-association and change impact; it does not imply causality or execution order.
+behaviors. Its approved bare same-feature behavior form and canonical resolution
+are defined by [0013](0013-bare-behavior-reference-normalization.md). It expresses
+broader product association and change impact; it does not imply causality or
+execution order.
 
 `architecture` is not a valid behavior field and remains a feature-level
 concern:
@@ -233,9 +235,9 @@ outcomes or rules.
 non-empty list of behavior references. A use case states the actor requirement PML
 aims to fulfill; its referenced behaviors collectively fulfill that goal.
 
-Every behavior reference uses one canonical form: the fully qualified behavior
-semantic path. Local and cross-feature references do not have separate shorthand
-or resolution rules. Each reference MUST resolve to a declared behavior.
+Behavior references use the approved authored and canonical forms defined by
+[0013](0013-bare-behavior-reference-normalization.md). Each reference MUST resolve
+to a declared behavior.
 
 The behavior list expresses membership, not execution order. Trigger and signal
 relationships express causal order. The use-case goal remains an independently
@@ -248,9 +250,9 @@ use_cases:
     actor: member
     goal: Handle an Inbox Item requiring attention.
     behaviors:
-      - domains.inbox.features.attention.behaviors.inbox_item_opening
-      - domains.inbox.features.attention.behaviors.attention_handling
-      - domains.inbox.features.attention.behaviors.attention_view_update
+      - inbox_item_opening
+      - attention_handling
+      - attention_view_update
 ```
 
 ## Consolidated example
@@ -301,6 +303,8 @@ concept-id = identifier resolving to one declared product concept
 declared-signal-id = identifier resolving to one inline signal definition
 feature-or-behavior-id = fully qualified feature or behavior semantic path
 behavior-id = fully qualified behavior semantic path
+behavior-reference = identifier | behavior-id, resolved under 0013
+relationship-reference = identifier | feature-or-behavior-id, resolved under 0013
 rule-map = the closed ID-keyed rule map defined by the language
 
 conditions = unique list[statement] with 1..7 items
@@ -321,8 +325,8 @@ outcome = completion-case | {
   one_of: map[identifier, completion-case] with 2..7 entries
 }
 failure-map = map[identifier, completion-case] with 1..7 entries
-behavior-reference-list = unique list[behavior-id] with 1..7 items
-relationship-list = unique list[feature-or-behavior-id] with 1..7 items
+behavior-reference-list = unique list[behavior-reference] with 1..7 items
+relationship-list = unique list[relationship-reference] with 1..7 items
 behavior = {
   conditions?: conditions,
   trigger: trigger,
@@ -341,7 +345,8 @@ use-case = {
 Every object is closed and rejects unknown keys. Direct and `one_of` trigger or
 outcome forms are mutually exclusive. Every list is non-empty when present and
 rejects duplicate values. Every ID-keyed map rejects duplicate IDs and every
-reference MUST resolve to the required canonical object category.
+reference MUST resolve to the required canonical object category. Reference
+uniqueness after canonical resolution is defined by [0013](0013-bare-behavior-reference-normalization.md).
 
 Structured lifecycle transition fields were considered and rejected because they
 duplicate conditions and outcomes. No general workflow or ordering construct

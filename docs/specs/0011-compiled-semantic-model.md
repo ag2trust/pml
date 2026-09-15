@@ -13,7 +13,8 @@ producers or consumers remain supported.
 
 This specification does not change the PML language. It uses the behavior,
 transition, signal, relationship, use-case, and obligation semantics approved in
-[0010](0010-behavior-transition-model.md) exactly. It also approves the Unicode
+[0010](0010-behavior-transition-model.md), as amended by
+[0013](0013-bare-behavior-reference-normalization.md). It also approves the Unicode
 scalar-string and string-key loading preconditions required for deterministic JSON
 tooling; those preconditions are input well-formedness, not product meaning. It
 does not authorize schema, validator, compiler, command, formatter, bindings,
@@ -24,8 +25,8 @@ order defined below.
 ## Purpose and authority boundary
 
 PML YAML is the authored and authoritative statement of product intent. The
-compiled semantic model is a deterministic, read-only index over one completely
-validated PML definition. It makes identities and references explicit so every
+compiled semantic model is a deterministic, read-only index over one PML definition
+with no error diagnostics. It makes identities and references explicit so every
 consumer observes the same resolved model rather than independently interpreting
 YAML.
 
@@ -56,12 +57,13 @@ restricted-YAML loading and modular-document merge rules. The required pipeline 
    accepted source fragments.
 2. Apply the exact schema and local language checks approved for the document's
    PML language version.
-3. Resolve declared identities and references against that same in-memory
-   document while collecting the approved reference diagnostics.
+3. Apply the approved in-memory reference canonicalization from [0013](0013-bare-behavior-reference-normalization.md),
+   then resolve declared identities and references while collecting the approved
+   reference diagnostics.
 4. Apply any remaining approved semantic checks that depend on the resolved
    graph.
-5. Materialize and serialize the compiled model only when the complete diagnostic
-   set is empty.
+5. Materialize and serialize the compiled model only when no diagnostic has
+   `error` severity. Ordered `warning` diagnostics may accompany the model.
 
 Schema validation and local language checks may run before reference resolution.
 Reference validation and compilation SHOULD share one resolver so signal,
@@ -106,7 +108,8 @@ UTF-8 and a rejected document never reaches compilation.
 ### Invalid input and unresolved references
 
 Any loading, schema, language, duplicate-definition, or unresolved-reference
-diagnostic prevents model production. In particular, compilation MUST NOT emit:
+diagnostic with `error` severity prevents model production. In particular,
+compilation MUST NOT emit:
 
 - a partial model;
 - placeholder actors, concepts, features, behaviors, signals, architecture
@@ -115,11 +118,15 @@ diagnostic prevents model production. In particular, compilation MUST NOT emit:
 - an empty consumer or producer substituted for a failed signal reference; or
 - a best-effort graph with invalid nodes omitted.
 
-The library result is either a complete compiled model or the normal ordered
-validation diagnostics, never both. A future `pml compile --json` command exits
+The library result has a complete compiled model when it has no error diagnostics;
+it may also carry normal ordered warning diagnostics. A result with one or more
+error diagnostics has no compiled model. Warnings do not modify the model or its
+digest. `pml compile --json` exits zero, writes warnings to standard error, and
+writes JSON to standard output when warnings are the only diagnostics. It exits
 nonzero, writes diagnostics to standard error, and writes no JSON to standard
-output when validation fails. `explain`, `graph`, and the web UI observe the same
-all-or-nothing boundary.
+output when an error diagnostic is present. `explain`, `graph`, and the web UI
+MUST NOT expose a compiled model when an error diagnostic is present; their own
+warning presentation and output policies do not alter this library boundary.
 
 ## Identity and reference rules
 
@@ -415,8 +422,9 @@ The model has these consistency invariants:
 
 The `definition_digest` uses the already approved definition-digest algorithm,
 made fully explicit here for the version 2 byte contract. After complete schema
-and semantic validation, encode the merged definition with this compact canonical
-definition JSON algorithm:
+and semantic validation, apply the approved reference canonicalization from
+[0013](0013-bare-behavior-reference-normalization.md), then encode the resulting
+canonical definition with this compact canonical definition JSON algorithm:
 
 - A valid PML definition contains only objects, arrays, and strings. A value of
   any other JSON kind has already failed schema validation and MUST NOT be hashed.
@@ -439,9 +447,10 @@ definition JSON algorithm:
 Hash those exact bytes with SHA-256. The field value is `sha256:` followed by the
 lowercase hexadecimal digest. This matches the established definition-digest
 behavior while making it normative across independent compilers. It identifies
-the authoritative input snapshot; it does not make the compiled model
-authoritative. The string-key and scalar-string loading checks precede this
-encoding, so every diagnostic-free definition has a defined digest input.
+the authoritative input snapshot after its approved canonical reference
+derivation; it does not make the compiled model authoritative. The string-key and
+scalar-string loading checks precede this encoding, so every diagnostic-free
+definition has a defined digest input.
 
 ### Structural records
 
@@ -834,8 +843,10 @@ cases.
 
 The web UI consumes this same model for navigable project, domain, feature, and
 behavior views; transition and signal details; use-case membership; relationship
-and causal graphs; and stable obligation inspection. Validation findings are a
-separate failed-compilation result, not nodes in a partial compiled model.
+and causal graphs; and stable obligation inspection. Validation findings with
+`error` severity are a separate failed-compilation result, not nodes in a partial
+compiled model. Warning diagnostics may accompany a complete model and are not
+model nodes.
 
 The UI is a read-only projection. Editing, approving, rewriting, or synchronizing
 PML from the UI requires a separate language and workflow decision. Graphviz or

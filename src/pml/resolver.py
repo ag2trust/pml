@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 from pml.compiled_model import CompiledModel
 from pml.diagnostics import Diagnostic
+from pml.normalization import normalize_definition_references
 
 
 OBLIGATION_SECTIONS = ("rules", "use_cases")
@@ -80,6 +81,23 @@ def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _bare_feature_related_to_self_nodes(document: Mapping[str, Any]) -> set[str]:
+    """Return features whose bare relationship names their own ID."""
+
+    nodes: set[str] = set()
+    for domain_id, domain in _mapping(document.get("domains")).items():
+        if not isinstance(domain, dict):
+            continue
+        for feature_id, feature in _mapping(domain.get("features")).items():
+            if not isinstance(feature, dict):
+                continue
+            feature_path = f"domains.{domain_id}.features.{feature_id}"
+            related_to = feature.get("related_to")
+            if isinstance(related_to, list) and feature_id in related_to:
+                nodes.add(feature_path)
+    return nodes
+
+
 def _is_behavior_node(node_id: str) -> bool:
     """Return whether a semantic ID has the canonical behavior path shape."""
 
@@ -138,7 +156,16 @@ class ReferenceResolver:
     """Resolve all definition references against one in-memory snapshot."""
 
     def __init__(self, document: Mapping[str, Any]) -> None:
-        self._document = document
+        self._bare_feature_related_to_self_nodes = (
+            _bare_feature_related_to_self_nodes(document)
+        )
+        self._document = normalize_definition_references(document)
+
+    @property
+    def document(self) -> Mapping[str, Any]:
+        """Return the canonical definition snapshot used for resolution."""
+
+        return self._document
 
     def iter_nodes(self) -> Iterator[tuple[str, dict[str, Any]]]:
         """Yield every state-bearing rule scope, feature, and direct behavior."""
@@ -369,7 +396,18 @@ class ReferenceResolver:
                         )
                     referenced_behaviors = use_case.get("behaviors", [])
                     if isinstance(referenced_behaviors, list):
+                        seen_behaviors: set[str] = set()
                         for behavior in referenced_behaviors:
+                            if isinstance(behavior, str) and behavior in seen_behaviors:
+                                use_case_diagnostics.append(
+                                    Diagnostic(
+                                        f"{use_case_path}.behaviors",
+                                        "duplicate-reference",
+                                        f"duplicate behavior '{behavior}'",
+                                    )
+                                )
+                            elif isinstance(behavior, str):
+                                seen_behaviors.add(behavior)
                             if isinstance(behavior, str) and behavior not in behavior_ids:
                                 use_case_diagnostics.append(
                                     Diagnostic(
@@ -392,9 +430,31 @@ class ReferenceResolver:
             node_diagnostics: list[Diagnostic] = []
             related_nodes = node.get("related_to", [])
             if isinstance(related_nodes, list):
+                seen_related_nodes: set[str] = set()
+                if (
+                    node_id not in behavior_ids
+                    and node_id in self._bare_feature_related_to_self_nodes
+                ):
+                    node_diagnostics.append(
+                        Diagnostic(
+                            f"{node_id}.related_to",
+                            "self-reference",
+                            "a node cannot relate to itself",
+                        )
+                    )
                 for related in related_nodes:
                     if not isinstance(related, str):
                         continue
+                    if related in seen_related_nodes:
+                        node_diagnostics.append(
+                            Diagnostic(
+                                f"{node_id}.related_to",
+                                "duplicate-reference",
+                                f"duplicate node '{related}'",
+                            )
+                        )
+                    else:
+                        seen_related_nodes.add(related)
                     if related not in node_ids:
                         node_diagnostics.append(
                             Diagnostic(

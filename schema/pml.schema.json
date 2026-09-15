@@ -45,7 +45,7 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "pattern": "^domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.behaviors\\.[a-z][a-z0-9_]*)?$"
+        "pattern": "^(?:[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.behaviors\\.[a-z][a-z0-9_]*)?)$"
       }
     },
     "project": {
@@ -107,7 +107,6 @@
     },
     "ruleMap": {
       "type": "object",
-      "maxProperties": 7,
       "propertyNames": {"$ref": "#/$defs/id"},
       "additionalProperties": {"$ref": "#/$defs/rule"}
     },
@@ -192,7 +191,7 @@
     "behaviorMap": {
       "type": "object",
       "minProperties": 1,
-      "maxProperties": 25,
+      "maxProperties": 9,
       "propertyNames": {"$ref": "#/$defs/id"},
       "additionalProperties": {"$ref": "#/$defs/behavior"}
     },
@@ -312,7 +311,7 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "pattern": "^domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*\\.behaviors\\.[a-z][a-z0-9_]*$"
+            "pattern": "^(?:[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*\\.behaviors\\.[a-z][a-z0-9_]*)$"
           }
         }
       }
