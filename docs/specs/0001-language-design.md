@@ -39,6 +39,10 @@ direction.
 - `experience`: actor-visible information, controls, and states.
 - `architecture`: independently owner-mandated technical decisions.
 
+Rules are not hard-capped, but a rules map with more than seven entries emits a
+warning. A feature may contain at most nine behaviors, and more than seven
+behaviors emits a warning.
+
 Features may `emit` signals. Reactions refer to a signal with `on` and contain one
 normative `statement`. Several consequences of one signal are several independently
 identified reactions.
