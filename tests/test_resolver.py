@@ -146,11 +146,22 @@ def test_resolver_rejects_duplicates_after_behavior_reference_normalization() ->
     ]
 
 
-def test_resolver_emits_complete_model_for_diagnostic_free_definition() -> None:
+def test_resolver_emits_complete_model_for_definition_with_scope_warnings() -> None:
     resolution = resolve_definition(_document("assistant-creation.pml.yaml"))
     model = resolution.compiled_model
 
-    assert resolution.diagnostics == ()
+    assert [(item.path, item.code, item.severity) for item in resolution.diagnostics] == [
+        (
+            "domains.assistants.features.creation.rules.credentials_not_exposed",
+            "PML-W-RULE-SCOPE",
+            "warning",
+        ),
+        (
+            "domains.assistants.features.creation.rules.customer_ownership",
+            "PML-W-RULE-SCOPE",
+            "warning",
+        ),
+    ]
     assert model is not None
     assert list(Draft202012Validator(COMPILED_SCHEMA).iter_errors(model)) == []
     assert set(model) == {
