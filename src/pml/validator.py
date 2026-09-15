@@ -371,8 +371,6 @@ def _surface_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                 for parts, value in _walk(surface, (surface_path,)):
                     if not isinstance(value, str):
                         continue
-                    if len(parts) > 1 and parts[-2] == "shows":
-                        continue
                     if SURFACE_NORMATIVE_MARKER.search(value):
                         diagnostics.append(
                             Diagnostic(

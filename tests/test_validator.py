@@ -1233,6 +1233,20 @@ def test_surface_shows_resolves_full_path_in_another_feature(
     assert validate_file(manifest) == []
 
 
+def test_surface_shows_normative_marker_is_rejected(tmp_path: Path) -> None:
+    manifest = _surface_manifest(
+        tmp_path, {"shows": ["The Member MUST retry."]}
+    )
+
+    diagnostics = validate_file(manifest)
+
+    assert any(
+        item.code == "PML-E-SURFACE-NORMATIVE"
+        and item.path.endswith(".states.target.shows[0]")
+        for item in diagnostics
+    )
+
+
 def test_surface_shows_unresolved_path_is_rejected(tmp_path: Path) -> None:
     manifest = _surface_manifest(tmp_path, {"shows": ["behaviors.missing"]})
 
