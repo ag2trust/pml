@@ -682,6 +682,107 @@ It must visually distinguish those three meanings. It must not derive workflow
 order from use cases, direction from `related_to`, or a relationship from shared
 actors, concepts, words, or hierarchy.
 
+#### Approved DOT output contract
+
+Owner approved on 2026-09-11.
+
+`pml graph <manifest>` emits deterministic Graphviz DOT bytes to standard output
+for the complete unfiltered explicit graph. It accepts no flags, filters,
+alternate formats, renderer dependency, or file-output option. Invalid or
+unsupported input emits diagnostics to standard error, exits nonzero, and
+produces no standard output. It consumes only the complete supported compiled
+model and never infers edges or reads state or evidence.
+
+The graph name is `pml`. When the compiled model contains no explicit graph
+edges, the exact output is:
+
+```
+digraph pml {
+}
+```
+
+That output is two lines terminated by exactly one final line feed.
+
+**Nodes.** Emit only nodes that participate in at least one edge, sorted
+lexically by their compiled endpoint ID. Each node statement uses a double-quoted
+node ID whose value equals the compiled endpoint ID. The `label` attribute
+equals the node ID. Causal endpoints are the exact completion and trigger
+obligation IDs from the compiled signal records; behavior paths must not
+substitute for obligation endpoints.
+
+**Edge order.** For each signal in compiled array order, emit the
+completion-to-signal edge followed by each signal-to-consumer-trigger edge in
+consumer array order. Then emit all relationships in compiled array order. Then
+emit all use-case memberships in compiled array order. All edges use the `->`
+DOT operator.
+
+**Edge attributes.** Each edge meaning uses exactly these attributes in the
+fixed alphabetical key order shown:
+
+| Meaning | Attributes |
+| --- | --- |
+| Causal (completion→signal and signal→trigger) | `[kind="causal", style="solid"]` |
+| Symmetric relationship | `[dir="none", kind="related_to", style="dashed"]` |
+| Use-case membership | `[dir="none", kind="use_case_membership", style="dotted"]` |
+
+Reciprocal authored `related_to` declarations between the same pair collapse to
+one symmetric edge using the normalized endpoint pair from the compiled
+`relationships` array. Use-case membership edges carry no order or direction.
+
+**Layout.** Use two-space indentation. Place one statement per line. Terminate
+every node and edge statement with a semicolon. End the output with exactly one
+final line feed.
+
+**Escaping.** Inside DOT double-quoted strings, escape `"` as `\"` and `\` as
+`\\`. Emit all other characters directly as their UTF-8 bytes. Ordering is
+determined before escaping.
+
+#### Empty-graph example
+
+A compiled model with no signals, relationships, or use-case memberships
+produces:
+
+```
+digraph pml {
+}
+```
+
+#### Representative non-empty example
+
+Given a compiled model containing the signals, relationships, and use-case
+memberships from the canonical conformance fixture, the exact output is:
+
+```
+digraph pml {
+  "domains.a_work.features.workspace" [label="domains.a_work.features.workspace"];
+  "domains.a_work.features.workspace.behaviors.a_start" [label="domains.a_work.features.workspace.behaviors.a_start"];
+  "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved" [label="domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved"];
+  "domains.a_work.features.workspace.behaviors.a_start.trigger.z_ready" [label="domains.a_work.features.workspace.behaviors.a_start.trigger.z_ready"];
+  "domains.a_work.features.workspace.behaviors.z_finish" [label="domains.a_work.features.workspace.behaviors.z_finish"];
+  "domains.a_work.features.workspace.behaviors.z_finish.outcome" [label="domains.a_work.features.workspace.behaviors.z_finish.outcome"];
+  "domains.a_work.features.workspace.use_cases.a_flow" [label="domains.a_work.features.workspace.use_cases.a_flow"];
+  "domains.a_work.features.workspace.use_cases.z_flow" [label="domains.a_work.features.workspace.use_cases.z_flow"];
+  "domains.z_archive.features.archive" [label="domains.z_archive.features.archive"];
+  "record_ready" [label="record_ready"];
+  "z_started" [label="z_started"];
+  "domains.a_work.features.workspace.behaviors.z_finish.outcome" -> "record_ready" [kind="causal", style="solid"];
+  "record_ready" -> "domains.a_work.features.workspace.behaviors.a_start.trigger.z_ready" [kind="causal", style="solid"];
+  "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved" -> "z_started" [kind="causal", style="solid"];
+  "domains.a_work.features.workspace" -> "domains.a_work.features.workspace.behaviors.z_finish" [dir="none", kind="related_to", style="dashed"];
+  "domains.a_work.features.workspace" -> "domains.z_archive.features.archive" [dir="none", kind="related_to", style="dashed"];
+  "domains.a_work.features.workspace.behaviors.a_start" -> "domains.a_work.features.workspace.behaviors.z_finish" [dir="none", kind="related_to", style="dashed"];
+  "domains.a_work.features.workspace.behaviors.a_start" -> "domains.z_archive.features.archive" [dir="none", kind="related_to", style="dashed"];
+  "domains.a_work.features.workspace.use_cases.a_flow" -> "domains.a_work.features.workspace.behaviors.a_start" [dir="none", kind="use_case_membership", style="dotted"];
+  "domains.a_work.features.workspace.use_cases.z_flow" -> "domains.a_work.features.workspace.behaviors.a_start" [dir="none", kind="use_case_membership", style="dotted"];
+  "domains.a_work.features.workspace.use_cases.z_flow" -> "domains.a_work.features.workspace.behaviors.z_finish" [dir="none", kind="use_case_membership", style="dotted"];
+}
+```
+
+This example includes a signal with one consumer (`record_ready`), a
+zero-consumer signal (`z_started`) that emits only its producer-to-signal edge,
+four symmetric relationships, and three use-case memberships across two use
+cases.
+
 ### Future web UI
 
 The web UI consumes this same model for navigable project, domain, feature, and

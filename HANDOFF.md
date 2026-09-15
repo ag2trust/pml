@@ -15,7 +15,9 @@ The owner-approved version 1 compiled semantic model in
 is implemented through canonical serialization and `pml compile --json`.
 
 `pml explain`, `pml graph`, and the future read-only web explorer described in
-0011 are approved but remain unimplemented consumers of the compiled model.
+0011 are approved but remain unimplemented consumers of the compiled model. The
+`pml graph` DOT output contract was owner approved on 2026-09-11 and is recorded
+in spec 0011.
 
 ## Approval boundary
 

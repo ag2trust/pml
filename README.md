@@ -29,8 +29,8 @@ documentation. The owner-approved version 1 compiled semantic model in
 [`docs/specs/0011-compiled-semantic-model.md`](docs/specs/0011-compiled-semantic-model.md)
 is implemented through canonical serialization and `pml compile --json`.
 
-`pml graph` and the future read-only web explorer are approved but unimplemented
-compiled-model consumers.
+The future read-only web explorer is an approved but unimplemented compiled-model
+consumer.
 
 ## Development installation
 
@@ -82,6 +82,15 @@ Explain one canonical compiled-model ID with:
 
 `pml explain` is a read-only human-readable view of the validated compiled model;
 it does not load or modify bindings, probes, locks, evidence, or generated state.
+
+Write the complete explicit graph as deterministic Graphviz DOT bytes with:
+
+```bash
+.venv/bin/pml graph pml.yaml
+```
+
+`pml graph` is read-only and emits only producer-completion-to-signal,
+signal-to-consumer-trigger, `related_to`, and use-case membership edges.
 
 Initialize PML from an implementing product repository with:
 

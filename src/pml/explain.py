@@ -53,6 +53,8 @@ class CompiledModelIndexes:
     relationships_by_endpoint: Mapping[str, tuple[Record, ...]]
     memberships_by_use_case: Mapping[str, tuple[Record, ...]]
     memberships_by_behavior: Mapping[str, tuple[Record, ...]]
+    relationships: tuple[Record, ...]
+    use_case_memberships: tuple[Record, ...]
 
     def matching_records(self, canonical_id: str) -> tuple[tuple[str, Record], ...]:
         """Probe every requestable category for ``canonical_id`` in model order."""
@@ -163,6 +165,8 @@ def build_compiled_model_indexes(model: Mapping[str, Any]) -> CompiledModelIndex
                 for behavior, memberships in memberships_by_behavior.items()
             }
         ),
+        relationships=tuple(model["relationships"]),
+        use_case_memberships=tuple(model["use_case_memberships"]),
     )
 
 
