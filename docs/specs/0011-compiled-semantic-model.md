@@ -792,8 +792,10 @@ cases.
 
 The web UI consumes this same model for navigable project, domain, feature, and
 behavior views; transition and signal details; use-case membership; relationship
-and causal graphs; and stable obligation inspection. Validation findings are a
-separate failed-compilation result, not nodes in a partial compiled model.
+and causal graphs; and stable obligation inspection. Validation findings with
+`error` severity are a separate failed-compilation result, not nodes in a partial
+compiled model. Warning diagnostics may accompany a complete model and are not
+model nodes.
 
 The UI is a read-only projection. Editing, approving, rewriting, or synchronizing
 PML from the UI requires a separate language and workflow decision. Graphviz or
