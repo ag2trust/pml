@@ -18,6 +18,7 @@ from pml.validator import load_document, validate_document
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REFERENCE_FIXTURES = ROOT / "tests" / "fixtures" / "reference-normalization"
 COMPILED_SCHEMA = json.loads(
     (ROOT / "schema" / "pml-compiled-model.schema.json").read_text()
 )
@@ -25,6 +26,13 @@ COMPILED_SCHEMA = json.loads(
 
 def _document(example: str) -> dict:
     document, diagnostics = load_document(ROOT / "examples" / example)
+    assert diagnostics == []
+    assert document is not None
+    return document
+
+
+def _reference_document(name: str) -> dict:
+    document, diagnostics = load_document(REFERENCE_FIXTURES / name)
     assert diagnostics == []
     assert document is not None
     return document
@@ -45,6 +53,97 @@ def test_resolver_indexes_definition_identities_and_resolved_signals() -> None:
     assert resolution.signals["assistant_created"].completion == f"{producer}.outcome"
     assert resolution.diagnostics == ()
     assert resolution.compiled_model is None
+
+
+def test_resolver_normalizes_bare_same_feature_behavior_references() -> None:
+    resolution = resolve_references(_reference_document("bare.pml.yaml"))
+    feature = "domains.notes.features.creation"
+    creation = f"{feature}.behaviors.note_creation"
+    visibility = f"{feature}.behaviors.note_visibility"
+    use_case = f"{feature}.use_cases.create_note"
+
+    assert resolution.diagnostics == ()
+    assert resolution.nodes[feature]["related_to"] == [creation]
+    assert resolution.nodes[creation]["related_to"] == [visibility]
+    assert resolution.use_cases[use_case]["behaviors"] == [creation, visibility]
+
+
+def test_resolver_rejects_a_missing_bare_use_case_behavior() -> None:
+    document = _reference_document("bare.pml.yaml")
+    document["domains"]["notes"]["features"]["creation"]["use_cases"][
+        "create_note"
+    ]["behaviors"] = ["missing_behavior"]
+
+    resolution = resolve_references(document)
+
+    assert [(item.path, item.code, item.message) for item in resolution.diagnostics] == [
+        (
+            "domains.notes.features.creation.use_cases.create_note.behaviors",
+            "undefined-reference",
+            "unknown behavior "
+            "'domains.notes.features.creation.behaviors.missing_behavior'",
+        )
+    ]
+
+
+def test_resolver_rejects_bare_related_to_self_reference() -> None:
+    document = _reference_document("bare.pml.yaml")
+    behavior = document["domains"]["notes"]["features"]["creation"]["behaviors"][
+        "note_creation"
+    ]
+    behavior["related_to"] = ["note_creation"]
+
+    resolution = resolve_references(document)
+
+    assert [(item.path, item.code) for item in resolution.diagnostics] == [
+        (
+            "domains.notes.features.creation.behaviors.note_creation.related_to",
+            "self-reference",
+        )
+    ]
+
+
+def test_resolver_rejects_a_feature_bare_related_to_its_own_id() -> None:
+    document = _reference_document("bare.pml.yaml")
+    feature = document["domains"]["notes"]["features"]["creation"]
+    feature["behaviors"]["creation"] = {
+        "trigger": {"statement": "A Member starts creation."},
+        "outcome": {"statement": "Creation is available."},
+    }
+    feature["related_to"] = ["creation"]
+
+    resolution = resolve_references(document)
+
+    assert [(item.path, item.code) for item in resolution.diagnostics] == [
+        ("domains.notes.features.creation.related_to", "self-reference")
+    ]
+
+
+def test_resolver_rejects_duplicates_after_behavior_reference_normalization() -> None:
+    document = _reference_document("bare.pml.yaml")
+    feature = document["domains"]["notes"]["features"]["creation"]
+    behavior_path = "domains.notes.features.creation.behaviors.note_visibility"
+    feature["use_cases"]["create_note"]["behaviors"] = [
+        "note_visibility",
+        behavior_path,
+    ]
+    feature["behaviors"]["note_creation"]["related_to"] = [
+        "note_visibility",
+        behavior_path,
+    ]
+
+    resolution = resolve_references(document)
+
+    assert [(item.path, item.code) for item in resolution.diagnostics] == [
+        (
+            "domains.notes.features.creation.use_cases.create_note.behaviors",
+            "duplicate-reference",
+        ),
+        (
+            "domains.notes.features.creation.behaviors.note_creation.related_to",
+            "duplicate-reference",
+        ),
+    ]
 
 
 def test_resolver_emits_complete_model_for_diagnostic_free_definition() -> None:

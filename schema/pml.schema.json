@@ -45,7 +45,7 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "pattern": "^domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.behaviors\\.[a-z][a-z0-9_]*)?$"
+        "pattern": "^(?:[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.behaviors\\.[a-z][a-z0-9_]*)?)$"
       }
     },
     "project": {
@@ -311,7 +311,7 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "pattern": "^domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*\\.behaviors\\.[a-z][a-z0-9_]*$"
+            "pattern": "^(?:[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*\\.behaviors\\.[a-z][a-z0-9_]*)$"
           }
         }
       }

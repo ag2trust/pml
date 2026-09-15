@@ -531,5 +531,5 @@ def validate_document(document: dict[str, Any]) -> ResolvedDefinition:
     return replace(
         resolution,
         diagnostics=tuple(diagnostics),
-        compiled_model=_build_compiled_model(document, resolver, resolution),
+        compiled_model=_build_compiled_model(resolver.document, resolver, resolution),
     )

@@ -222,6 +222,7 @@ pml architecture-status definition.pml.yaml product/
 - [Architecture decisions](docs/specs/0006-architecture-decisions.md) — approved registry and separate conformance semantics.
 - [Behavior transition model](docs/specs/0010-behavior-transition-model.md) — approved transition grammar and migration guidance.
 - [Canonical compiled semantic model](docs/specs/0011-compiled-semantic-model.md) — approved version 1 derived model and JSON contract.
+- [Bare behavior reference normalization](docs/specs/0013-bare-behavior-reference-normalization.md) — approved same-feature reference and digest canonicalization rules.
 - [Human review workflow](docs/specs/0012-human-review-workflow.md) — digest-bound review metadata and interactive review.
 
 Examples:

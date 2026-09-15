@@ -1,0 +1,38 @@
+pml: "0.1-draft"
+
+project:
+  id: reference_normalization
+  name: Reference Normalization
+  purpose: Prove canonical behavior references.
+
+actors:
+  member:
+    meaning: A person who uses the product.
+
+domains:
+  notes:
+    purpose: Manage notes.
+    features:
+      creation:
+        purpose: Create and display notes.
+        actors: [member]
+        related_to: [domains.notes.features.creation.behaviors.note_creation]
+        behaviors:
+          note_creation:
+            trigger:
+              statement: A Member submits a Note.
+            outcome:
+              statement: The Note is available.
+            related_to: [domains.notes.features.creation.behaviors.note_visibility]
+          note_visibility:
+            trigger:
+              statement: A Member opens a Note.
+            outcome:
+              statement: The Note is visible.
+        use_cases:
+          create_note:
+            actor: member
+            goal: Create and view a Note.
+            behaviors:
+              - domains.notes.features.creation.behaviors.note_creation
+              - domains.notes.features.creation.behaviors.note_visibility

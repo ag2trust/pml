@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from pml.compiled_model import CompiledModel
+from pml.normalization import normalize_definition_references
 
 
 def _encoded_string(value: str) -> str:
@@ -70,7 +71,7 @@ def _pretty(value: Any, depth: int = 0) -> str:
 def canonical_definition_bytes(document: Mapping[str, Any]) -> bytes:
     """Encode a valid merged definition for its approved SHA-256 digest."""
 
-    return _compact(document).encode("utf-8")
+    return _compact(normalize_definition_references(document)).encode("utf-8")
 
 
 def definition_digest(document: Mapping[str, Any]) -> str:
