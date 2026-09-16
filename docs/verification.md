@@ -30,7 +30,23 @@ means `<implementing-product>/src/notes`, not a path under the owner source. Uns
 paths and paths that resolve outside the product repository remain invalid.
 
 Verification methods are deterministic probes, agent judgment, and human
-attestation. Their configured coverage for each obligation must total `1.0`.
+attestation. When an obligation has a verification plan, its configured coverage
+must total `1.0`. An obligation without a plan has zero coverage and derives
+`UNBOUND` status.
+
+## Derived status
+
+`pml status` derives an obligation signal from its approved plan and current
+evidence. In precedence order, the signals are `FAILED`, `BLOCKED`, `VERIFIED`,
+`PARTIAL`, `STALE`, `UNVERIFIED`, and `UNBOUND`. `UNBOUND` means no probes, agent
+judgment, or human attestation is configured for that obligation. `UNVERIFIED`
+means a plan is configured but it has no current evidence. Both have zero verified
+coverage, but only the latter has a verification method awaiting evidence.
+
+Each obligation row includes a compact plan summary such as
+`plan=probes:2 agent:0.5 human:0`; probe counts are the number of configured
+deterministic probes and agent and human values are their configured coverage. The
+final status line reports the count of every signal, including `UNBOUND` separately.
 
 ## Deterministic probe eligibility
 
@@ -61,10 +77,11 @@ reconciles generated state but never executes probes or refreshes evidence.
 Deterministic probes run through `pml verify`; agent and human evidence require
 explicit re-verification and report ingestion.
 
-Architecture constraints use the same verification methods and coverage total, but
-their bindings, state, and derived status are separate from product conformance.
-Architecture evidence cannot establish product behavior, and product evidence cannot
-establish an architecture decision.
+Architecture constraints use the same optional-plan coverage and evidence rules:
+each configured plan totals `1.0`, while no plan derives `UNBOUND` with zero
+coverage. Their bindings, state, and derived status are separate from product
+conformance. Architecture evidence cannot establish product behavior, and product
+evidence cannot establish an architecture decision.
 
 A probe may declare an optional `setup` array of steps that runs before `steps`.
 Setup expectations are asserted and captured values are visible to `steps`. A

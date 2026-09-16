@@ -446,7 +446,6 @@ def test_bindings_conformance_examples_are_validated_semantically() -> None:
     )
     assert invalid_reference is None
     assert {item.code for item in reference_diagnostics} == {
-        "missing-verification-plan",
         "undefined-reference",
     }
 
@@ -774,6 +773,44 @@ def test_coverage_moves_from_stale_to_partial_to_verified() -> None:
     state["evidence"]["agent_judgment"]["input_fingerprint"] = current
     verified = derive_obligation_status(obligation, state, current, True, plan)
     assert (verified.signal, verified.verified_coverage) == ("VERIFIED", 1.0)
+
+
+def test_status_distinguishes_unbound_from_unverified_judgment_plan(
+    tmp_path: Path, capsys
+) -> None:
+    manifest, product = copy_example_layout(tmp_path)
+    unbound_id = "domains.notes.features.creation.rules.preserve_content"
+    judgment_id = "domains.notes.features.creation.use_cases.create_note"
+    bindings_path = manifest.parent / "bindings.yaml"
+    bindings = yaml.safe_load(bindings_path.read_text())
+    del bindings["bindings"]["domains.notes.features.creation"]["verification"][unbound_id]
+    bindings_path.write_text(yaml.safe_dump(bindings, sort_keys=False))
+    lock_path = product / ".pml" / "pml.lock"
+    lock = yaml.safe_load(lock_path.read_text())
+    lock["bindings"]["digest"] = bindings_digest(bindings)
+    lock_path.write_text(yaml.safe_dump(lock, sort_keys=False))
+
+    assert main(["status", str(manifest), str(product)]) == 0
+    output = capsys.readouterr().out
+
+    assert f"{unbound_id} UNBOUND 0% plan=probes:0 agent:0 human:0" in output
+    assert f"{judgment_id} UNVERIFIED 0% plan=probes:0 agent:1 human:0" in output
+    assert "PML STATUS:" in output
+    assert "UNBOUND=1" in output
+
+
+def test_state_schema_lists_unbound_derived_status_signal() -> None:
+    schema = json.loads((ROOT / "schema" / "pml-state.schema.json").read_text())
+
+    assert schema["$defs"]["derivedStatusSignal"]["enum"] == [
+        "FAILED",
+        "BLOCKED",
+        "VERIFIED",
+        "PARTIAL",
+        "STALE",
+        "UNVERIFIED",
+        "UNBOUND",
+    ]
 
 
 def test_binding_coverage_must_total_one(tmp_path: Path) -> None:

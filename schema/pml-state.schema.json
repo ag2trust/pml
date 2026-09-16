@@ -42,6 +42,10 @@
       "maxLength": 4096
     },
     "result": {"enum": ["passed", "failed", "inconclusive", "not_evaluated", "blocked"]},
+    "derivedStatusSignal": {
+      "description": "Status output only; derived signals are not authored in product state.",
+      "enum": ["FAILED", "BLOCKED", "VERIFIED", "PARTIAL", "STALE", "UNVERIFIED", "UNBOUND"]
+    },
     "recordedTime": {
       "type": "string",
       "format": "date-time",
