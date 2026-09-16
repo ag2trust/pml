@@ -118,6 +118,28 @@ def test_generic_rule_without_an_authored_identifier_warns() -> None:
     ]
 
 
+def test_generic_rule_does_not_match_a_partial_punctuation_bearing_vocabulary_key() -> None:
+    document, feature = _cardinality_document()
+    document["vocabulary"] = {
+        "C++": {"meaning": "A supported programming language."}
+    }
+    feature["rules"] = {
+        "generic_enforcement": {
+            "statement": "C MUST be enforced for every affected resource."
+        }
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert [(item.path, item.code, item.severity) for item in diagnostics] == [
+        (
+            "domains.notes.features.creation.rules.generic_enforcement.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        )
+    ]
+
+
 def test_generic_rule_with_an_actor_or_concept_does_not_warn() -> None:
     document, feature = _cardinality_document()
     document["actors"]["reader"] = {"meaning": "A person reading a Testimonial."}
@@ -137,6 +159,51 @@ def test_generic_rule_with_an_actor_or_concept_does_not_warn() -> None:
     diagnostics = validate_document(document).diagnostics
 
     assert not any(item.code == "PML-W-RULE-GENERIC" for item in diagnostics)
+
+
+@pytest.mark.parametrize("invalid_contains", [None, "Not a list."])
+def test_malformed_surface_contains_returns_schema_diagnostics(
+    invalid_contains: object,
+) -> None:
+    document, feature = _cardinality_document()
+    feature["experience"] = {
+        "surfaces": {"creation_form": {"contains": invalid_contains}}
+    }
+
+    resolution = validate_document(document)
+
+    assert any(
+        item.path
+        == "domains.notes.features.creation.experience.surfaces.creation_form.contains"
+        and item.code == "schema"
+        for item in resolution.diagnostics
+    )
+    assert resolution.compiled_model is None
+
+
+@pytest.mark.parametrize("invalid_contains", [None, "Not a list."])
+def test_malformed_surface_state_contains_returns_schema_diagnostics(
+    invalid_contains: object,
+) -> None:
+    document, feature = _cardinality_document()
+    feature["experience"] = {
+        "surfaces": {
+            "creation_form": {
+                "contains": ["Creation form."],
+                "states": {"idle": {"contains": invalid_contains}},
+            }
+        }
+    }
+
+    resolution = validate_document(document)
+
+    assert any(
+        item.path
+        == "domains.notes.features.creation.experience.surfaces.creation_form.states.idle.contains"
+        and item.code == "schema"
+        for item in resolution.diagnostics
+    )
+    assert resolution.compiled_model is None
 
 
 @pytest.mark.parametrize(

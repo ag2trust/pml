@@ -272,14 +272,18 @@ def _feature_statements(
     for surface_id, surface in _items(experience.get("surfaces")):
         surface_map = _mapping(surface)
         surface_path = f"{feature_path}.experience.surfaces.{surface_id}"
-        for index, item in enumerate(surface_map.get("contains", [])):
-            if isinstance(item, str):
-                statements.append((f"{surface_path}.contains[{index}]", item))
+        contains = surface_map.get("contains")
+        if isinstance(contains, list):
+            for index, item in enumerate(contains):
+                if isinstance(item, str):
+                    statements.append((f"{surface_path}.contains[{index}]", item))
         for state_id, state in _items(surface_map.get("states")):
             state_path = f"{surface_path}.states.{state_id}"
-            for index, item in enumerate(_mapping(state).get("contains", [])):
-                if isinstance(item, str):
-                    statements.append((f"{state_path}.contains[{index}]", item))
+            contains = _mapping(state).get("contains")
+            if isinstance(contains, list):
+                for index, item in enumerate(contains):
+                    if isinstance(item, str):
+                        statements.append((f"{state_path}.contains[{index}]", item))
     return statements
 
 
@@ -338,16 +342,10 @@ def _identifiers(document: dict[str, Any]) -> list[str]:
 
 
 def _mentions_identifier(statement: str, identifiers: Iterable[str]) -> bool:
-    words = _words(statement)
-    for identifier in identifiers:
-        identifier_words = _words(identifier)
-        length = len(identifier_words)
-        if length and any(
-            words[index : index + length] == identifier_words
-            for index in range(len(words) - length + 1)
-        ):
-            return True
-    return False
+    normalized = statement.casefold().replace("_", " ")
+    return any(
+        _term_pattern(identifier).search(normalized) for identifier in identifiers
+    )
 
 
 def _generic_rule_warnings(document: dict[str, Any]) -> list[Diagnostic]:

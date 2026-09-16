@@ -565,6 +565,28 @@ def test_review_rejects_invalid_definition_before_prompting(tmp_path: Path) -> N
     assert prompted is False
 
 
+def test_review_allows_a_definition_with_only_generic_warnings(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    document = yaml.safe_load((source / "index.pml.yaml").read_text(encoding="utf-8"))
+    document["domains"]["notes"]["features"]["creation"]["rules"] = {
+        "generic_enforcement": {
+            "statement": "MUST be enforced for every affected resource."
+        }
+    }
+    (source / "index.pml.yaml").write_text(
+        yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+    )
+    output = StringIO()
+
+    assert review_manifest(
+        source,
+        default_origin="human",
+        input_fn=lambda _: "quit",
+        output=output,
+    ) == 0
+    assert "PML-W-RULE-GENERIC" in output.getvalue()
+
+
 def test_rejection_reason_length_is_enforced_before_write(tmp_path: Path) -> None:
     source = _source(tmp_path)
     answers = iter(["reject", "x" * 4097, "quit"])

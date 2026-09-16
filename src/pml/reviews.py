@@ -505,20 +505,20 @@ def _definition_snapshot(
         return None, (), diagnostics
     resolution = validate_document(document)
     diagnostics = list(resolution.diagnostics)
-    if diagnostics:
+    if any(diagnostic.severity == "error" for diagnostic in diagnostics):
         return None, (), diagnostics
     assert resolution.compiled_model is not None
-    return document, build_review_targets(resolution.compiled_model), []
+    return document, build_review_targets(resolution.compiled_model), diagnostics
 
 
 def validate_reviews(manifest: Path) -> list[Diagnostic]:
     """Validate optional review metadata against one valid definition snapshot."""
 
     _, targets, diagnostics = _definition_snapshot(manifest)
-    if diagnostics:
+    if any(diagnostic.severity == "error" for diagnostic in diagnostics):
         return diagnostics
-    _, diagnostics = load_reviews(manifest, targets)
-    return diagnostics
+    _, review_diagnostics = load_reviews(manifest, targets)
+    return diagnostics + review_diagnostics
 
 
 def _mount_path(root: Path, source: Path) -> tuple[str, ...]:
@@ -653,9 +653,13 @@ def review_manifest(
         return 1
 
     _, targets, diagnostics = _definition_snapshot(manifest)
-    if diagnostics:
-        _print_diagnostics(diagnostics, output, "PML REVIEW UNAVAILABLE")
+    errors = [diagnostic for diagnostic in diagnostics if diagnostic.severity == "error"]
+    warnings = [diagnostic for diagnostic in diagnostics if diagnostic.severity == "warning"]
+    if errors:
+        _print_diagnostics(errors, output, "PML REVIEW UNAVAILABLE")
         return 1
+    for warning in warnings:
+        print(warning.format(), file=output)
     loaded, diagnostics = load_reviews(manifest, targets)
     if loaded is None:
         _print_diagnostics(diagnostics, output, "PML REVIEW UNAVAILABLE")
