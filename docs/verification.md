@@ -32,6 +32,20 @@ paths and paths that resolve outside the product repository remain invalid.
 Verification methods are deterministic probes, agent judgment, and human
 attestation. Their configured coverage for each obligation must total `1.0`.
 
+## Derived status
+
+`pml status` derives an obligation signal from its approved plan and current
+evidence. In precedence order, the signals are `FAILED`, `BLOCKED`, `VERIFIED`,
+`PARTIAL`, `STALE`, `UNVERIFIED`, and `UNBOUND`. `UNBOUND` means no probes, agent
+judgment, or human attestation is configured for that obligation. `UNVERIFIED`
+means a plan is configured but it has no current evidence. Both have zero verified
+coverage, but only the latter has a verification method awaiting evidence.
+
+Each obligation row includes a compact plan summary such as
+`plan=probes:2 agent:0.5 human:0`; probe counts are the number of configured
+deterministic probes and agent and human values are their configured coverage. The
+final status line reports the count of every signal, including `UNBOUND` separately.
+
 ## Deterministic probe eligibility
 
 The following classification applies to the `verifies` target of every

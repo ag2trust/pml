@@ -45,7 +45,8 @@ stored freshness flag.
 Each obligation's approved verification coverage totals `1.0`. Current passing
 evidence contributes its configured portion:
 
-- no current evidence: `UNVERIFIED` or `STALE`, 0%;
+- no verification plan: `UNBOUND`, 0%;
+- a configured plan with no current evidence: `UNVERIFIED` or `STALE`, 0%;
 - some current passing coverage: `PARTIAL`;
 - all coverage current and passing: `VERIFIED`, 100%;
 - any current required check failed: `FAILED`;
