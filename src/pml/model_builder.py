@@ -271,10 +271,10 @@ def _surface_references(
 
 def _concept_required_by(
     resolution: ResolvedDefinition,
-) -> dict[str, list[dict[str, str]]]:
-    """Return per-concept behaviors whose structured conditions require each state."""
+) -> dict[str, list[str]]:
+    """Return per-concept behaviors whose structured conditions name the concept."""
 
-    references: dict[str, list[dict[str, str]]] = {}
+    references: dict[str, set[str]] = {}
     for behavior_path, behavior in resolution.behaviors.items():
         conditions = behavior.get("conditions")
         if not isinstance(conditions, list):
@@ -283,15 +283,10 @@ def _concept_required_by(
             if not isinstance(item, dict):
                 continue
             concept = item.get("concept")
-            state = item.get("state")
-            if not (isinstance(concept, str) and isinstance(state, str)):
+            if not isinstance(concept, str):
                 continue
-            references.setdefault(concept, []).append(
-                {"behavior": behavior_path, "state": state}
-            )
-    for entries in references.values():
-        entries.sort(key=lambda entry: (entry["state"], entry["behavior"]))
-    return references
+            references.setdefault(concept, set()).add(behavior_path)
+    return {concept: sorted(paths) for concept, paths in references.items()}
 
 
 def _relationships(

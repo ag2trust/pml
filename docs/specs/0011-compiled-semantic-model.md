@@ -176,10 +176,13 @@ changes are:
   for prose items. The single applicability obligation at
   `<behavior-path>.conditions` remains a `conditions` obligation whose definition
   carries the same list.
-- Each compiled `concept` gains a `required_by` inverse list of
-  `{state, behavior}` records, one per structured condition that names the
-  concept, sorted by `(state, behavior)`. Concepts with no structured requirer
-  serialize `required_by: []`.
+- Each compiled `concept` gains a `required_by` inverse list of behavior paths,
+  one per distinct behavior whose structured conditions name the concept, sorted
+  lexically. Concepts with no structured requirer serialize `required_by: []`.
+
+Every other version-2 rule (identity, obligation inventory, closed enums,
+canonical JSON encoding, definition digest) remains as approved, subject to the
+byte change for `format_version` documented in the encoding section.
 
 ## Version 2 delta
 
@@ -201,7 +204,7 @@ accept `format_version: 1` as a synonym; the two versions describe incompatible
 Every other version-1 rule (identity, ordering, canonical JSON encoding,
 definition digest, obligation inventory, closed enums) remains as approved.
 
-## Version 2 JSON structure
+## Version 3 JSON structure
 
 Every object below is closed: implementations MUST NOT add unlisted properties.
 Properties marked `?` are omitted when their authored value is absent; they are not
@@ -211,7 +214,7 @@ strings preserve authored Unicode text exactly.
 ```text
 compiled-model = {
   format: "pml.compiled",
-  format_version: 2,
+  format_version: 3,
   language_version: "0.1-draft",
   definition_digest: sha256-digest,
   project: compiled-project,
@@ -251,7 +254,8 @@ compiled-actor = {
 compiled-concept = {
   id: concept-id,
   meaning: authored-text,
-  states: list[authored-text]
+  states: list[authored-text],
+  required_by: list[behavior-path]
 }
 
 compiled-architecture-decision = {
@@ -319,9 +323,13 @@ compiled-behavior = {
 }
 
 compiled-conditions = {
-  statements: list[authored-text],
+  statements: list[condition-statement],
   obligation: obligation-id
 }
+
+condition-statement =
+  authored-text
+  | {concept: concept-id, state: authored-text}
 
 compiled-trigger =
   {kind: "direct", case: compiled-direct-trigger-case}
@@ -444,7 +452,7 @@ The model has these consistency invariants:
   or another compiled edge.
 
 The `definition_digest` uses the already approved definition-digest algorithm,
-made fully explicit here for the version 2 byte contract. After complete schema
+made fully explicit here for the version 3 byte contract. After complete schema
 and semantic validation, apply the approved reference canonicalization from
 [0013](0013-bare-behavior-reference-normalization.md), then encode the resulting
 canonical definition with this compact canonical definition JSON algorithm:
@@ -558,11 +566,11 @@ use-case goal.
 
 ## Stable obligations
 
-Version 2 uses these closed `obligation-kind` values and definitions:
+Version 3 uses these closed `obligation-kind` values and definitions:
 
 | `kind` | `definition` | Stable ID |
 | --- | --- | --- |
-| `conditions` | `{statements: list[authored-text]}` | `<behavior-path>.conditions` |
+| `conditions` | `{statements: list[condition-statement]}` | `<behavior-path>.conditions` |
 | `trigger` | `{statement: authored-text}` or `{signal: signal-id}` | direct: `<behavior-path>.trigger`; alternative: `<behavior-path>.trigger.<alternative-id>` |
 | `completion` | `{outcomes: list[obligation-id], failures: list[obligation-id]}` | `<behavior-path>.completion` |
 | `outcome_exclusivity` | `{alternatives: list[obligation-id]}` | `<behavior-path>.outcome` for `outcome.one_of` only |
@@ -668,17 +676,18 @@ The rules are:
    | `completion` obligation `definition.failures` | obligation ID |
    | `outcome_exclusivity` obligation `definition.alternatives` | obligation ID |
    | obligation `surfaces` (rule/outcome/failure) | surface-state path |
+   | `concepts[].required_by` | behavior path |
 
    The authored reference arrays named in rule 2 retain authored order instead;
    this table does not reorder them merely because their entries are references.
 5. Sort each symmetric relationship's two `endpoints` lexically before using the
    endpoint tuple as its identity and sort `declared_by` lexically by semantic
    path. Emit only one relationship record per endpoint pair.
-6. These rules exhaust every array in version 2. A future format change that adds
+6. These rules exhaust every array in version 3. A future format change that adds
    an array MUST assign it either source-sequence preservation or an explicit total
    sort key before that format version is approved.
 7. Serialize the ordered model with the canonical JSON algorithm below. No other
-   JSON layout or escape spelling conforms to version 2.
+   JSON layout or escape spelling conforms to version 3.
 8. Do not include timestamps, source paths, machine paths, random identifiers,
    generated state, or environment-dependent values.
 
@@ -699,8 +708,8 @@ trailing spaces, and ends with exactly one line feed after the top-level value.
 
 Emit values as follows:
 
-- The version-2 model's only number is `format_version`, emitted as the single
-  ASCII byte `2`. The model contains no booleans or nulls; absent optional
+- The version-3 model's only number is `format_version`, emitted as the single
+  ASCII byte `3`. The model contains no booleans or nulls; absent optional
   properties are omitted as specified above.
 - An empty object is `{}` and an empty array is `[]`.
 - A non-empty object begins with `{`. For each property in Unicode scalar-value

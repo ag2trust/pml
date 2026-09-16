@@ -1606,10 +1606,7 @@ def test_structured_concept_state_condition_compiles() -> None:
         if concept["id"] == "testimonial"
     )
     assert testimonial["required_by"] == [
-        {
-            "state": "polished",
-            "behavior": "domains.reviews.features.publishing.behaviors.publish",
-        }
+        "domains.reviews.features.publishing.behaviors.publish"
     ]
 
 
@@ -1705,4 +1702,22 @@ def test_pml_explain_concept_lists_required_by_behaviors() -> None:
     assert result.output is not None
     assert "required_by" in result.output
     assert "domains.reviews.features.publishing.behaviors.publish" in result.output
-    assert "polished" in result.output
+
+
+def test_structured_condition_concept_counts_as_a_feature_local_term() -> None:
+    from pml.validator import validate_document
+
+    document = _conditions_document(
+        [{"concept": "testimonial", "state": "polished"}]
+    )
+    document["domains"]["reviews"]["features"]["publishing"]["rules"] = {
+        "polished_visible": {
+            "statement": "A Testimonial MUST remain visible when polished."
+        }
+    }
+
+    resolution = validate_document(document)
+
+    assert not any(
+        item.code == "PML-W-RULE-SCOPE" for item in resolution.diagnostics
+    )

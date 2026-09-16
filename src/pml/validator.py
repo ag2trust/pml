@@ -312,6 +312,13 @@ def _behavior_texts(behavior: dict[str, Any]) -> Iterable[str]:
         for statement in conditions.get("statements", []):
             if isinstance(statement, str):
                 yield statement
+            elif isinstance(statement, dict):
+                concept = statement.get("concept")
+                state = statement.get("state")
+                if isinstance(concept, str):
+                    yield concept
+                if isinstance(state, str):
+                    yield state
 
     trigger = behavior.get("trigger")
     if isinstance(trigger, dict):

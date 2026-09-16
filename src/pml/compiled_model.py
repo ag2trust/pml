@@ -30,16 +30,11 @@ class CompiledActor(TypedDict):
     meaning: str
 
 
-class ConceptRequirer(TypedDict):
-    state: str
-    behavior: Path
-
-
 class CompiledConcept(TypedDict):
     id: str
     meaning: str
     states: list[str]
-    required_by: list[ConceptRequirer]
+    required_by: list[Path]
 
 
 class CompiledArchitectureDecision(TypedDict):
