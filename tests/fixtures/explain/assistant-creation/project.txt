@@ -1,0 +1,4 @@
+Project: example_product
+  Purpose: Demonstrate the proposed PML grammar.
+  Domains:
+    assistants: 2 behaviors, 5 rules

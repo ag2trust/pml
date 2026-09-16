@@ -68,6 +68,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     explain_parser.add_argument("manifest", type=Path)
     explain_parser.add_argument("canonical_id")
+    explain_parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="render the complete legacy compiled-record view",
+    )
     graph_parser = subparsers.add_parser(
         "graph", help="write the explicit compiled graph as deterministic DOT"
     )
@@ -156,7 +161,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         assert document is not None
         assert resolution.compiled_model is not None
-        result = explain_compiled_model(resolution.compiled_model, args.canonical_id)
+        result = explain_compiled_model(
+            resolution.compiled_model, args.canonical_id, raw=args.raw
+        )
         if result.diagnostic is not None:
             print(result.diagnostic, file=sys.stderr)
             return result.exit_code

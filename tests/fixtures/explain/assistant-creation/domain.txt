@@ -1,0 +1,4 @@
+Domain: domains.assistants
+  Purpose: Allow Members to create and operate Assistants.
+  Features:
+    creation: 2 behaviors, 5 rules

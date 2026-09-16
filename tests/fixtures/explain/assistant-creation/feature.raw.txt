@@ -1,0 +1,39 @@
+Feature
+  Authored:
+    id: "creation"
+    purpose: "Allow a Member to create a usable Assistant."
+    actors:
+      - "member"
+    experience: {"surfaces": [{"id": "creation_flow", "contains": ["Assistant identity input.", "Operating instructions input.", "Capability selection.", "Creation action."], "states": [{"id": "failure", "shows": ["domains.assistants.features.creation.behaviors.assistant_creation.failures.rejected"]}, {"id": "submitting", "contains": ["Progress indication.", "Duplicate-submission guard."]}], "accessibility": [], "responsive_behavior": []}]}
+    related_to: []
+    architecture: []
+  Derived identity/structural:
+    path: "domains.assistants.features.creation"
+    domain: "domains.assistants"
+  Derived inverse links:
+    rule_obligations:
+      - "domains.assistants.features.creation.rules.atomic_failure"
+      - "domains.assistants.features.creation.rules.credentials_not_exposed"
+      - "domains.assistants.features.creation.rules.customer_ownership"
+      - "domains.assistants.features.creation.rules.entitlement"
+      - "domains.assistants.features.creation.rules.ownership"
+    use_cases:
+      - "domains.assistants.features.creation.use_cases.create_from_scratch"
+    behaviors:
+      - "domains.assistants.features.creation.behaviors.assistant_creation"
+      - "domains.assistants.features.creation.behaviors.created_assistant_visibility"
+    stable_obligations:
+      - "domains.assistants.features.creation.rules.atomic_failure"
+      - "domains.assistants.features.creation.rules.credentials_not_exposed"
+      - "domains.assistants.features.creation.rules.customer_ownership"
+      - "domains.assistants.features.creation.rules.entitlement"
+      - "domains.assistants.features.creation.rules.ownership"
+      - "domains.assistants.features.creation.use_cases.create_from_scratch"
+    relationships: []
+    use_case_memberships: []
+  Derived coupling:
+    signals_produced:
+      - {"id": "assistant_created", "producer_behavior": "domains.assistants.features.creation.behaviors.assistant_creation"}
+    signals_consumed:
+      - {"id": "assistant_created", "producer_feature": "domains.assistants.features.creation"}
+    distinct_producer_feature_count: 0

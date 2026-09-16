@@ -13,6 +13,8 @@ from pml.validator import load_document, validate_document
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = ROOT / "tests" / "fixtures" / "compiled_model" / "canonical.pml.yaml"
+ASSISTANT_CREATION = ROOT / "examples" / "assistant-creation.pml.yaml"
+EXPLAIN_FIXTURES = ROOT / "tests" / "fixtures" / "explain" / "assistant-creation"
 
 
 @pytest.mark.parametrize(
@@ -31,10 +33,10 @@ CANONICAL = ROOT / "tests" / "fixtures" / "compiled_model" / "canonical.pml.yaml
         ("project.rules.a_rule", "Obligation"),
     ],
 )
-def test_explain_queries_each_requestable_compiled_category(
+def test_raw_explain_queries_each_requestable_compiled_category(
     canonical_id: str, category: str, capsys
 ) -> None:
-    assert cli.main(["explain", str(CANONICAL), canonical_id]) == 0
+    assert cli.main(["explain", str(CANONICAL), canonical_id, "--raw"]) == 0
 
     captured = capsys.readouterr()
     assert captured.err == ""
@@ -42,6 +44,139 @@ def test_explain_queries_each_requestable_compiled_category(
     assert "  Authored:\n" in captured.out
     assert "  Derived identity/structural:\n" in captured.out
     assert "  Derived inverse links:\n" in captured.out
+
+
+@pytest.mark.parametrize(
+    ("canonical_id", "snapshot"),
+    [
+        ("project", "project.txt"),
+        ("Assistant", "vocabulary.txt"),
+        ("member", "actor.txt"),
+        ("assistant", "concept.txt"),
+        ("domains.assistants", "domain.txt"),
+        ("domains.assistants.features.creation", "feature.txt"),
+        (
+            "domains.assistants.features.creation.behaviors.assistant_creation",
+            "behavior.txt",
+        ),
+        (
+            "domains.assistants.features.creation.use_cases.create_from_scratch",
+            "use-case.txt",
+        ),
+        ("assistant_created", "signal.txt"),
+        ("domains.assistants.features.creation.rules.ownership", "rule.txt"),
+    ],
+)
+def test_explain_default_summary_matches_each_available_node_kind_snapshot(
+    canonical_id: str, snapshot: str
+) -> None:
+    document, diagnostics = load_document(ASSISTANT_CREATION)
+    assert document is not None
+    assert diagnostics == []
+    resolution = validate_document(document)
+    assert resolution.compiled_model is not None
+
+    result = explain_compiled_model(resolution.compiled_model, canonical_id)
+
+    assert result.diagnostic is None
+    assert result.output == (EXPLAIN_FIXTURES / snapshot).read_text(encoding="utf-8")
+
+
+def test_explain_default_feature_summary_is_compact_plain_text(capsys) -> None:
+    feature = "domains.assistants.features.creation"
+
+    assert cli.main(["explain", str(ASSISTANT_CREATION), feature]) == 0
+
+    captured = capsys.readouterr()
+    assert "{" not in captured.out
+    assert "[" not in captured.out
+    assert len(captured.out.splitlines()) <= 60
+
+
+def test_explain_raw_feature_output_matches_the_legacy_stored_snapshot(capsys) -> None:
+    feature = "domains.assistants.features.creation"
+
+    assert cli.main(["explain", str(ASSISTANT_CREATION), feature, "--raw"]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == (EXPLAIN_FIXTURES / "feature.raw.txt").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_explain_summary_keeps_transition_kinds_and_wraps_complete_text() -> None:
+    model = _compiled(CANONICAL)
+
+    feature = explain_compiled_model(model, "domains.a_work.features.workspace")
+    project = explain_compiled_model(model, "project")
+
+    assert feature.output is not None
+    assert (
+        "a_start | 2 | one_of:2 | one_of:2 | z_started | record_ready | 2"
+        in feature.output
+    )
+    assert project.output is not None
+    assert r"\n line feed" in project.output
+    assert r"\u001f unit separator, café, and 🧭." in project.output
+    assert all(len(line) <= 100 for line in project.output.splitlines())
+
+
+def test_explain_summary_lists_failure_completion_signals_as_produced() -> None:
+    model = _compiled(ROOT / "examples" / "behavior-one-of-output.pml.yaml")
+    feature = explain_compiled_model(model, "domains.email.features.triage")
+    behavior = explain_compiled_model(
+        model, "domains.email.features.triage.behaviors.importance_decision"
+    )
+    signals = "email_processing_failed, important_email_processed, ordinary_email_processed"
+
+    assert feature.output is not None
+    assert f"importance_decision | 1 | one_of:2 | one_of:2 | {signals} | none | 1" in feature.output
+    assert behavior.output is not None
+    assert """  Signals produced:
+    email_processing_failed
+    important_email_processed
+    ordinary_email_processed
+""" in behavior.output
+
+
+def test_explain_summary_renders_a_subjectless_global_signal(tmp_path: Path, capsys) -> None:
+    source = tmp_path / "global-signal.pml.yaml"
+    source.write_text(
+        """pml: "0.1-draft"
+project:
+  id: global_signal
+  name: Global signal
+  purpose: Exercise a signal without a subject.
+domains:
+  core:
+    purpose: Exercise global signals.
+    features:
+      producer:
+        purpose: Produce a global signal.
+        behaviors:
+          emit:
+            trigger:
+              statement: A participant requests an update.
+            outcome:
+              statement: The update is available.
+              signal:
+                id: update_available
+                meaning: An update is available to all participants.
+""",
+        encoding="utf-8",
+    )
+
+    assert cli.main(["explain", str(source), "update_available"]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert captured.out == """Signal: update_available
+  Meaning: An update is available to all participants.
+  Subject: none
+  Produced by: domains.core.features.producer.behaviors.emit
+  Consumed by:
+    none
+"""
 
 
 def _collision_manifest(tmp_path: Path) -> Path:
@@ -150,7 +285,7 @@ def test_explain_renders_each_flat_identity_collision_in_compiled_category_order
 ) -> None:
     source = _collision_manifest(tmp_path)
 
-    assert cli.main(["explain", str(source), "shared"]) == 0
+    assert cli.main(["explain", str(source), "shared", "--raw"]) == 0
 
     captured = capsys.readouterr()
     assert captured.err == ""
@@ -166,7 +301,7 @@ def test_explain_surfaces_path_collisions_and_incoming_relationships_read_only(
     source = _collision_manifest(tmp_path)
     before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
 
-    assert cli.main(["explain", str(source), "domains.core.features.f"]) == 0
+    assert cli.main(["explain", str(source), "domains.core.features.f", "--raw"]) == 0
 
     captured = capsys.readouterr()
     assert captured.err == ""
@@ -180,7 +315,7 @@ def test_explain_surfaces_path_collisions_and_incoming_relationships_read_only(
 def test_explain_feature_coupling_section_snapshot(tmp_path: Path, capsys) -> None:
     source = _coupling_manifest(tmp_path)
 
-    assert cli.main(["explain", str(source), "domains.core.features.consumer"]) == 0
+    assert cli.main(["explain", str(source), "domains.core.features.consumer", "--raw"]) == 0
 
     captured = capsys.readouterr()
     assert captured.err == ""
@@ -217,7 +352,7 @@ def test_explain_renders_use_case_and_obligation_and_membership_from_both_sides(
     use_case = "domains.core.features.f.use_cases.u"
     behavior = "domains.core.features.f.behaviors.b"
 
-    assert cli.main(["explain", str(source), use_case]) == 0
+    assert cli.main(["explain", str(source), use_case, "--raw"]) == 0
 
     captured = capsys.readouterr()
     assert captured.err == ""
@@ -225,7 +360,7 @@ def test_explain_renders_use_case_and_obligation_and_membership_from_both_sides(
     assert f'    obligation: "{use_case}"' in captured.out
     assert f'"use_case": "{use_case}", "behavior": "{behavior}"' in captured.out
 
-    assert cli.main(["explain", str(source), behavior]) == 0
+    assert cli.main(["explain", str(source), behavior, "--raw"]) == 0
 
     captured = capsys.readouterr()
     assert captured.err == ""
@@ -239,7 +374,7 @@ def test_explain_renders_vocabulary_and_obligation_collision(tmp_path: Path, cap
     source = _collision_manifest(tmp_path)
     completion = "domains.core.features.f.behaviors.b.completion"
 
-    assert cli.main(["explain", str(source), completion]) == 0
+    assert cli.main(["explain", str(source), completion, "--raw"]) == 0
 
     captured = capsys.readouterr()
     assert captured.err == ""
@@ -343,7 +478,7 @@ def test_explain_argparse_rejects_missing_or_unrecognized_arguments(capsys) -> N
 def test_explain_preserves_authored_and_derived_classification(capsys) -> None:
     behavior = "domains.a_work.features.workspace.behaviors.a_start"
 
-    assert cli.main(["explain", str(CANONICAL), behavior]) == 0
+    assert cli.main(["explain", str(CANONICAL), behavior, "--raw"]) == 0
 
     captured = capsys.readouterr()
     assert captured.err == ""
@@ -361,7 +496,7 @@ def test_explain_lists_referencing_surface_state_on_obligation(capsys) -> None:
         "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved"
     )
 
-    assert cli.main(["explain", str(CANONICAL), obligation]) == 0
+    assert cli.main(["explain", str(CANONICAL), obligation, "--raw"]) == 0
 
     captured = capsys.readouterr()
     assert captured.err == ""
