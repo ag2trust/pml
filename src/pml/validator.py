@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 import copy
 import json
@@ -28,6 +28,7 @@ AMBIGUOUS_WORDS = (
     "should",
 )
 NORMATIVE_MARKER = re.compile(r"\b(MUST|MUST NOT)\b")
+SURFACE_NORMATIVE_MARKER = re.compile(r"\b(MUST NOT|MUST|SHALL|SHOULD)\b")
 ARCHITECTURE_IMPLEMENTATION_DETAIL = re.compile(
     r"(?:\b(?:file|filename|function|class|table|endpoint|topology|cluster|service)\b|(?-i:\bnode\b)|"
     r"\b(?:get|post|put|patch|delete)\s+/|(?-i:\b[a-z0-9_-]+\.(?:py|js|ts|java|go|rb|sql|ya?ml|json)\b)|"
@@ -324,6 +325,187 @@ def _is_transition_text(parts: tuple[Any, ...]) -> bool:
     )
 
 
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _keys(value: Any) -> list[str]:
+    return list(_mapping(value).keys())
+
+
+@dataclass(frozen=True)
+class _ShowTargetIndex:
+    """Canonical `shows` paths plus feature-local bare-ID resolution."""
+
+    paths: frozenset[str]
+    bare_paths: dict[tuple[str, str], str | None]
+
+
+def _eligible_show_targets(document: dict[str, Any]) -> _ShowTargetIndex:
+    """Index every obligation path a surface `shows` may resolve to.
+
+    A bare ID is valid only when it has one eligible terminal-path match in its
+    enclosing feature. Record that result while enumerating targets so each
+    surface state performs constant-time lookup instead of rescanning every
+    obligation in the definition.
+    """
+
+    paths: set[str] = set()
+    bare_paths: dict[tuple[str, str], str | None] = {}
+
+    def add(path: str, feature_path: str | None = None) -> None:
+        paths.add(path)
+        if feature_path is None:
+            return
+        key = (feature_path, path.rsplit(".", 1)[-1])
+        prior = bare_paths.get(key)
+        if prior is None and key in bare_paths:
+            return
+        bare_paths[key] = path if prior is None else None
+
+    for rule_id in _keys(document.get("rules")):
+        add(f"project.rules.{rule_id}")
+    for domain_id, domain in _mapping(document.get("domains")).items():
+        if not isinstance(domain, dict):
+            continue
+        for rule_id in _keys(domain.get("rules")):
+            add(f"domains.{domain_id}.rules.{rule_id}")
+        for feature_id, feature in _mapping(domain.get("features")).items():
+            if not isinstance(feature, dict):
+                continue
+            feature_path = f"domains.{domain_id}.features.{feature_id}"
+            for rule_id in _keys(feature.get("rules")):
+                add(f"{feature_path}.rules.{rule_id}", feature_path)
+            for behavior_id, behavior in _mapping(feature.get("behaviors")).items():
+                if not isinstance(behavior, dict):
+                    continue
+                behavior_path = f"{feature_path}.behaviors.{behavior_id}"
+                for rule_id in _keys(behavior.get("rules")):
+                    add(f"{behavior_path}.rules.{rule_id}", feature_path)
+                outcome = behavior.get("outcome")
+                if isinstance(outcome, dict):
+                    alternatives = outcome.get("one_of")
+                    if isinstance(alternatives, dict):
+                        for alternative_id in alternatives:
+                            add(
+                                f"{behavior_path}.outcome.{alternative_id}",
+                                feature_path,
+                            )
+                    elif "statement" in outcome:
+                        add(f"{behavior_path}.outcome", feature_path)
+                failures = behavior.get("failures")
+                if isinstance(failures, dict):
+                    for failure_id in failures:
+                        add(
+                            f"{behavior_path}.failures.{failure_id}",
+                            feature_path,
+                        )
+    return _ShowTargetIndex(frozenset(paths), bare_paths)
+
+
+def resolve_show_entry(
+    entry: str, feature_path: str, eligible: _ShowTargetIndex
+) -> str | None:
+    """Resolve one authored `shows` entry to a canonical obligation path.
+
+    Accepted forms, tried in order:
+      1. Full obligation path already present in ``eligible``.
+      2. Feature-relative path prepended to ``feature_path``.
+      3. Behavior-relative path (missing the leading ``behaviors.``).
+      4. Bare last-segment ID with exactly one match within the feature.
+    """
+
+    if entry in eligible.paths:
+        return entry
+    prefixed = f"{feature_path}.{entry}"
+    if prefixed in eligible.paths:
+        return prefixed
+    behavior_prefixed = f"{feature_path}.behaviors.{entry}"
+    if behavior_prefixed in eligible.paths:
+        return behavior_prefixed
+    return eligible.bare_paths.get((feature_path, entry))
+
+
+def _surface_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
+    """Reject normative markers, unresolved paths, and duplicate `shows`."""
+
+    diagnostics: list[Diagnostic] = []
+    eligible = _eligible_show_targets(document)
+    domains = _mapping(document.get("domains"))
+    for domain_id, domain in domains.items():
+        if not isinstance(domain, dict):
+            continue
+        for feature_id, feature in _mapping(domain.get("features")).items():
+            if not isinstance(feature, dict):
+                continue
+            feature_path = f"domains.{domain_id}.features.{feature_id}"
+            experience = feature.get("experience")
+            if not isinstance(experience, dict):
+                continue
+            surfaces = experience.get("surfaces")
+            if not isinstance(surfaces, dict):
+                continue
+            for surface_id, surface in surfaces.items():
+                if not isinstance(surface, dict):
+                    continue
+                surface_path = (
+                    f"{feature_path}.experience.surfaces.{surface_id}"
+                )
+                for parts, value in _walk(surface, (surface_path,)):
+                    if not isinstance(value, str):
+                        continue
+                    if SURFACE_NORMATIVE_MARKER.search(value):
+                        diagnostics.append(
+                            Diagnostic(
+                                _path(parts),
+                                "PML-E-SURFACE-NORMATIVE",
+                                "surfaces reference obligations instead of restating them; remove normative markers",
+                            )
+                        )
+                states = surface.get("states")
+                if not isinstance(states, dict):
+                    continue
+                for state_id, state in states.items():
+                    if not isinstance(state, dict):
+                        continue
+                    shows = state.get("shows")
+                    if not isinstance(shows, list):
+                        continue
+                    state_path = (
+                        f"{surface_path}.states.{state_id}.shows"
+                    )
+                    resolved_by_index: dict[int, str] = {}
+                    for index, entry in enumerate(shows):
+                        if not isinstance(entry, str):
+                            continue
+                        resolved = resolve_show_entry(
+                            entry, feature_path, eligible
+                        )
+                        if resolved is None:
+                            diagnostics.append(
+                                Diagnostic(
+                                    f"{state_path}[{index}]",
+                                    "undefined-reference",
+                                    f"'{entry}' does not resolve to a rule, outcome, outcome alternative, or failure in the enclosing feature or the definition",
+                                )
+                            )
+                            continue
+                        resolved_by_index[index] = resolved
+                    seen: dict[str, int] = {}
+                    for index, resolved in resolved_by_index.items():
+                        if resolved in seen:
+                            diagnostics.append(
+                                Diagnostic(
+                                    f"{state_path}[{index}]",
+                                    "duplicate-reference",
+                                    f"'{shows[index]}' resolves to the same obligation as '{shows[seen[resolved]]}'",
+                                )
+                            )
+                        else:
+                            seen[resolved] = index
+    return diagnostics
+
+
 def _semantic_diagnostics(
     document: dict[str, Any],
     resolution: ResolvedDefinition | None = None,
@@ -389,6 +571,8 @@ def _semantic_diagnostics(
                         "behavior transitions must describe observable product semantics, not implementation details",
                     )
                 )
+
+    diagnostics.extend(_surface_diagnostics(document))
 
     if resolution is None:
         resolution = resolve_references(document)

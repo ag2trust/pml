@@ -99,7 +99,7 @@ def is_supported_model(model: Mapping[str, Any]) -> bool:
     return (
         model.get("format") == "pml.compiled"
         and type(model.get("format_version")) is int
-        and model.get("format_version") == 1
+        and model.get("format_version") == 2
     )
 
 
@@ -360,7 +360,7 @@ def _obligation_fields(
         _prefixed(definition, "definition", *authored_keys),
         _selected(record, "id", "node", "kind")
         + _prefixed(definition, "definition", *derived_keys),
-        [],
+        _selected(record, "surfaces"),
     )
 
 

@@ -57,6 +57,22 @@ def test_reviewed_product_example_is_valid() -> None:
     assert validate_reviews(ROOT / "examples/reviewed-product") == []
 
 
+@pytest.mark.parametrize(
+    "model",
+    [
+        {"format": "pml.compiled", "format_version": 1},
+        {"format": "pml.other", "format_version": 2},
+        {"format": "pml.compiled", "format_version": True},
+        {},
+    ],
+)
+def test_build_review_targets_rejects_unsupported_compiled_model(
+    model: dict,
+) -> None:
+    with pytest.raises(ValueError, match="unsupported compiled model"):
+        build_review_targets(model)
+
+
 def test_invalid_review_reference_example_is_rejected() -> None:
     diagnostics = validate_reviews(ROOT / "examples/reviewed-product-invalid")
 
