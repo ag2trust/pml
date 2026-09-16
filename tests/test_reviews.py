@@ -34,6 +34,61 @@ def _source(tmp_path: Path) -> Path:
     return source
 
 
+def _coupling_warning_source(tmp_path: Path) -> Path:
+    producer_signals = [f"producer_{index}_ready" for index in range(4)]
+    features = {
+        f"producer_{index}": {
+            "purpose": f"Produce signal {index}.",
+            "behaviors": {
+                "produce": {
+                    "trigger": {"statement": f"Production {index} begins."},
+                    "outcome": {
+                        "statement": f"Production {index} completes.",
+                        "signal": {
+                            "id": signal_id,
+                            "meaning": f"Production {index} is ready.",
+                        },
+                    },
+                }
+            },
+        }
+        for index, signal_id in enumerate(producer_signals)
+    }
+    features["consumer"] = {
+        "purpose": "Consume the available work.",
+        "behaviors": {
+            "consume": {
+                "trigger": {
+                    "one_of": {
+                        signal_id: {"signal": signal_id}
+                        for signal_id in producer_signals
+                    }
+                },
+                "outcome": {"statement": "The consumed work is available."},
+            }
+        },
+    }
+    source = tmp_path / "coupling.pml.yaml"
+    source.write_text(
+        yaml.safe_dump(
+            {
+                "pml": "0.1-draft",
+                "project": {
+                    "id": "signal_coupling",
+                    "name": "Signal Coupling",
+                    "purpose": "Exercise derived signal coupling warnings.",
+                },
+                "domains": {
+                    "core": {"purpose": "Exercise signals.", "features": features}
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    return source
+
+
 def _targets(source: Path):
     document, diagnostics = load_document(source)
     assert document is not None and diagnostics == []
@@ -55,6 +110,25 @@ def _write_reviews(source: Path, reviews: dict) -> None:
 
 def test_reviewed_product_example_is_valid() -> None:
     assert validate_reviews(ROOT / "examples/reviewed-product") == []
+
+
+def test_review_allows_coupling_warnings_and_prints_them(tmp_path: Path) -> None:
+    source = _coupling_warning_source(tmp_path)
+    output = StringIO()
+
+    assert review_manifest(source, input_fn=lambda _: "quit", output=output) == 0
+
+    warning = (
+        "domains.core.features.consumer: [warning] [PML-W-SIGNAL-FAN-IN] "
+        "features should consume signals from no more than 3 distinct other features"
+    )
+    assert warning in output.getvalue()
+    assert "PML REVIEW UNAVAILABLE" not in output.getvalue()
+    assert "PML REVIEW SUMMARY:" in output.getvalue()
+    assert not (tmp_path / "reviews.yaml").exists()
+    assert [(item.code, item.severity) for item in validate_reviews(source)] == [
+        ("PML-W-SIGNAL-FAN-IN", "warning")
+    ]
 
 
 @pytest.mark.parametrize(
@@ -586,6 +660,9 @@ def test_oversized_review_write_preserves_existing_file(tmp_path: Path) -> None:
 def test_review_rejects_invalid_definition_before_prompting(tmp_path: Path) -> None:
     source = _source(tmp_path)
     (source / "index.pml.yaml").write_text("invalid: true\n", encoding="utf-8")
+    reviews = source / "reviews.yaml"
+    reviews.write_text("preserve this file\n", encoding="utf-8")
+    before = reviews.read_bytes()
     prompted = False
 
     def answer(prompt: str) -> str:
@@ -595,6 +672,7 @@ def test_review_rejects_invalid_definition_before_prompting(tmp_path: Path) -> N
 
     assert review_manifest(source, input_fn=answer, output=StringIO()) == 1
     assert prompted is False
+    assert reviews.read_bytes() == before
 
 
 def test_review_allows_a_definition_with_only_generic_warnings(tmp_path: Path) -> None:

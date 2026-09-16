@@ -36,6 +36,107 @@ def _behavior(index: int) -> dict[str, dict[str, str]]:
     }
 
 
+def _fan_in_document(
+    producer_count: int, *, include_same_feature_signal: bool = False
+) -> dict:
+    producer_signals = [f"producer_{index}_ready" for index in range(producer_count)]
+    features = {
+        f"producer_{index}": {
+            "purpose": f"Produce signal {index}.",
+            "behaviors": {
+                "produce": {
+                    "trigger": {"statement": f"Production {index} begins."},
+                    "outcome": {
+                        "statement": f"Production {index} completes.",
+                        "signal": {
+                            "id": producer_signals[index],
+                            "meaning": f"Production {index} is ready.",
+                        },
+                    },
+                }
+            },
+        }
+        for index in range(producer_count)
+    }
+    trigger_cases = {
+        signal_id: {"signal": signal_id} for signal_id in producer_signals
+    }
+    consumer_behaviors = {
+        "consume": {
+            "trigger": {"one_of": trigger_cases},
+            "outcome": {"statement": "The consumed work is available."},
+        }
+    }
+    if include_same_feature_signal:
+        consumer_behaviors["produce_local"] = {
+            "trigger": {"statement": "Local production begins."},
+            "outcome": {
+                "statement": "Local production completes.",
+                "signal": {
+                    "id": "local_ready",
+                    "meaning": "Local production is ready.",
+                },
+            },
+        }
+        trigger_cases["local_ready"] = {"signal": "local_ready"}
+    features["consumer"] = {
+        "purpose": "Consume the available work.",
+        "behaviors": consumer_behaviors,
+    }
+    return {
+        "pml": "0.1-draft",
+        "project": {
+            "id": "signal_coupling",
+            "name": "Signal Coupling",
+            "purpose": "Exercise derived signal coupling warnings.",
+        },
+        "domains": {"core": {"purpose": "Exercise signals.", "features": features}},
+    }
+
+
+def _fan_out_document(consumer_count: int) -> dict:
+    features = {
+        "producer": {
+            "purpose": "Produce the shared signal.",
+            "behaviors": {
+                "produce": {
+                    "trigger": {"statement": "Production begins."},
+                    "outcome": {
+                        "statement": "Production completes.",
+                        "signal": {
+                            "id": "shared_ready",
+                            "meaning": "Shared work is ready.",
+                        },
+                    },
+                }
+            },
+        }
+    }
+    features.update(
+        {
+            f"consumer_{index}": {
+                "purpose": f"Consume shared work {index}.",
+                "behaviors": {
+                    "consume": {
+                        "trigger": {"signal": "shared_ready"},
+                        "outcome": {"statement": f"Shared work {index} is available."},
+                    }
+                },
+            }
+            for index in range(consumer_count)
+        }
+    )
+    return {
+        "pml": "0.1-draft",
+        "project": {
+            "id": "signal_coupling",
+            "name": "Signal Coupling",
+            "purpose": "Exercise derived signal coupling warnings.",
+        },
+        "domains": {"core": {"purpose": "Exercise signals.", "features": features}},
+    }
+
+
 def test_diagnostic_severity_defaults_to_error() -> None:
     diagnostic = Diagnostic("path", "code", "message")
 
@@ -321,6 +422,44 @@ def test_feature_with_ten_behaviors_is_an_error() -> None:
     )
     assert any(item.code == "PML-W-BEHAVIOR-COUNT" for item in resolution.diagnostics)
     assert resolution.compiled_model is None
+
+
+def test_signal_fan_in_warning_is_emitted_above_three_other_features() -> None:
+    resolution = validate_document(_fan_in_document(4))
+
+    assert [(item.path, item.code, item.severity) for item in resolution.diagnostics] == [
+        (
+            "domains.core.features.consumer",
+            "PML-W-SIGNAL-FAN-IN",
+            "warning",
+        )
+    ]
+    assert resolution.compiled_model is not None
+
+
+@pytest.mark.parametrize("include_same_feature_signal", [False, True])
+def test_signal_fan_in_at_or_below_three_other_features_is_not_warned(
+    include_same_feature_signal: bool,
+) -> None:
+    resolution = validate_document(
+        _fan_in_document(3, include_same_feature_signal=include_same_feature_signal)
+    )
+
+    assert resolution.diagnostics == ()
+    assert resolution.compiled_model is not None
+
+
+def test_signal_fan_out_warning_is_emitted_above_five_consumer_features() -> None:
+    resolution = validate_document(_fan_out_document(6))
+
+    assert [(item.path, item.code, item.severity) for item in resolution.diagnostics] == [
+        (
+            "domains.core.features.producer.behaviors.produce.outcome",
+            "PML-W-SIGNAL-FAN-OUT",
+            "warning",
+        )
+    ]
+    assert resolution.compiled_model is not None
 
 
 def test_project_manifest_has_lint_warnings() -> None:
