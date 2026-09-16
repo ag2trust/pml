@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 import copy
 import json
@@ -332,48 +332,78 @@ def _keys(value: Any) -> list[str]:
     return list(_mapping(value).keys())
 
 
-def _eligible_show_targets(document: dict[str, Any]) -> set[str]:
-    """Return every obligation path a surface `shows` may resolve to."""
+@dataclass(frozen=True)
+class _ShowTargetIndex:
+    """Canonical `shows` paths plus feature-local bare-ID resolution."""
 
-    targets: set[str] = set()
+    paths: frozenset[str]
+    bare_paths: dict[tuple[str, str], str | None]
+
+
+def _eligible_show_targets(document: dict[str, Any]) -> _ShowTargetIndex:
+    """Index every obligation path a surface `shows` may resolve to.
+
+    A bare ID is valid only when it has one eligible terminal-path match in its
+    enclosing feature. Record that result while enumerating targets so each
+    surface state performs constant-time lookup instead of rescanning every
+    obligation in the definition.
+    """
+
+    paths: set[str] = set()
+    bare_paths: dict[tuple[str, str], str | None] = {}
+
+    def add(path: str, feature_path: str | None = None) -> None:
+        paths.add(path)
+        if feature_path is None:
+            return
+        key = (feature_path, path.rsplit(".", 1)[-1])
+        prior = bare_paths.get(key)
+        if prior is None and key in bare_paths:
+            return
+        bare_paths[key] = path if prior is None else None
+
     for rule_id in _keys(document.get("rules")):
-        targets.add(f"project.rules.{rule_id}")
+        add(f"project.rules.{rule_id}")
     for domain_id, domain in _mapping(document.get("domains")).items():
         if not isinstance(domain, dict):
             continue
         for rule_id in _keys(domain.get("rules")):
-            targets.add(f"domains.{domain_id}.rules.{rule_id}")
+            add(f"domains.{domain_id}.rules.{rule_id}")
         for feature_id, feature in _mapping(domain.get("features")).items():
             if not isinstance(feature, dict):
                 continue
             feature_path = f"domains.{domain_id}.features.{feature_id}"
             for rule_id in _keys(feature.get("rules")):
-                targets.add(f"{feature_path}.rules.{rule_id}")
+                add(f"{feature_path}.rules.{rule_id}", feature_path)
             for behavior_id, behavior in _mapping(feature.get("behaviors")).items():
                 if not isinstance(behavior, dict):
                     continue
                 behavior_path = f"{feature_path}.behaviors.{behavior_id}"
                 for rule_id in _keys(behavior.get("rules")):
-                    targets.add(f"{behavior_path}.rules.{rule_id}")
+                    add(f"{behavior_path}.rules.{rule_id}", feature_path)
                 outcome = behavior.get("outcome")
                 if isinstance(outcome, dict):
                     alternatives = outcome.get("one_of")
                     if isinstance(alternatives, dict):
                         for alternative_id in alternatives:
-                            targets.add(
-                                f"{behavior_path}.outcome.{alternative_id}"
+                            add(
+                                f"{behavior_path}.outcome.{alternative_id}",
+                                feature_path,
                             )
                     elif "statement" in outcome:
-                        targets.add(f"{behavior_path}.outcome")
+                        add(f"{behavior_path}.outcome", feature_path)
                 failures = behavior.get("failures")
                 if isinstance(failures, dict):
                     for failure_id in failures:
-                        targets.add(f"{behavior_path}.failures.{failure_id}")
-    return targets
+                        add(
+                            f"{behavior_path}.failures.{failure_id}",
+                            feature_path,
+                        )
+    return _ShowTargetIndex(frozenset(paths), bare_paths)
 
 
 def resolve_show_entry(
-    entry: str, feature_path: str, eligible: set[str]
+    entry: str, feature_path: str, eligible: _ShowTargetIndex
 ) -> str | None:
     """Resolve one authored `shows` entry to a canonical obligation path.
 
@@ -384,23 +414,15 @@ def resolve_show_entry(
       4. Bare last-segment ID with exactly one match within the feature.
     """
 
-    if entry in eligible:
+    if entry in eligible.paths:
         return entry
     prefixed = f"{feature_path}.{entry}"
-    if prefixed in eligible:
+    if prefixed in eligible.paths:
         return prefixed
     behavior_prefixed = f"{feature_path}.behaviors.{entry}"
-    if behavior_prefixed in eligible:
+    if behavior_prefixed in eligible.paths:
         return behavior_prefixed
-    feature_prefix = f"{feature_path}."
-    bare_matches = [
-        target
-        for target in eligible
-        if target.startswith(feature_prefix) and target.rsplit(".", 1)[-1] == entry
-    ]
-    if len(bare_matches) == 1:
-        return bare_matches[0]
-    return None
+    return eligible.bare_paths.get((feature_path, entry))
 
 
 def _surface_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:

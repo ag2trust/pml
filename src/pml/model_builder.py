@@ -7,7 +7,7 @@ from typing import Any, TYPE_CHECKING, cast
 
 from pml.compiled_model import CompiledModel, CompiledObligation
 from pml.serialization import definition_digest
-from pml.validator import _eligible_show_targets, resolve_show_entry
+from pml.validator import _ShowTargetIndex, _eligible_show_targets, resolve_show_entry
 
 if TYPE_CHECKING:
     from pml.resolver import Obligation, ReferenceResolver, ResolvedDefinition
@@ -98,7 +98,7 @@ def _compiled_outcome(behavior_path: str, definition: Mapping[str, Any]) -> dict
 def _compiled_experience(
     definition: Mapping[str, Any],
     feature_path: str,
-    eligible: set[str],
+    eligible: _ShowTargetIndex,
 ) -> dict[str, Any]:
     surfaces = []
     for surface_id, surface in sorted(
@@ -227,7 +227,7 @@ def _signal_consumers(
 
 
 def _surface_references(
-    document: Mapping[str, Any], eligible: set[str]
+    document: Mapping[str, Any], eligible: _ShowTargetIndex
 ) -> dict[str, list[str]]:
     """Return a map from obligation path to the surface state paths that show it."""
 
@@ -292,7 +292,7 @@ def _build_compiled_model(
     resolver: ReferenceResolver,
     resolution: ResolvedDefinition,
 ) -> CompiledModel:
-    """Build the complete v1 model from one diagnostic-free resolver result."""
+    """Build the complete v2 model from one diagnostic-free resolver result."""
 
     if resolution.diagnostics:
         raise ValueError("cannot compile a definition with diagnostics")
@@ -417,7 +417,7 @@ def _build_compiled_model(
     # These collections flatten records from multiple hierarchy levels. Sorting
     # source keys at each level is not equivalent to sorting the completed path
     # when an accepted ID has a terminal line feed, because LF sorts before the
-    # path separator. The compiled v1 contract orders the flattened records by
+    # path separator. The compiled v2 contract orders the flattened records by
     # their complete canonical path.
     features.sort(key=lambda feature: feature["path"])
     behaviors.sort(key=lambda behavior: behavior["path"])

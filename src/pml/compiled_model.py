@@ -1,4 +1,4 @@
-"""Shared in-memory types for the closed PML compiled-model v1 contract.
+"""Shared in-memory types for the closed PML compiled-model v2 contract.
 
 These types describe derived data only.  They intentionally do not compile,
 validate, or reinterpret authored PML definitions.

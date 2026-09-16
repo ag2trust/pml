@@ -76,11 +76,11 @@ def _messages(errors: object) -> list[str]:
     return messages
 
 
-def test_schema_accepts_complete_v1_model() -> None:
+def test_schema_accepts_complete_v2_model() -> None:
     assert list(_validator().iter_errors(_model())) == []
 
 
-def test_schema_accepts_every_v1_variant() -> None:
+def test_schema_accepts_every_v2_variant() -> None:
     model = _model()
     feature = "domains.notes.features.handling"
     behavior = feature + ".behaviors.handle_note"
@@ -120,7 +120,7 @@ def test_schema_accepts_every_v1_variant() -> None:
         (lambda model: model["behaviors"][0]["trigger"].__setitem__("case", {"obligation": "x", "statement": "x", "signal": "s"}), "is not valid under any of the given schemas"),  # type: ignore[index,union-attr]
     ],
 )
-def test_schema_rejects_closed_or_invalid_v1_shape(mutate, expected: str) -> None:  # type: ignore[no-untyped-def]
+def test_schema_rejects_closed_or_invalid_v2_shape(mutate, expected: str) -> None:  # type: ignore[no-untyped-def]
     model = _model()
     mutate(model)
     assert any(expected in error.message for error in _validator().iter_errors(model))

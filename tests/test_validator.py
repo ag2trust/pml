@@ -8,7 +8,13 @@ import yaml
 
 from pml.diagnostics import Diagnostic
 from pml.formats import FORMAT_CHECKER
-from pml.validator import load_document, validate_document, validate_file
+from pml.validator import (
+    _eligible_show_targets,
+    load_document,
+    resolve_show_entry,
+    validate_document,
+    validate_file,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1278,6 +1284,27 @@ def test_surface_shows_resolves_bare_relative_and_full_forms(
     manifest = _surface_manifest(tmp_path, {"shows": [entry]})
 
     assert validate_file(manifest) == []
+
+
+def test_surface_bare_shows_lookup_is_bounded_after_indexing() -> None:
+    """The maximum surface-state cardinality cannot rescan every rule per state."""
+
+    document, feature = _cardinality_document()
+    document["rules"] = {
+        f"project_rule_{index}": {
+            "statement": f"The system MUST preserve project rule {index}."
+        }
+        for index in range(10_000)
+    }
+    feature_path = "domains.notes.features.creation"
+    eligible = _eligible_show_targets(document)
+
+    # 25 domains × 25 features × 25 surfaces × 25 states is the largest
+    # schema-permitted population. Each lookup must use the prebuilt index.
+    for _ in range(25**4):
+        assert resolve_show_entry("preserve_content", feature_path, eligible) == (
+            "domains.notes.features.creation.rules.preserve_content"
+        )
 
 
 def test_surface_shows_resolves_full_path_in_another_feature(

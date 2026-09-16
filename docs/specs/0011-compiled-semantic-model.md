@@ -868,7 +868,7 @@ With owner approval granted, delivery follows the repository order:
 2. Add negative conformance cases for numeric, boolean, null, sequence, and mapping
    keys; escaped high and low surrogates; and adjacent escaped surrogate code
    points. Add a positive case containing a supplementary Unicode scalar.
-3. Define the version 1 JSON Schema and shared in-memory types.
+3. Define the version 2 JSON Schema and shared in-memory types.
 4. Refactor reference resolution and stable obligation enumeration to populate the
    model without changing validation outcomes.
 5. Add compiled-model conformance fixtures plus deterministic serialization
