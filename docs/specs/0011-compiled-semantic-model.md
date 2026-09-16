@@ -654,8 +654,8 @@ Version 5 uses these closed `obligation-kind` values and definitions:
 | `trigger` | `{statement: authored-text}` or `{signal: signal-id}` | direct: `<behavior-path>.trigger`; alternative: `<behavior-path>.trigger.<alternative-id>` |
 | `completion` | `{outcomes: list[obligation-id], failures: list[obligation-id]}` | `<behavior-path>.completion` |
 | `outcome_exclusivity` | `{alternatives: list[obligation-id]}` | `<behavior-path>.outcome` for `outcome.one_of` only |
-| `outcome` | `{statement: authored-text, signal?: signal-id}` | direct: `<behavior-path>.outcome`; alternative: `<behavior-path>.outcome.<alternative-id>` |
-| `failure` | `{statement: authored-text, signal?: signal-id}` | `<behavior-path>.failures.<failure-id>` |
+| `outcome` | `{statement: authored-text, signal?: signal-id, transitions?: list[compiled-completion-transition]}` | direct: `<behavior-path>.outcome`; alternative: `<behavior-path>.outcome.<alternative-id>` |
+| `failure` | `{statement: authored-text, signal?: signal-id, transitions?: list[compiled-completion-transition]}` | `<behavior-path>.failures.<failure-id>` |
 | `rule` | `{statement: authored-text}` | `<scope-path>.rules.<rule-id>` |
 | `use_case` | `{actor: actor-id, goal: authored-text, behaviors: list[behavior-path]}` | `<feature-path>.use_cases.<use-case-id>` |
 | `architecture_constraint` | `{statement: authored-text}` | `architecture.<decision-id>.constraints.<constraint-id>` |

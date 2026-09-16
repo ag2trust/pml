@@ -305,7 +305,13 @@ def _behavior_fields(record: Record) -> tuple[list[tuple[str, Any]], list[tuple[
     structural.extend(_selected(record, "completion_obligation"))
     failures = record["failures"]
     authored.append(
-        ("failures", [dict(_selected(failure, "statement", "signal")) for failure in failures])
+        (
+            "failures",
+            [
+                dict(_selected(failure, "statement", "signal", "transitions"))
+                for failure in failures
+            ],
+        )
     )
     structural.append(
         ("failures", [dict(_selected(failure, "id", "obligation")) for failure in failures])
@@ -316,11 +322,19 @@ def _behavior_fields(record: Record) -> tuple[list[tuple[str, Any]], list[tuple[
 
 def _transition_authored(field: str, transition: Record) -> list[tuple[str, Any]]:
     if transition["kind"] == "direct":
-        return [(f"{field}.case", dict(_selected(transition["case"], "statement", "signal")))]
+        return [
+            (
+                f"{field}.case",
+                dict(_selected(transition["case"], "statement", "signal", "transitions")),
+            )
+        ]
     return [
         (
             f"{field}.cases",
-            [dict(_selected(case, "statement", "signal")) for case in transition["cases"]],
+            [
+                dict(_selected(case, "statement", "signal", "transitions"))
+                for case in transition["cases"]
+            ],
         )
     ]
 
@@ -353,8 +367,8 @@ def _obligation_fields(
         "trigger": ("statement", "signal"),
         "completion": (),
         "outcome_exclusivity": (),
-        "outcome": ("statement", "signal"),
-        "failure": ("statement", "signal"),
+        "outcome": ("statement", "signal", "transitions"),
+        "failure": ("statement", "signal", "transitions"),
         "rule": ("statement",),
         "use_case": ("actor", "goal", "behaviors"),
         "architecture_constraint": ("statement",),
