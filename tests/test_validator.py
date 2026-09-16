@@ -160,6 +160,20 @@ def test_generic_rule_ignores_an_empty_vocabulary_key() -> None:
     ]
 
 
+def test_generic_rule_ignores_a_punctuation_only_vocabulary_key() -> None:
+    document, feature = _cardinality_document()
+    document["vocabulary"] = {"+": {"meaning": "A punctuation-only term."}}
+    feature["rules"] = {
+        "generic_enforcement": {
+            "statement": "C++ MUST be enforced for every affected resource."
+        }
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert any(item.code == "PML-W-RULE-GENERIC" for item in diagnostics)
+
+
 def test_generic_rule_with_an_actor_or_concept_does_not_warn() -> None:
     document, feature = _cardinality_document()
     document["actors"]["reader"] = {"meaning": "A person reading a Testimonial."}

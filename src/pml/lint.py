@@ -342,7 +342,7 @@ def _identifiers(document: dict[str, Any]) -> list[str]:
         (
             str(identifier)
             for identifier in identifiers
-            if str(identifier).replace("_", " ").strip()
+            if _WORD.search(str(identifier).replace("_", " "))
         ),
         key=str.casefold,
     )
