@@ -105,6 +105,15 @@ and consumers; omit it for a global product occurrence. Signals are meaningful
 product occurrences, not required code events, messages, queues, or transports.
 Signal references in triggers resolve to these inline definitions.
 
+Tooling derives warning-only signal-coupling diagnostics from the compiled signal
+edges. `PML-W-SIGNAL-FAN-IN` warns when a feature consumes signals from more than
+three distinct other features; consumption of a signal produced in that same
+feature never counts. `PML-W-SIGNAL-FAN-OUT` warns when one signal is consumed in
+more than five distinct features. These checks do not add a PML relationship or
+obligation. Feature explain output includes the corresponding derived coupling
+projection; its exact fields and ordering are defined in the
+[compiled semantic model](specs/0011-compiled-semantic-model.md#signal-coupling-diagnostics).
+
 ### `rules.<id>`
 
 A rule contains one `statement` with `MUST` or `MUST NOT`. Rules express invariants

@@ -502,23 +502,36 @@ def _definition_snapshot(
 ) -> tuple[dict[str, Any] | None, tuple[ReviewTarget, ...], list[Diagnostic]]:
     document, diagnostics = load_document(manifest)
     if document is None:
-        return None, (), diagnostics
+        return None, (), [
+            diagnostic
+            for diagnostic in diagnostics
+            if diagnostic.severity == "error"
+        ]
     resolution = validate_document(document)
-    diagnostics = list(resolution.diagnostics)
-    if diagnostics:
-        return None, (), diagnostics
+    errors = [
+        diagnostic
+        for diagnostic in resolution.diagnostics
+        if diagnostic.severity == "error"
+    ]
+    if errors:
+        return None, (), errors
     assert resolution.compiled_model is not None
-    return document, build_review_targets(resolution.compiled_model), []
+    warnings = [
+        diagnostic
+        for diagnostic in resolution.diagnostics
+        if diagnostic.severity == "warning"
+    ]
+    return document, build_review_targets(resolution.compiled_model), warnings
 
 
 def validate_reviews(manifest: Path) -> list[Diagnostic]:
     """Validate optional review metadata against one valid definition snapshot."""
 
-    _, targets, diagnostics = _definition_snapshot(manifest)
-    if diagnostics:
+    document, targets, diagnostics = _definition_snapshot(manifest)
+    if document is None:
         return diagnostics
-    _, diagnostics = load_reviews(manifest, targets)
-    return diagnostics
+    _, review_diagnostics = load_reviews(manifest, targets)
+    return diagnostics + review_diagnostics
 
 
 def _mount_path(root: Path, source: Path) -> tuple[str, ...]:
@@ -652,10 +665,12 @@ def review_manifest(
         )
         return 1
 
-    _, targets, diagnostics = _definition_snapshot(manifest)
-    if diagnostics:
+    document, targets, diagnostics = _definition_snapshot(manifest)
+    if document is None:
         _print_diagnostics(diagnostics, output, "PML REVIEW UNAVAILABLE")
         return 1
+    for diagnostic in diagnostics:
+        print(diagnostic.format(), file=output)
     loaded, diagnostics = load_reviews(manifest, targets)
     if loaded is None:
         _print_diagnostics(diagnostics, output, "PML REVIEW UNAVAILABLE")
@@ -760,12 +775,16 @@ def review_manifest(
                     file=output,
                 )
                 return 1
-            _, updated_targets, edit_diagnostics = _definition_snapshot(manifest)
-            if edit_diagnostics:
+            updated_document, updated_targets, edit_diagnostics = _definition_snapshot(
+                manifest
+            )
+            if updated_document is None:
                 _print_diagnostics(
                     edit_diagnostics, output, "PML REVIEW EDIT INVALID"
                 )
                 return 1
+            for diagnostic in edit_diagnostics:
+                print(diagnostic.format(), file=output)
             updated = {item.id: item for item in updated_targets}
             loaded.target_ids = frozenset(updated)
             removed = sorted(set(records).difference(updated))
