@@ -42,7 +42,8 @@ stored freshness flag.
 
 ## Confidence
 
-Each obligation's approved verification coverage totals `1.0`. Current passing
+When an obligation has an approved verification plan, its coverage totals `1.0`.
+An obligation without a plan has zero coverage and is `UNBOUND`. Current passing
 evidence contributes its configured portion:
 
 - no verification plan: `UNBOUND`, 0%;
@@ -67,9 +68,10 @@ has processed the latest change without trusting a mutable “synced” flag.
 
 ## Architecture conformance
 
-Architecture constraints use the same plan and evidence requirements but do not
-share product binding entries or state. Their owner-controlled bindings are keyed by
-decision ID under the `architecture` map, generated state is
+Architecture constraints use the same optional-plan coverage and evidence rules:
+each configured plan totals `1.0`, while no plan derives `UNBOUND` with zero
+coverage. They do not share product binding entries or state. Their owner-controlled
+bindings are keyed by decision ID under the `architecture` map, generated state is
 `.pml/architecture/<decision>.state.yaml`, and `pml architecture-status` derives
 their status independently. Neither evidence kind can prove the other conformance
 dimension.

@@ -22,9 +22,10 @@ verification:
     agent_judgment: 0.4
 ```
 
-Coverage for one obligation must total exactly `1.0`. Probe, agent-judgment, and
-human-attestation coverage are explicit. Coverage is approved verification metadata,
-not part of the product definition and not a generated score.
+When an obligation has a verification plan, its coverage must total exactly `1.0`.
+Probe, agent-judgment, and human-attestation coverage are explicit. An obligation
+without a plan is unbound and has zero coverage. Coverage is approved verification
+metadata, not part of the product definition and not a generated score.
 
 ## Deterministic probes
 
