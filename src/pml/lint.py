@@ -338,7 +338,14 @@ def _identifiers(document: dict[str, Any]) -> list[str]:
     for _, domain in _items(document.get("domains")):
         for _, feature in _items(_mapping(domain).get("features")):
             identifiers.update(_mapping(_mapping(feature).get("behaviors")).keys())
-    return sorted((str(identifier) for identifier in identifiers), key=str.casefold)
+    return sorted(
+        (
+            str(identifier)
+            for identifier in identifiers
+            if str(identifier).replace("_", " ").strip()
+        ),
+        key=str.casefold,
+    )
 
 
 def _mentions_identifier(statement: str, identifiers: Iterable[str]) -> bool:

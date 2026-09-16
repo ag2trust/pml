@@ -140,6 +140,26 @@ def test_generic_rule_does_not_match_a_partial_punctuation_bearing_vocabulary_ke
     ]
 
 
+def test_generic_rule_ignores_an_empty_vocabulary_key() -> None:
+    document, feature = _cardinality_document()
+    document["vocabulary"] = {"": {"meaning": "An empty vocabulary term."}}
+    feature["rules"] = {
+        "generic_enforcement": {
+            "statement": "MUST be enforced for every affected resource."
+        }
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert [(item.path, item.code, item.severity) for item in diagnostics] == [
+        (
+            "domains.notes.features.creation.rules.generic_enforcement.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        )
+    ]
+
+
 def test_generic_rule_with_an_actor_or_concept_does_not_warn() -> None:
     document, feature = _cardinality_document()
     document["actors"]["reader"] = {"meaning": "A person reading a Testimonial."}
