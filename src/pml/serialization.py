@@ -43,8 +43,8 @@ def _compact(value: Any) -> str:
 def _pretty(value: Any, depth: int = 0) -> str:
     if isinstance(value, str):
         return _encoded_string(value)
-    if type(value) is int and value == 1:
-        return "1"
+    if type(value) is int and value == 2:
+        return "2"
     if isinstance(value, Mapping):
         items = _sorted_items(value)
         if not items:
@@ -64,7 +64,7 @@ def _pretty(value: Any, depth: int = 0) -> str:
         )
         return f"[\n{body}\n{'  ' * depth}]"
     raise TypeError(
-        "compiled-model JSON contains only objects, arrays, strings, and format version 1"
+        "compiled-model JSON contains only objects, arrays, strings, and format version 2"
     )
 
 
@@ -75,19 +75,19 @@ def canonical_definition_bytes(document: Mapping[str, Any]) -> bytes:
 
 
 def definition_digest(document: Mapping[str, Any]) -> str:
-    """Return the definition digest fixed by the compiled-model v1 contract."""
+    """Return the definition digest fixed by the compiled-model v2 contract."""
 
     encoded = canonical_definition_bytes(document)
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 def _canonical_compiled_json_bytes(value: Any) -> bytes:
-    """Encode a value with the compiled-model v1 layout (for conformance tests)."""
+    """Encode a value with the compiled-model v2 layout (for conformance tests)."""
 
     return (_pretty(value) + "\n").encode("utf-8")
 
 
 def serialize_compiled_model(model: CompiledModel) -> bytes:
-    """Serialize a compiled-model v1 value to its canonical, newline-ended bytes."""
+    """Serialize a compiled-model v2 value to its canonical, newline-ended bytes."""
 
     return _canonical_compiled_json_bytes(model)

@@ -150,7 +150,7 @@
       "states": []
     }
   ],
-  "definition_digest": "sha256:50b13fc3e9557b58997d1bd88956425eebdfa32c950cc7d5ab6bcebafd6e4482",
+  "definition_digest": "sha256:f5b9cb75052f2554eaba883ea435a7cb5a2091a11c5a89e43a6f4750cfff49b9",
   "domains": [
     {
       "features": [
@@ -207,17 +207,16 @@
             ],
             "states": [
               {
-                "id": "a_empty",
-                "statements": [
+                "contains": [
                   "No record is selected.",
                   "An invitation is visible."
-                ]
+                ],
+                "id": "a_empty"
               },
               {
                 "id": "z_ready",
-                "statements": [
-                  "The ready state is visible.",
-                  "The next action is visible."
+                "shows": [
+                  "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved"
                 ]
               }
             ]
@@ -267,7 +266,7 @@
     }
   ],
   "format": "pml.compiled",
-  "format_version": 1,
+  "format_version": 2,
   "language_version": "0.1-draft",
   "obligations": [
     {
@@ -354,7 +353,10 @@
       },
       "id": "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved",
       "kind": "outcome",
-      "node": "domains.a_work.features.workspace.behaviors.a_start"
+      "node": "domains.a_work.features.workspace.behaviors.a_start",
+      "surfaces": [
+        "domains.a_work.features.workspace.experience.surfaces.a_workspace.states.z_ready"
+      ]
     },
     {
       "definition": {

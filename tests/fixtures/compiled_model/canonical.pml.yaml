@@ -136,8 +136,11 @@ domains:
               responsive_behavior: [Keep the action visible., Keep the status readable.]
               accessibility: [Announce the result., Identify the action.]
               states:
-                z_ready: [The ready state is visible., The next action is visible.]
-                a_empty: [No record is selected., An invitation is visible.]
+                z_ready:
+                  shows:
+                    - behaviors.a_start.outcome.z_saved
+                a_empty:
+                  contains: [No record is selected., An invitation is visible.]
               contains: [The primary action., The record status.]
         purpose: Start and finish work records.
     purpose: Coordinate current work.
