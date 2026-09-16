@@ -17,6 +17,8 @@ vocabulary:
       - user
   Assistant:
     meaning: A Customer-owned AI worker configured by a Member.
+  Credentials:
+    meaning: Authentication material used to access an external capability.
 
 actors:
   member:
@@ -60,7 +62,7 @@ domains:
             trigger:
               statement: The Member provides valid configuration and requests creation.
             outcome:
-              statement: The Assistant is created for the Member's Customer and can respond to a message.
+              statement: The Assistant is created for the Member's organization and can respond to a message.
               signal:
                 id: assistant_created
                 subject: assistant
