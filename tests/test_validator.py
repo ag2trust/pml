@@ -317,6 +317,54 @@ def test_assistant_creation_example_has_rule_scope_warnings() -> None:
             "rule mentions no term used in this feature; consider domain or project scope",
             "warning",
         ),
+        (
+            "concepts.assistant.states[0]",
+            "PML-W-STATE-DEAD-END",
+            "declared state 'draft' has no completion transition out of it or into none",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[0]",
+            "PML-W-STATE-UNREACHABLE",
+            "declared state 'draft' has no completion transition into it",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[1]",
+            "PML-W-STATE-DEAD-END",
+            "declared state 'active' has no completion transition out of it or into none",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[2]",
+            "PML-W-STATE-DEAD-END",
+            "declared state 'paused' has no completion transition out of it or into none",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[2]",
+            "PML-W-STATE-UNREACHABLE",
+            "declared state 'paused' has no completion transition into it",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[3]",
+            "PML-W-STATE-DEAD-END",
+            "declared state 'retired' has no completion transition out of it or into none",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[3]",
+            "PML-W-STATE-UNREACHABLE",
+            "declared state 'retired' has no completion transition into it",
+            "warning",
+        ),
+        (
+            "domains.assistants.features.creation.behaviors.assistant_creation.conditions[0].state",
+            "PML-W-CONDITION-STATE-UNPRODUCED",
+            "condition requires state 'draft' of concept 'assistant', but no completion transition produces it",
+            "warning",
+        ),
     ]
 
 

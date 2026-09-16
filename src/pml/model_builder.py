@@ -36,11 +36,29 @@ def _signal_reference(definition: Mapping[str, Any]) -> str | None:
     return signal if isinstance(signal, str) else None
 
 
+def _transition_parts(value: str) -> tuple[str, str]:
+    """Split a schema-valid authored transition into its endpoint spellings."""
+
+    from_state, _, to_state = value.partition(" -> ")
+    return from_state, to_state
+
+
 def _compiled_completion_definition(definition: Mapping[str, Any]) -> dict[str, Any]:
     compiled = {"statement": definition["statement"]}
     signal_id = _signal_reference(definition)
     if signal_id is not None:
         compiled["signal"] = signal_id
+    transitions = definition.get("transitions")
+    if isinstance(transitions, dict):
+        compiled["transitions"] = [
+            {
+                "concept": concept_id,
+                "from": _transition_parts(transition)[0],
+                "to": _transition_parts(transition)[1],
+            }
+            for concept_id, transition in sorted(transitions.items())
+            if isinstance(transition, str)
+        ]
     return compiled
 
 
@@ -289,6 +307,49 @@ def _concept_required_by(
     return {concept: sorted(paths) for concept, paths in references.items()}
 
 
+def _concept_transitions(
+    behaviors: list[dict[str, Any]],
+) -> dict[str, list[dict[str, str]]]:
+    """Derive one sorted transition index for each concept from completions."""
+
+    references: dict[str, list[dict[str, str]]] = {}
+    for behavior in behaviors:
+        outcome = _mapping(behavior.get("outcome"))
+        if outcome.get("kind") == "one_of":
+            completions = _sequence(outcome.get("cases"))
+        else:
+            completions = [_mapping(outcome.get("case"))]
+        completions.extend(_sequence(behavior.get("failures")))
+        for completion in completions:
+            if not isinstance(completion, dict):
+                continue
+            completion_path = completion.get("obligation")
+            if not isinstance(completion_path, str):
+                continue
+            for transition in _sequence(completion.get("transitions")):
+                if not isinstance(transition, dict):
+                    continue
+                concept = transition.get("concept")
+                from_state = transition.get("from")
+                to_state = transition.get("to")
+                if not all(isinstance(value, str) for value in (concept, from_state, to_state)):
+                    continue
+                references.setdefault(concept, []).append(
+                    {
+                        "from": from_state,
+                        "to": to_state,
+                        "completion": completion_path,
+                    }
+                )
+    for transitions in references.values():
+        transitions.sort(
+            key=lambda transition: (
+                transition["from"], transition["to"], transition["completion"]
+            )
+        )
+    return references
+
+
 def _relationships(
     resolution: ResolvedDefinition,
 ) -> list[dict[str, Any]]:
@@ -508,9 +569,10 @@ def _build_compiled_model(
     terms.sort(key=lambda term: (term["id"], term["source_kind"]))
 
     concept_required_by = _concept_required_by(resolution)
+    concept_transitions = _concept_transitions(behaviors)
     model = {
         "format": "pml.compiled",
-        "format_version": 4,
+        "format_version": 5,
         "language_version": "0.1-draft",
         "definition_digest": definition_digest(document),
         "project": {
@@ -541,6 +603,7 @@ def _build_compiled_model(
                 "meaning": definition["meaning"],
                 "states": _sequence(definition.get("states")),
                 "required_by": concept_required_by.get(concept_id, []),
+                "transitions": concept_transitions.get(concept_id, []),
             }
             for concept_id, definition in sorted(resolution.concepts.items())
         ],

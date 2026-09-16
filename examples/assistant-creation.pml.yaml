@@ -62,6 +62,8 @@ domains:
               statement: The Member provides valid configuration and requests creation.
             outcome:
               statement: The Assistant is created for the Member's organization and can respond to a message.
+              transitions:
+                assistant: none -> active
               signal:
                 id: assistant_created
                 subject: assistant

@@ -143,13 +143,15 @@
       "states": [
         "ready",
         "draft"
-      ]
+      ],
+      "transitions": []
     },
     {
       "id": "z_record",
       "meaning": "The last concept by ID.",
       "required_by": [],
-      "states": []
+      "states": [],
+      "transitions": []
     }
   ],
   "definition_digest": "sha256:31a2b2edf593d50eb942c38c70000184744cd046c1c4696d2a7b7cdaa5522da6",
@@ -268,7 +270,7 @@
     }
   ],
   "format": "pml.compiled",
-  "format_version": 4,
+  "format_version": 5,
   "language_version": "0.1-draft",
   "obligations": [
     {

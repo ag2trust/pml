@@ -99,7 +99,7 @@ def is_supported_model(model: Mapping[str, Any]) -> bool:
     return (
         model.get("format") == "pml.compiled"
         and type(model.get("format_version")) is int
-        and model.get("format_version") == 4
+        and model.get("format_version") == 5
     )
 
 
@@ -239,7 +239,7 @@ def _record_fields(
         return (
             _selected(record, "id", "meaning", "states"),
             [],
-            _selected(record, "required_by"),
+            _selected(record, "required_by", "transitions"),
         )
     if category == "architecture":
         return (

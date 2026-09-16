@@ -301,7 +301,17 @@
       "required": ["statement"],
       "properties": {
         "statement": {"$ref": "#/$defs/nonEmpty"},
-        "signal": {"$ref": "#/$defs/inlineSignal"}
+        "signal": {"$ref": "#/$defs/inlineSignal"},
+        "transitions": {"$ref": "#/$defs/transitionMap"}
+      }
+    },
+    "transitionMap": {
+      "type": "object",
+      "maxProperties": 3,
+      "propertyNames": {"$ref": "#/$defs/id"},
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^.+ -> .+$"
       }
     },
     "inlineSignal": {

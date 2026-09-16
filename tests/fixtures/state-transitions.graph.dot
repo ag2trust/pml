@@ -1,0 +1,8 @@
+digraph pml {
+  "concepts.note.states.active" [label="concepts.note.states.active"];
+  "concepts.note.states.draft" [label="concepts.note.states.draft"];
+  "concepts.note.states.none" [label="concepts.note.states.none"];
+  "concepts.note.states.active" -> "concepts.note.states.none" [kind="state", label="domains.notes.features.lifecycle.behaviors.remove.outcome", style="solid"];
+  "concepts.note.states.draft" -> "concepts.note.states.active" [kind="state", label="domains.notes.features.lifecycle.behaviors.activate.outcome", style="solid"];
+  "concepts.note.states.none" -> "concepts.note.states.draft" [kind="state", label="domains.notes.features.lifecycle.behaviors.create.outcome", style="solid"];
+}
