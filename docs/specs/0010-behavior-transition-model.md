@@ -86,16 +86,34 @@ Each occurrence of an alternative trigger initiates a behavior evaluation.
 
 An outcome is either one direct outcome or a closed, ID-keyed `one_of` map of
 mutually exclusive successful alternatives. Every direct outcome or outcome
-alternative requires one local `statement` and may define one signal.
+alternative requires one local `statement` and may define one signal, an optional
+bounded product-state `transitions` map, or both.
 
 Optional `failures` is a closed, ID-keyed map of authored unsuccessful
 completions. Every failure requires one local `statement` and may define one
-signal. Rejections and cancellations belong in `failures` only when they prevent
-the behavior's successful result; otherwise they are separate behaviors.
+signal, an optional bounded product-state `transitions` map, or both. Rejections
+and cancellations belong in `failures` only when they prevent the behavior's
+successful result; otherwise they are separate behaviors.
 
 Each initiated evaluation MUST complete exactly one successful outcome or one
 authored failure. Completing none or more than one is nonconformant. A correctly
 produced authored failure is conformant.
+
+### Completion state transitions
+
+A direct outcome, outcome alternative, or failure may define `transitions`: a
+map of at most three concept IDs to `"<from> -> <to>"` strings. `from` is one
+declared state of the named concept, `*` for any state, or `none` when the
+instance comes into existence. `to` is one declared state or `none` when the
+instance ceases to exist. `from` and `to` MUST differ. A completion may define
+both an inline signal and `transitions`.
+
+Transitions are completion-owned product semantics. They do not define
+persistence, messaging, workflow order, or an implementation mechanism. Each
+transition is verified as part of its owning completion obligation and creates no
+separate obligation path. The validator rejects unknown concepts and undeclared
+states, and derives reachability warnings from all completion transitions in the
+definition.
 
 ```yaml
 outcome:
@@ -157,9 +175,10 @@ stable obligations without repeating their statements as rules:
 - each failure resolves at
   `<fully-qualified-behavior-id>.failures.<failure-id>`.
 
-A signal is a required effect of the outcome or failure that defines it and is
-verified as part of that completion obligation; it does not create a separate
-obligation. Existing rule obligation paths remain unchanged.
+A signal or completion state transition is a required effect of the outcome or
+failure that defines it and is verified as part of that completion obligation;
+neither creates a separate obligation. Existing rule obligation paths remain
+unchanged.
 
 ### Signals
 
@@ -324,12 +343,17 @@ signal = {
 }
 completion-case = {
   statement: statement,
-  signal?: signal
+  signal?: signal,
+  transitions?: transition-map
 }
 outcome = completion-case | {
   one_of: map[identifier, completion-case] with 2..7 entries
 }
 failure-map = map[identifier, completion-case] with 1..7 entries
+transition-from = declared state of the named concept | "*" | "none"
+transition-to = declared state of the named concept | "none"
+state-transition = "<transition-from> -> <transition-to>", with distinct endpoints
+transition-map = map[concept-id, state-transition] with at most 3 entries
 behavior-reference-list = unique list[behavior-reference] with 1..7 items
 relationship-list = unique list[relationship-reference] with 1..7 items
 behavior = {
@@ -354,11 +378,13 @@ reference MUST resolve to the required canonical object category. Reference
 uniqueness after canonical resolution is defined by [0013](0013-bare-behavior-reference-normalization.md).
 
 A structured condition item names one declared concept state exactly; it does
-not encode workflow, lifecycle, or ordering, and it never replaces outcomes or
-failures. Other structured lifecycle transition fields were considered and
-rejected because they duplicate conditions and outcomes. No general workflow or
-ordering construct is planned; signal-to-trigger relationships already express
-required causal order.
+not encode workflow or ordering, and it never replaces outcomes or failures.
+Completion-owned `transitions` is the sole structured lifecycle construct: it
+records a declared concept state change as a completion effect without defining a
+workflow. Other structured lifecycle or ordering fields remain rejected because
+they duplicate conditions, completion transitions, or outcomes. No general
+workflow or ordering construct is planned; signal-to-trigger relationships already
+express required causal order.
 Time and quantity requirements remain precise authored statements or rules unless
 real product definitions demonstrate a need for structured scalar types.
 

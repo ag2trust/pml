@@ -4,8 +4,9 @@ Product Manifest Language (PML) is a small, opinionated, declarative language fo
 describing what a software product is and what it must do.
 
 PML captures product concepts, actors, features, behavior transitions, rules, use cases,
-optional completion signals, relationships, experiences, and selected owner-mandated
-architecture without prescribing code organization, APIs, database schemas, or tests.
+optional completion signals and concept state transitions, relationships, experiences,
+and selected owner-mandated architecture without prescribing code organization, APIs,
+database schemas, or tests.
 
 The intended workflow is:
 
@@ -94,7 +95,8 @@ Write the complete explicit graph as deterministic Graphviz DOT bytes with:
 ```
 
 `pml graph` is read-only and emits only producer-completion-to-signal,
-signal-to-consumer-trigger, `related_to`, and use-case membership edges.
+signal-to-consumer-trigger, `related_to`, use-case membership, and concept
+state-transition edges.
 
 Review every unresolved feature, behavior, and stable obligation interactively with:
 
