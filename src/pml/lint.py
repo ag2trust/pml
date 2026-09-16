@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
+from pml.compiled_model import CompiledModel
 from pml.diagnostics import Diagnostic
 
 
@@ -362,6 +363,117 @@ def _generic_rule_warnings(document: dict[str, Any]) -> list[Diagnostic]:
                     path,
                     "PML-W-RULE-GENERIC",
                     "rule uses a generic quantifier without naming an actor, concept, vocabulary key, or behavior",
+                    severity="warning",
+                )
+            )
+    return warnings
+
+
+def _term_pattern(term: str) -> re.Pattern[str]:
+    """Compile a case-insensitive whole-word pattern for one PML term."""
+
+    normalized = term.casefold().replace("_", " ")
+    return re.compile(rf"(?<!\w){re.escape(normalized)}(?!\w)")
+
+
+def _mentioned_terms(text: str, terms: dict[str, re.Pattern[str]]) -> set[str]:
+    """Return canonical terms mentioned by a statement."""
+
+    normalized = text.casefold().replace("_", " ")
+    return {term for term, pattern in terms.items() if pattern.search(normalized)}
+
+
+def _behavior_texts(behavior: dict[str, Any]) -> Iterable[str]:
+    """Yield the authored statements that make a behavior's terms local."""
+
+    conditions = behavior.get("conditions")
+    if isinstance(conditions, dict):
+        for statement in conditions.get("statements", []):
+            if isinstance(statement, str):
+                yield statement
+
+    for transition_name in ("trigger", "outcome"):
+        transition = behavior.get(transition_name)
+        if not isinstance(transition, dict):
+            continue
+        cases = (
+            transition.get("cases")
+            if transition.get("kind") == "one_of"
+            else [transition.get("case")]
+        )
+        if isinstance(cases, list):
+            for case in cases:
+                if isinstance(case, dict) and isinstance(case.get("statement"), str):
+                    yield case["statement"]
+
+    for failure in behavior.get("failures", []):
+        if isinstance(failure, dict) and isinstance(failure.get("statement"), str):
+            yield failure["statement"]
+
+
+def rule_scope_warnings(model: CompiledModel) -> list[Diagnostic]:
+    """Return deterministic scope advice derived from a compiled model."""
+
+    term_groups = {
+        "actor": {actor["id"] for actor in model["actors"]},
+        "concept": {concept["id"] for concept in model["concepts"]},
+        "vocabulary": {entry["term"] for entry in model["vocabulary"]},
+        "behavior": {behavior["id"] for behavior in model["behaviors"]},
+    }
+    terms = {
+        term: _term_pattern(term)
+        for group in term_groups.values()
+        for term in group
+    }
+    features = {feature["path"]: feature for feature in model["features"]}
+    behaviors_by_feature: dict[str, list[dict[str, Any]]] = {}
+    for behavior in model["behaviors"]:
+        behaviors_by_feature.setdefault(behavior["feature"], []).append(behavior)
+    use_cases_by_feature: dict[str, list[dict[str, Any]]] = {}
+    for use_case in model["use_cases"]:
+        use_cases_by_feature.setdefault(use_case["feature"], []).append(use_case)
+
+    feature_terms: dict[str, set[str]] = {}
+    for feature_path, feature in features.items():
+        local = set(feature["actors"])
+        for behavior in behaviors_by_feature.get(feature_path, []):
+            local.add(behavior["id"])
+            for statement in _behavior_texts(behavior):
+                local.update(_mentioned_terms(statement, terms))
+        for use_case in use_cases_by_feature.get(feature_path, []):
+            for value in (use_case["actor"], use_case["goal"]):
+                local.update(_mentioned_terms(value, terms))
+        feature_terms[feature_path] = local
+
+    domain_terms: dict[str, set[str]] = {
+        domain["path"]: set() for domain in model["domains"]
+    }
+    for feature in model["features"]:
+        domain_terms[feature["domain"]].update(feature_terms[feature["path"]])
+
+    warnings: list[Diagnostic] = []
+    for obligation in sorted(model["obligations"], key=lambda item: item["id"]):
+        if obligation["kind"] != "rule":
+            continue
+        node = obligation["node"]
+        if node in feature_terms:
+            local = feature_terms[node]
+            message = (
+                "rule mentions no term used in this feature; consider domain or project scope"
+            )
+        elif node in domain_terms:
+            local = domain_terms[node]
+            message = "rule mentions no term used in this domain; consider project scope"
+        else:
+            continue
+        statement = obligation["definition"]["statement"]
+        mentioned = _mentioned_terms(statement, terms)
+        if mentioned and not mentioned.intersection(local):
+            warnings.append(
+                Diagnostic(
+                    obligation["id"],
+                    "PML-W-RULE-SCOPE",
+                    message,
                     severity="warning",
                 )
             )

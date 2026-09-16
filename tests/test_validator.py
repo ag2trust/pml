@@ -222,7 +222,7 @@ def test_feature_with_ten_behaviors_is_an_error() -> None:
     assert resolution.compiled_model is None
 
 
-def test_project_manifest_is_valid() -> None:
+def test_project_manifest_has_lint_warnings() -> None:
     diagnostics = validate_file(ROOT / "pml.yaml")
 
     assert [(item.path, item.code, item.severity) for item in diagnostics] == [
@@ -246,10 +246,20 @@ def test_project_manifest_is_valid() -> None:
             "PML-W-RULE-GENERIC",
             "warning",
         ),
+        (
+            "domains.language.features.conformance_monitoring.rules.protected_probes",
+            "PML-W-RULE-SCOPE",
+            "warning",
+        ),
+        (
+            "domains.language.features.definition_authoring.rules.approval_boundary",
+            "PML-W-RULE-SCOPE",
+            "warning",
+        ),
     ]
 
 
-def test_assistant_creation_example_is_valid() -> None:
+def test_assistant_creation_example_has_lint_warnings() -> None:
     diagnostics = validate_file(ROOT / "examples" / "assistant-creation.pml.yaml")
 
     assert [(item.path, item.code, item.severity) for item in diagnostics] == [
@@ -257,6 +267,74 @@ def test_assistant_creation_example_is_valid() -> None:
             "domains.assistants.features.creation.rules.customer_ownership.statement",
             "PML-W-RULE-GENERIC",
             "warning",
+        ),
+        (
+            "domains.assistants.features.creation.rules.credentials_not_exposed",
+            "PML-W-RULE-SCOPE",
+            "warning",
+        ),
+    ]
+
+
+def test_feature_rule_mentioning_a_local_concept_has_no_scope_warning() -> None:
+    document, feature = _cardinality_document()
+    document["concepts"] = {
+        "feedback_request": {"meaning": "A request for product feedback."}
+    }
+    feature["rules"] = {
+        "feedback_visible": {
+            "statement": "A Feedback Request MUST remain visible to the Member."
+        }
+    }
+    feature["behaviors"]["note_creation"]["conditions"] = [
+        "A Feedback Request has been submitted by the Member."
+    ]
+
+    resolution = validate_document(document)
+
+    assert not any(item.code == "PML-W-RULE-SCOPE" for item in resolution.diagnostics)
+
+
+def test_domain_rule_mentioning_a_feature_actor_has_no_scope_warning() -> None:
+    document, _ = _cardinality_document()
+    document["domains"]["notes"]["rules"] = {
+        "member_access": {"statement": "A Member MUST retain access to Notes."}
+    }
+
+    resolution = validate_document(document)
+
+    assert not any(item.code == "PML-W-RULE-SCOPE" for item in resolution.diagnostics)
+
+
+def test_feature_rule_with_punctuation_bearing_vocabulary_term_warns() -> None:
+    document, feature = _cardinality_document()
+    document["vocabulary"] = {
+        "C++": {"meaning": "A supported programming language."}
+    }
+    feature["behaviors"]["note_creation"]["conditions"] = [
+        "C++ is selected for the implementation."
+    ]
+    document["domains"]["notes"]["features"]["review"] = {
+        "purpose": "Review a submitted note.",
+        "rules": {
+            "cxx_is_portable": {
+                "statement": "C++ MUST remain portable across supported environments."
+            }
+        },
+        "behaviors": {
+            "note_review": {
+                "trigger": {"statement": "A Member requests a note review."},
+                "outcome": {"statement": "The review result is visible."},
+            }
+        },
+    }
+
+    resolution = validate_document(document)
+
+    assert [(item.path, item.code) for item in resolution.diagnostics] == [
+        (
+            "domains.notes.features.review.rules.cxx_is_portable",
+            "PML-W-RULE-SCOPE",
         )
     ]
 

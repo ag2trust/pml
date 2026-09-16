@@ -146,7 +146,7 @@ def test_resolver_rejects_duplicates_after_behavior_reference_normalization() ->
     ]
 
 
-def test_resolver_emits_complete_model_for_warning_only_definition() -> None:
+def test_resolver_emits_complete_model_for_definition_with_lint_warnings() -> None:
     resolution = resolve_definition(_document("assistant-creation.pml.yaml"))
     model = resolution.compiled_model
 
@@ -155,7 +155,12 @@ def test_resolver_emits_complete_model_for_warning_only_definition() -> None:
             "domains.assistants.features.creation.rules.customer_ownership.statement",
             "PML-W-RULE-GENERIC",
             "warning",
-        )
+        ),
+        (
+            "domains.assistants.features.creation.rules.credentials_not_exposed",
+            "PML-W-RULE-SCOPE",
+            "warning",
+        ),
     ]
     assert model is not None
     assert list(Draft202012Validator(COMPILED_SCHEMA).iter_errors(model)) == []

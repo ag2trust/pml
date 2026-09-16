@@ -49,6 +49,9 @@ def test_assistant_creation_generic_warning_does_not_fail_validation(capsys) -> 
         "domains.assistants.features.creation.rules.customer_ownership.statement: "
         "[warning] [PML-W-RULE-GENERIC] rule uses a generic quantifier without "
         "naming an actor, concept, vocabulary key, or behavior\n"
+        "domains.assistants.features.creation.rules.credentials_not_exposed: "
+        "[warning] [PML-W-RULE-SCOPE] rule mentions no term used in this feature; "
+        "consider domain or project scope\n"
     )
 
     assert main(["validate", str(source)]) == 0
