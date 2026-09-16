@@ -934,8 +934,8 @@ determined before escaping.
 
 #### Empty-graph example
 
-A compiled model with no signals, relationships, or use-case memberships
-produces:
+A compiled model with no signals, relationships, use-case memberships, or
+concept state transitions produces:
 
 ```
 digraph pml {
