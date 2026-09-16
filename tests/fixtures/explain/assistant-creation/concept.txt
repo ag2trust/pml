@@ -1,0 +1,9 @@
+Concept: assistant
+  Meaning: A Customer-owned AI worker configured by a Member.
+  States:
+    draft
+    active
+    paused
+    retired
+  Required by:
+    domains.assistants.features.creation.behaviors.assistant_creation: draft

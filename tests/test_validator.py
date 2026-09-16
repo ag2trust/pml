@@ -1931,7 +1931,7 @@ def test_pml_explain_concept_lists_required_by_behaviors() -> None:
     result = explain_compiled_model(resolution.compiled_model, "testimonial")
 
     assert result.output is not None
-    assert "required_by" in result.output
+    assert "Required by" in result.output
     assert "domains.reviews.features.publishing.behaviors.publish" in result.output
 
 

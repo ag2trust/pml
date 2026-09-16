@@ -1,0 +1,6 @@
+Rule: domains.assistants.features.creation.rules.ownership
+  Statement: A Member MUST create an Assistant only for the Member's Customer.
+  Scope: domains.assistants.features.creation
+  Obligation path: domains.assistants.features.creation.rules.ownership
+  Surfaces:
+    none

@@ -85,8 +85,12 @@ Explain one canonical compiled-model ID with:
 .venv/bin/pml explain pml.yaml <canonical-id>
 ```
 
-`pml explain` is a read-only human-readable view of the validated compiled model;
-it does not load or modify bindings, probes, locks, evidence, or generated state.
+`pml explain` is a read-only human-readable summary of the validated compiled
+model; it does not load or modify bindings, probes, locks, evidence, or generated
+state. Its fixed per-kind summary is deterministic and wraps long text without
+truncation. Use `pml explain pml.yaml <canonical-id> --raw` for the complete
+legacy compiled-record view when diagnosing the model; `--raw` is deterministic
+too and preserves that rendering byte-for-byte.
 
 Write the complete explicit graph as deterministic Graphviz DOT bytes with:
 

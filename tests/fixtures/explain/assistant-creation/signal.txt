@@ -1,0 +1,6 @@
+Signal: assistant_created
+  Meaning: A usable Assistant has been created successfully.
+  Subject: assistant
+  Produced by: domains.assistants.features.creation.behaviors.assistant_creation
+  Consumed by:
+    domains.assistants.features.creation.behaviors.created_assistant_visibility
