@@ -37,7 +37,10 @@ behavior = {
 ```
 
 - `conditions` describes relevant product state that must hold when the behavior
-  is initiated. It is optional.
+  is initiated. It is optional. Each condition item is either a prose statement
+  or a closed structured mapping `{concept: <concept-id>, state: <state>}` naming
+  one declared state of one declared concept. Two structured conditions in one
+  behavior MUST NOT name the same concept.
 - `trigger` identifies what initiates one behavior evaluation. It is required.
 - `outcome` identifies successful completion. It is required.
 - `failures` identifies authored unsuccessful completions. It is optional.
@@ -307,7 +310,9 @@ behavior-reference = identifier | behavior-id, resolved under 0013
 relationship-reference = identifier | feature-or-behavior-id, resolved under 0013
 rule-map = the closed ID-keyed rule map defined by the language
 
-conditions = unique list[statement] with 1..7 items
+condition-item = statement | {concept: concept-id, state: non-empty text}
+conditions = unique list[condition-item] with 1..7 items,
+  no two structured items sharing the same concept
 direct-trigger = {statement: statement} | {signal: declared-signal-id}
 trigger = direct-trigger | {
   one_of: map[identifier, direct-trigger] with 2..7 entries
@@ -348,9 +353,12 @@ rejects duplicate values. Every ID-keyed map rejects duplicate IDs and every
 reference MUST resolve to the required canonical object category. Reference
 uniqueness after canonical resolution is defined by [0013](0013-bare-behavior-reference-normalization.md).
 
-Structured lifecycle transition fields were considered and rejected because they
-duplicate conditions and outcomes. No general workflow or ordering construct
-is planned; signal-to-trigger relationships already express required causal order.
+A structured condition item names one declared concept state exactly; it does
+not encode workflow, lifecycle, or ordering, and it never replaces outcomes or
+failures. Other structured lifecycle transition fields were considered and
+rejected because they duplicate conditions and outcomes. No general workflow or
+ordering construct is planned; signal-to-trigger relationships already express
+required causal order.
 Time and quantity requirements remain precise authored statements or rules unless
 real product definitions demonstrate a need for structured scalar types.
 

@@ -134,8 +134,8 @@ def test_review_allows_coupling_warnings_and_prints_them(tmp_path: Path) -> None
 @pytest.mark.parametrize(
     "model",
     [
-        {"format": "pml.compiled", "format_version": 1},
-        {"format": "pml.other", "format_version": 2},
+        {"format": "pml.compiled", "format_version": 2},
+        {"format": "pml.other", "format_version": 3},
         {"format": "pml.compiled", "format_version": True},
         {},
     ],

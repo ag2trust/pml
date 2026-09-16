@@ -20,4 +20,4 @@ steps:
   - http: GET /assistants/{assistant_id}
     as: member
     within: 5s
-    expect: {status: 200, body_matches_fixture: assistant.json#configuration}
+    expect: {status: 200, body_matches_fixture: assistant.json#configuration, text_lacks: ["numeric rating"]}

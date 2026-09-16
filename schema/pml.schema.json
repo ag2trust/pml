@@ -200,13 +200,34 @@
       "additionalProperties": false,
       "required": ["trigger", "outcome"],
       "properties": {
-        "conditions": {"$ref": "#/$defs/stringList"},
+        "conditions": {"$ref": "#/$defs/conditionList"},
         "trigger": {"$ref": "#/$defs/trigger"},
         "outcome": {"$ref": "#/$defs/outcome"},
         "failures": {"$ref": "#/$defs/failureMap"},
         "rules": {"$ref": "#/$defs/ruleMap"},
         "related_to": {"$ref": "#/$defs/pathList"}
       }
+    },
+    "conditionList": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/conditionItem"}
+    },
+    "conditionItem": {
+      "oneOf": [
+        {"$ref": "#/$defs/nonEmpty"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["concept", "state"],
+          "properties": {
+            "concept": {"$ref": "#/$defs/id"},
+            "state": {"$ref": "#/$defs/nonEmpty"}
+          }
+        }
+      ]
     },
     "trigger": {
       "oneOf": [

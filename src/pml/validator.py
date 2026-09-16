@@ -447,6 +447,80 @@ def _surface_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
     return diagnostics
 
 
+def _condition_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
+    """Reject unknown concepts, undeclared states, and duplicate concept conditions."""
+
+    diagnostics: list[Diagnostic] = []
+    concepts = _mapping(document.get("concepts"))
+    concept_states: dict[str, list[str]] = {}
+    for concept_id, definition in concepts.items():
+        if not isinstance(definition, dict):
+            continue
+        states = definition.get("states")
+        concept_states[concept_id] = (
+            list(states) if isinstance(states, list) else []
+        )
+
+    for domain_id, domain in _mapping(document.get("domains")).items():
+        if not isinstance(domain, dict):
+            continue
+        for feature_id, feature in _mapping(domain.get("features")).items():
+            if not isinstance(feature, dict):
+                continue
+            for behavior_id, behavior in _mapping(feature.get("behaviors")).items():
+                if not isinstance(behavior, dict):
+                    continue
+                conditions = behavior.get("conditions")
+                if not isinstance(conditions, list):
+                    continue
+                base = (
+                    f"domains.{domain_id}.features.{feature_id}"
+                    f".behaviors.{behavior_id}.conditions"
+                )
+                seen_concepts: dict[str, int] = {}
+                for index, item in enumerate(conditions):
+                    if not isinstance(item, dict):
+                        continue
+                    concept = item.get("concept")
+                    state = item.get("state")
+                    if isinstance(concept, str) and concept not in concept_states:
+                        diagnostics.append(
+                            Diagnostic(
+                                f"{base}[{index}].concept",
+                                "PML-E-CONDITION-CONCEPT",
+                                f"unknown concept '{concept}'",
+                            )
+                        )
+                    elif (
+                        isinstance(concept, str)
+                        and isinstance(state, str)
+                        and state not in concept_states[concept]
+                    ):
+                        diagnostics.append(
+                            Diagnostic(
+                                f"{base}[{index}].state",
+                                "PML-E-CONDITION-STATE",
+                                f"concept '{concept}' does not declare state '{state}'",
+                            )
+                        )
+                    if isinstance(concept, str):
+                        if concept in seen_concepts:
+                            diagnostics.append(
+                                Diagnostic(
+                                    f"{base}[{index}].concept",
+                                    "PML-E-CONDITION-CONCEPT",
+                                    (
+                                        f"concept '{concept}' appears in another "
+                                        f"structured condition at index "
+                                        f"{seen_concepts[concept]}"
+                                    ),
+                                )
+                            )
+                        else:
+                            seen_concepts[concept] = index
+    return diagnostics
+
+
 def _semantic_diagnostics(
     document: dict[str, Any],
     resolution: ResolvedDefinition | None = None,
@@ -514,6 +588,7 @@ def _semantic_diagnostics(
                 )
 
     diagnostics.extend(_surface_diagnostics(document))
+    diagnostics.extend(_condition_diagnostics(document))
 
     if resolution is None:
         resolution = resolve_references(document)
