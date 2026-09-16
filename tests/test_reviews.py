@@ -366,6 +366,38 @@ def test_manual_edit_marks_changed_targets_human_pending_and_restarts_queue(
     assert "edited=1" in output.getvalue()
 
 
+def test_manual_edit_allows_a_warning_only_definition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _source(tmp_path)
+    document = yaml.safe_load((source / "index.pml.yaml").read_text(encoding="utf-8"))
+    document["domains"]["notes"]["features"]["creation"]["rules"] = {
+        "generic_enforcement": {
+            "statement": "MUST be enforced for every affected resource."
+        }
+    }
+    (source / "index.pml.yaml").write_text(
+        yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+    )
+
+    def edit(command: list[str]):
+        assert command == ["editor", str(source / "index.pml.yaml")]
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr("pml.reviews.subprocess.run", edit)
+    answers = iter(["edit", "quit"])
+    output = StringIO()
+
+    assert review_manifest(
+        source,
+        input_fn=lambda _: next(answers),
+        output=output,
+        environment={"EDITOR": "editor"},
+    ) == 0
+    assert "PML REVIEW EDIT INVALID" not in output.getvalue()
+    assert "PML-W-RULE-GENERIC" in output.getvalue()
+
+
 def test_invalid_manual_edit_leaves_reviews_unchanged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

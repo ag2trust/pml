@@ -765,11 +765,19 @@ def review_manifest(
                 )
                 return 1
             _, updated_targets, edit_diagnostics = _definition_snapshot(manifest)
-            if edit_diagnostics:
+            edit_errors = [
+                diagnostic
+                for diagnostic in edit_diagnostics
+                if diagnostic.severity == "error"
+            ]
+            if edit_errors:
                 _print_diagnostics(
-                    edit_diagnostics, output, "PML REVIEW EDIT INVALID"
+                    edit_errors, output, "PML REVIEW EDIT INVALID"
                 )
                 return 1
+            for warning in edit_diagnostics:
+                if warning.severity == "warning":
+                    print(warning.format(), file=output)
             updated = {item.id: item for item in updated_targets}
             loaded.target_ids = frozenset(updated)
             removed = sorted(set(records).difference(updated))
