@@ -13,6 +13,8 @@ from pml.probes import (
     MAX_PROBE_FILES,
     MAX_PROBE_FILE_BYTES,
     StepOutcome,
+    evaluate_cli_expectations,
+    evaluate_http_expectations,
     load_probes,
     missing_probe_diagnostics,
     probe_fingerprint,
@@ -87,6 +89,50 @@ def test_probe_schema_is_a_valid_metaschema_document() -> None:
     schema = json.loads((ROOT / "schema" / "pml-probe.schema.json").read_text())
 
     Draft202012Validator.check_schema(schema)
+
+
+@pytest.mark.parametrize(
+    ("step", "key", "value"),
+    [
+        ("http", "status_not", 404),
+        ("http", "body_lacks", ["rating"]),
+        ("http", "text_has", ["Assistant"]),
+        ("http", "text_lacks", ["numeric rating"]),
+        ("cli", "stdout_lacks", ["warning"]),
+    ],
+)
+def test_probe_schema_accepts_negative_and_text_expectations(
+    step: str, key: str, value: object
+) -> None:
+    schema = json.loads((ROOT / "schema" / "pml-probe.schema.json").read_text())
+    probe = {
+        "pml_probe": "0.1",
+        "probe": "expectations",
+        "verifies": "domains.notes.features.creation.rules.preserve_content",
+        "env": "staging",
+        "steps": [{
+            step: "GET /notes" if step == "http" else ["notes", "verify-content"],
+            "expect": {key: value},
+        }],
+    }
+
+    assert Draft202012Validator(schema).is_valid(probe)
+
+
+def test_probe_schema_rejects_status_and_status_not_together() -> None:
+    schema = json.loads((ROOT / "schema" / "pml-probe.schema.json").read_text())
+    probe = {
+        "pml_probe": "0.1",
+        "probe": "ambiguous_status",
+        "verifies": "domains.notes.features.creation.rules.preserve_content",
+        "env": "staging",
+        "steps": [{
+            "http": "GET /notes",
+            "expect": {"status": 200, "status_not": 404},
+        }],
+    }
+
+    assert not Draft202012Validator(schema).is_valid(probe)
 
 
 def test_approved_probe_is_valid_and_bound_to_obligation() -> None:
@@ -799,6 +845,84 @@ def test_run_probe_step_failure_yields_failed() -> None:
     assert result.result == "failed"
     assert [report.ok for report in result.steps] == [True, False]
     assert "trigger step 0" in result.observation
+
+
+@pytest.mark.parametrize(
+    ("step", "fixture", "expected_result"),
+    [
+        (
+            {"http": "GET /status", "expect": {"status_not": 404}},
+            {"status": 200, "body_text": "{}"},
+            "passed",
+        ),
+        (
+            {"http": "GET /status", "expect": {"status_not": 404}},
+            {"status": 404, "body_text": "{}"},
+            "failed",
+        ),
+        (
+            {"http": "GET /profile", "expect": {"body_lacks": ["rating"]}},
+            {"status": 200, "body_text": '{"name":"Ada"}'},
+            "passed",
+        ),
+        (
+            {"http": "GET /profile", "expect": {"body_lacks": ["rating"]}},
+            {"status": 200, "body_text": '{"rating":5}'},
+            "failed",
+        ),
+        (
+            {"http": "GET /page", "expect": {"text_has": ["Assistant"]}},
+            {"status": 200, "body_text": "<h1>Assistant</h1>"},
+            "passed",
+        ),
+        (
+            {"http": "GET /page", "expect": {"text_has": ["Assistant"]}},
+            {"status": 200, "body_text": "<h1>assistant</h1>"},
+            "failed",
+        ),
+        (
+            {"http": "GET /page", "expect": {"text_lacks": ["numeric rating"]}},
+            {"status": 200, "body_text": "<h1>Assistant</h1>"},
+            "passed",
+        ),
+        (
+            {"http": "GET /page", "expect": {"text_lacks": ["numeric rating"]}},
+            {"status": 200, "body_text": "<p>numeric rating: 5</p>"},
+            "failed",
+        ),
+        (
+            {"cli": ["notes", "verify"], "expect": {"stdout_lacks": ["warning"]}},
+            {"exit_code": 0, "stdout": "verified"},
+            "passed",
+        ),
+        (
+            {"cli": ["notes", "verify"], "expect": {"stdout_lacks": ["warning"]}},
+            {"exit_code": 0, "stdout": "warning: stale note"},
+            "failed",
+        ),
+    ],
+)
+def test_run_probe_applies_negative_and_text_expectations_to_fixture_responses(
+    step: dict, fixture: dict, expected_result: str
+) -> None:
+    probe = {
+        "pml_probe": "0.1",
+        "probe": "fixture_expectations",
+        "verifies": "domains.notes.features.creation.rules.preserve_content",
+        "env": "staging",
+        "steps": [step],
+    }
+
+    def executor(step: dict, captures: dict[str, str]) -> StepOutcome:
+        del captures
+        if "http" in step:
+            return evaluate_http_expectations(step["expect"], **fixture)
+        return evaluate_cli_expectations(step["expect"], **fixture)
+
+    result = run_probe(probe, executor)
+
+    assert result.result == expected_result
+    assert result.steps[0].ok is (expected_result == "passed")
 
 
 def test_run_probe_without_setup_still_returns_passed() -> None:

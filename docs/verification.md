@@ -87,3 +87,24 @@ pml validate-probes definition.pml.yaml probes/ \
 
 Product-state commands never treat that option or a legacy `.pml/bindings.yaml` as
 an override of the locked policy.
+
+## Probe step expectations
+
+HTTP step `expect` supports the following keys:
+
+- `status`: requires this HTTP status code.
+- `status_not`: requires any HTTP status code other than this one; it cannot be combined with `status`.
+- `body_has`: requires each named top-level field in a JSON response object.
+- `body_lacks`: requires each named top-level field to be absent from a JSON response object.
+- `text_has`: requires each string to appear verbatim in the raw response body text.
+- `text_lacks`: requires each string to be absent from the raw response body text.
+- `body_matches_fixture`: compares the JSON response body with the selected fixture value.
+
+CLI step `expect` supports the following keys:
+
+- `exit`: requires this process exit code.
+- `stdout_has`: requires each string to appear verbatim in standard output.
+- `stdout_lacks`: requires each string to be absent from standard output.
+
+Use `text_has` and `text_lacks` for server-rendered pages. Client-rendered pages
+need an endpoint probe or agent judgment.
