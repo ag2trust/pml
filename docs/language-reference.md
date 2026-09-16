@@ -53,8 +53,9 @@ may list unordered semantic `states`. Completion transitions name how behavior
 completions move one concept instance between those states. Concepts do not
 declare storage, classes, tables, or organizational ownership. Each state is a
 non-empty state token that is neither `*` nor `none` and does not contain
-` -> ` or a line-break character; those spellings are reserved to keep transition
-endpoints unambiguous and graph output single-line.
+` -> `, begin `-> `, end ` ->`, or contain a line-break character; those
+spellings are reserved to keep transition endpoints unambiguous and graph output
+single-line.
 
 ## Behavioral objects
 

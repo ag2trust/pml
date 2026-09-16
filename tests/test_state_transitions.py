@@ -77,8 +77,12 @@ def test_transition_map_accepts_at_most_three_concepts() -> None:
     assert "schema" in _diagnostic_codes(document)
 
 
-@pytest.mark.parametrize("state", ["*", "none", "draft -> review", "draft\n"])
-def test_concept_states_reserve_transition_sentinels_and_separator(state: str) -> None:
+@pytest.mark.parametrize(
+    "state", ["*", "none", "draft -> review", "draft ->", "-> active", "draft\n"]
+)
+def test_concept_states_reserve_transition_sentinels_and_separator_boundaries(
+    state: str,
+) -> None:
     diagnostics = validate_document(_document(states=[state])).diagnostics
 
     assert any(
