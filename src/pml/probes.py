@@ -385,6 +385,68 @@ class StepOutcome:
     captures: dict[str, str] = field(default_factory=dict)
 
 
+def evaluate_http_expectations(
+    expect: dict[str, Any], *, status: int, body_text: str
+) -> StepOutcome:
+    """Evaluate an HTTP step's status, JSON-field, and raw-text expectations.
+
+    HTTP executors pass the unmodified decoded response body as ``body_text``.
+    JSON is parsed only when a structured body expectation requires it, so text
+    expectations remain available for non-JSON responses such as HTML pages.
+    """
+
+    if "status" in expect and status != expect["status"]:
+        return StepOutcome(False, f"expected status {expect['status']}, got {status}")
+    if "status_not" in expect and status == expect["status_not"]:
+        return StepOutcome(False, f"response status must not be {status}")
+
+    if "body_has" in expect or "body_lacks" in expect:
+        try:
+            body = json.loads(body_text)
+        except json.JSONDecodeError:
+            return StepOutcome(
+                False, "response body is not valid JSON for a body field expectation"
+            )
+        if not isinstance(body, dict):
+            return StepOutcome(
+                False, "response body is not a JSON object for a body field expectation"
+            )
+        for field_name in expect.get("body_has", []):
+            if field_name not in body:
+                return StepOutcome(
+                    False, f"response body is missing required top-level field '{field_name}'"
+                )
+        for field_name in expect.get("body_lacks", []):
+            if field_name in body:
+                return StepOutcome(
+                    False, f"response body contains forbidden top-level field '{field_name}'"
+                )
+
+    for text in expect.get("text_has", []):
+        if text not in body_text:
+            return StepOutcome(False, f"response body is missing required text {text!r}")
+    for text in expect.get("text_lacks", []):
+        if text in body_text:
+            return StepOutcome(False, f"response body contains forbidden text {text!r}")
+    return StepOutcome(True, "HTTP expectations matched")
+
+
+def evaluate_cli_expectations(
+    expect: dict[str, Any], *, exit_code: int, stdout: str
+) -> StepOutcome:
+    """Evaluate a CLI step's exit-code and standard-output expectations."""
+
+    if "exit" in expect and exit_code != expect["exit"]:
+        return StepOutcome(False, f"expected exit code {expect['exit']}, got {exit_code}")
+    for text in expect.get("stdout_has", []):
+        if text not in stdout:
+            return StepOutcome(False, f"standard output is missing required text {text!r}")
+    for text in expect.get("stdout_lacks", []):
+        if text in stdout:
+            return StepOutcome(False, f"standard output contains forbidden text {text!r}")
+    return StepOutcome(True, "CLI expectations matched")
+
+
 @dataclass(frozen=True)
 class StepReport:
     """Per-step record produced by :func:`run_probe`."""
