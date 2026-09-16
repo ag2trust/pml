@@ -104,9 +104,9 @@ initiates one evaluation; its alternatives are not globally exclusive.
 map of two through seven mutually exclusive successful completions. Optional
 `failures` is an ID-keyed map of one through seven unsuccessful completions. Every
 initiated evaluation completes exactly one outcome or authored failure. Each direct
-completion requires a local `statement` and may define one inline `signal` or a
-`transitions` map with at most three concept-ID keys. Each map value is exactly
-`"<from> -> <to>"`: `from` is a declared state, `*`, or `none`; `to` is a
+completion requires a local `statement` and may define one inline `signal`, a
+`transitions` map with at most three concept-ID keys, or both. Each map value is
+exactly `"<from> -> <to>"`: `from` is a declared state, `*`, or `none`; `to` is a
 declared state or `none`. `none` means the concept instance comes into existence
 or ceases to exist, and `*` means any current state. A transition cannot retain
 the same state. Unknown concepts and undeclared or identical states are validation
