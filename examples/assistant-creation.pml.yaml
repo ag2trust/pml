@@ -11,22 +11,20 @@ vocabulary:
     forbidden_synonyms:
       - tenant
       - client
-  Member:
-    meaning: An authenticated person belonging to one Customer.
-    forbidden_synonyms:
-      - user
-  Assistant:
-    meaning: A Customer-owned AI worker configured by a Member.
   Credentials:
     meaning: Authentication material used to access an external capability.
 
 actors:
   member:
     meaning: An authenticated person belonging to one Customer.
+    forbidden_synonyms:
+      - user
 
 concepts:
   assistant:
     meaning: A Customer-owned AI worker configured by a Member.
+    forbidden_synonyms:
+      - bot
     states:
       - draft
       - active

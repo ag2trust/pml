@@ -23,6 +23,7 @@ concepts:
   a_record:
     meaning: A record whose authored state order is retained.
     states: [ready, draft]
+    forbidden_synonyms: [entry]
   z_record:
     meaning: The last concept by ID.
 
@@ -31,6 +32,7 @@ actors:
     meaning: The first actor by ID.
   zed:
     meaning: The last actor by ID.
+    forbidden_synonyms: [operator]
 
 vocabulary:
   Alpha:
