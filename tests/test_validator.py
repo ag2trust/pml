@@ -62,6 +62,83 @@ def test_feature_with_eight_rules_emits_a_warning_and_compiles() -> None:
     assert resolution.compiled_model is not None
 
 
+def test_feature_rule_restatement_warns_for_the_best_matching_outcome() -> None:
+    document, feature = _cardinality_document()
+    feature["rules"] = {
+        "copied_outcome": {
+            "statement": (
+                "A confirmation MUST be visible for the saved Note reference after creation."
+            )
+        }
+    }
+    feature["behaviors"]["note_creation"]["outcome"] = {
+        "statement": "A confirmation is visible for the saved Note identifier after creation."
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert [(item.path, item.code, item.message, item.severity) for item in diagnostics] == [
+        (
+            "domains.notes.features.creation.rules.copied_outcome.statement",
+            "PML-W-RULE-RESTATEMENT",
+            "rule statement restates "
+            "'domains.notes.features.creation.behaviors.note_creation.outcome.statement'",
+            "warning",
+        )
+    ]
+
+
+def test_unrelated_feature_rule_does_not_warn_for_restatement() -> None:
+    document, feature = _cardinality_document()
+    feature["rules"] = {
+        "weekly_summary": {"statement": "A Member MUST receive a weekly usage summary."}
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert not any(item.code == "PML-W-RULE-RESTATEMENT" for item in diagnostics)
+
+
+def test_generic_rule_without_an_authored_identifier_warns() -> None:
+    document, feature = _cardinality_document()
+    feature["rules"] = {
+        "generic_enforcement": {
+            "statement": "MUST be enforced for every affected resource."
+        }
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert [(item.path, item.code, item.severity) for item in diagnostics] == [
+        (
+            "domains.notes.features.creation.rules.generic_enforcement.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        )
+    ]
+
+
+def test_generic_rule_with_an_actor_or_concept_does_not_warn() -> None:
+    document, feature = _cardinality_document()
+    document["actors"]["reader"] = {"meaning": "A person reading a Testimonial."}
+    document["concepts"] = {
+        "testimonial_excerpt": {
+            "meaning": "A Testimonial excerpt available to a Reader."
+        }
+    }
+    feature["rules"] = {
+        "attribution": {
+            "statement": (
+                "Every Testimonial excerpt presented to a Reader MUST carry the Referrer's name."
+            )
+        }
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert not any(item.code == "PML-W-RULE-GENERIC" for item in diagnostics)
+
+
 @pytest.mark.parametrize(
     ("scope", "path"),
     [
@@ -146,11 +223,42 @@ def test_feature_with_ten_behaviors_is_an_error() -> None:
 
 
 def test_project_manifest_is_valid() -> None:
-    assert validate_file(ROOT / "pml.yaml") == []
+    diagnostics = validate_file(ROOT / "pml.yaml")
+
+    assert [(item.path, item.code, item.severity) for item in diagnostics] == [
+        (
+            "domains.language.features.conformance_monitoring.rules.passing_verdict_has_evidence.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        ),
+        (
+            "domains.language.features.definition_authoring.rules.accepted_definition_is_valid.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        ),
+        (
+            "domains.language.features.definition_authoring.rules.invalid_definition_has_diagnostics.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        ),
+        (
+            "domains.language.features.definition_authoring.rules.stable_terms.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        ),
+    ]
 
 
 def test_assistant_creation_example_is_valid() -> None:
-    assert validate_file(ROOT / "examples" / "assistant-creation.pml.yaml") == []
+    diagnostics = validate_file(ROOT / "examples" / "assistant-creation.pml.yaml")
+
+    assert [(item.path, item.code, item.severity) for item in diagnostics] == [
+        (
+            "domains.assistants.features.creation.rules.customer_ownership.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        )
+    ]
 
 
 def test_minimal_example_is_valid() -> None:

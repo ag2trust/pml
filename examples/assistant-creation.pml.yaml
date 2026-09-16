@@ -49,7 +49,7 @@ domains:
           entitlement:
             statement: A Member MUST enable only capabilities available to the Member's Customer.
           customer_ownership:
-            statement: Customer ownership MUST be enforced for every affected resource.
+            statement: Ownership MUST be enforced for every affected resource.
           credentials_not_exposed:
             statement: Credentials MUST NOT be exposed to the browser.
 

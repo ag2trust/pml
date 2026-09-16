@@ -146,11 +146,17 @@ def test_resolver_rejects_duplicates_after_behavior_reference_normalization() ->
     ]
 
 
-def test_resolver_emits_complete_model_for_diagnostic_free_definition() -> None:
+def test_resolver_emits_complete_model_for_warning_only_definition() -> None:
     resolution = resolve_definition(_document("assistant-creation.pml.yaml"))
     model = resolution.compiled_model
 
-    assert resolution.diagnostics == ()
+    assert [(item.path, item.code, item.severity) for item in resolution.diagnostics] == [
+        (
+            "domains.assistants.features.creation.rules.customer_ownership.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        )
+    ]
     assert model is not None
     assert list(Draft202012Validator(COMPILED_SCHEMA).iter_errors(model)) == []
     assert set(model) == {
@@ -273,7 +279,11 @@ def test_reference_clean_schema_invalid_definition_cannot_compile() -> None:
     assert references.diagnostics == ()
     assert references.compiled_model is None
     assert [(item.path, item.code) for item in resolution.diagnostics] == [
-        ("project", "schema")
+        ("project", "schema"),
+        (
+            "domains.assistants.features.creation.rules.customer_ownership.statement",
+            "PML-W-RULE-GENERIC",
+        ),
     ]
     assert resolution.compiled_model is None
 
@@ -310,7 +320,11 @@ def test_reference_clean_local_language_invalid_definition_cannot_compile() -> N
             "domains.assistants.features.creation.behaviors."
             "assistant_creation.trigger.statement",
             "implementation-detail",
-        )
+        ),
+        (
+            "domains.assistants.features.creation.rules.customer_ownership.statement",
+            "PML-W-RULE-GENERIC",
+        ),
     ]
     assert resolution.compiled_model is None
 

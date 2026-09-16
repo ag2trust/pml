@@ -14,6 +14,7 @@ from jsonschema import Draft202012Validator
 import yaml
 
 from pml.diagnostics import Diagnostic
+from pml.lint import lint_document
 from pml.resolver import ReferenceResolver, ResolvedDefinition, resolve_references
 
 
@@ -227,66 +228,6 @@ def _walk(value: Any, path: tuple[Any, ...] = ()) -> Iterable[tuple[tuple[Any, .
     elif isinstance(value, list):
         for index, child in enumerate(value):
             yield from _walk(child, path + (index,))
-
-
-def _cardinality_warnings(document: dict[str, Any]) -> list[Diagnostic]:
-    """Return deterministic advisory diagnostics for authored map sizes."""
-
-    warnings: list[Diagnostic] = []
-    for parts, value in _walk(document):
-        if not isinstance(value, dict):
-            continue
-        is_rules_map = (
-            parts == ("rules",)
-            or (
-                len(parts) == 3
-                and parts[0] == "domains"
-                and parts[2] == "rules"
-            )
-            or (
-                len(parts) == 5
-                and parts[0] == "domains"
-                and parts[2] == "features"
-                and parts[4] == "rules"
-            )
-            or (
-                len(parts) == 7
-                and parts[0] == "domains"
-                and parts[2] == "features"
-                and parts[4] == "behaviors"
-                and parts[6] == "rules"
-            )
-            or (
-                len(parts) == 3
-                and parts[0] == "architecture"
-                and parts[2] == "constraints"
-            )
-        )
-        if is_rules_map and len(value) > 7:
-            warnings.append(
-                Diagnostic(
-                    _path(parts),
-                    "PML-W-RULE-COUNT",
-                    "rules maps should contain no more than 7 rules",
-                    severity="warning",
-                )
-            )
-        if (
-            len(parts) == 5
-            and parts[0] == "domains"
-            and parts[2] == "features"
-            and parts[4] == "behaviors"
-            and len(value) > 7
-        ):
-            warnings.append(
-                Diagnostic(
-                    _path(parts),
-                    "PML-W-BEHAVIOR-COUNT",
-                    "features should contain no more than 7 behaviors",
-                    severity="warning",
-                )
-            )
-    return sorted(warnings, key=lambda diagnostic: diagnostic.path)
 
 
 def _is_transition_text(parts: tuple[Any, ...]) -> bool:
@@ -702,7 +643,7 @@ def validate_document(document: dict[str, Any]) -> ResolvedDefinition:
     resolver = ReferenceResolver(document)
     resolution = resolver.resolve()
     diagnostics.extend(_semantic_diagnostics(document, resolution))
-    diagnostics.extend(_cardinality_warnings(document))
+    diagnostics.extend(lint_document(document))
     if any(diagnostic.severity == "error" for diagnostic in diagnostics):
         return replace(
             resolution,
