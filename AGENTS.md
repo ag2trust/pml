@@ -27,3 +27,11 @@ PML is a language, not an open-ended documentation format.
   in normative product definitions.
 - Do not treat implementation existence as proof of conformance.
 
+## Authoring checklist
+
+- Do not restate a behavior's condition, trigger, or outcome as a rule.
+- Do not define the same term in vocabulary and again as a concept or actor.
+- Do not put `MUST` or `MUST NOT` statements in experience surfaces.
+- Do not write generic quantified rules without an actor or concept.
+- Do not make behaviors mirror screens, endpoints, or code units.
+- Do not move rules to a broader scope to evade a count; split the feature.
