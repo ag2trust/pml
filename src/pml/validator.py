@@ -703,16 +703,41 @@ def _semantic_diagnostics(
 ) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
 
-    vocabulary = document.get("vocabulary", {})
-    vocabulary_map = vocabulary if isinstance(vocabulary, dict) else {}
+    vocabulary_map = _mapping(document.get("vocabulary"))
+    actors_map = _mapping(document.get("actors"))
+    concepts_map = _mapping(document.get("concepts"))
+
+    declared_terms: dict[str, tuple[str, str]] = {}
+    for source_kind, definitions in (
+        ("actor", actors_map),
+        ("concept", concepts_map),
+    ):
+        for identifier in definitions:
+            declared_terms.setdefault(
+                identifier.casefold().replace("_", " "),
+                (source_kind, identifier),
+            )
+    for term in vocabulary_map:
+        duplicate = declared_terms.get(term.casefold().replace("_", " "))
+        if duplicate is not None:
+            source_kind, identifier = duplicate
+            diagnostics.append(
+                Diagnostic(
+                    f"vocabulary.{term}",
+                    "PML-E-VOCABULARY-DUPLICATE",
+                    f"vocabulary term '{term}' duplicates {source_kind} '{identifier}'",
+                )
+            )
+
     forbidden: dict[str, str] = {}
-    for canonical, definition in vocabulary_map.items():
-        if not isinstance(definition, dict):
-            continue
-        for synonym in definition.get("forbidden_synonyms", []):
-            if not isinstance(synonym, str):
+    for definitions in (vocabulary_map, actors_map, concepts_map):
+        for canonical, definition in definitions.items():
+            if not isinstance(definition, dict):
                 continue
-            forbidden[synonym.casefold()] = canonical
+            for synonym in definition.get("forbidden_synonyms", []):
+                if not isinstance(synonym, str):
+                    continue
+                forbidden[synonym.casefold()] = canonical
 
     normative_fields = {"statement"}
     for parts, value in _walk(document):

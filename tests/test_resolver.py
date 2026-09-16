@@ -171,6 +171,7 @@ def test_resolver_emits_complete_model_for_definition_with_scope_warnings() -> N
         "definition_digest",
         "project",
         "vocabulary",
+        "terms",
         "actors",
         "concepts",
         "architecture",

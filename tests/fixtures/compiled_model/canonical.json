@@ -152,7 +152,7 @@
       "states": []
     }
   ],
-  "definition_digest": "sha256:f5b9cb75052f2554eaba883ea435a7cb5a2091a11c5a89e43a6f4750cfff49b9",
+  "definition_digest": "sha256:31a2b2edf593d50eb942c38c70000184744cd046c1c4696d2a7b7cdaa5522da6",
   "domains": [
     {
       "features": [
@@ -268,7 +268,7 @@
     }
   ],
   "format": "pml.compiled",
-  "format_version": 3,
+  "format_version": 4,
   "language_version": "0.1-draft",
   "obligations": [
     {
@@ -582,6 +582,51 @@
         "completion": "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved"
       },
       "subject": "a_record"
+    }
+  ],
+  "terms": [
+    {
+      "forbidden_synonyms": [],
+      "id": "Alpha",
+      "meaning": "The first term by scalar-value ordering.",
+      "source_kind": "vocabulary"
+    },
+    {
+      "forbidden_synonyms": [
+        "entry"
+      ],
+      "id": "a_record",
+      "meaning": "A record whose authored state order is retained.",
+      "source_kind": "concept"
+    },
+    {
+      "forbidden_synonyms": [],
+      "id": "ada",
+      "meaning": "The first actor by ID.",
+      "source_kind": "actor"
+    },
+    {
+      "forbidden_synonyms": [],
+      "id": "z_record",
+      "meaning": "The last concept by ID.",
+      "source_kind": "concept"
+    },
+    {
+      "forbidden_synonyms": [
+        "operator"
+      ],
+      "id": "zed",
+      "meaning": "The last actor by ID.",
+      "source_kind": "actor"
+    },
+    {
+      "forbidden_synonyms": [
+        "later_term",
+        "earlier_term"
+      ],
+      "id": "éclair",
+      "meaning": "A basic non-ASCII vocabulary term.",
+      "source_kind": "vocabulary"
     }
   ],
   "use_case_memberships": [

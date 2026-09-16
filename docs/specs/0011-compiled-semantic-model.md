@@ -1,26 +1,25 @@
 # PML canonical compiled semantic model
 
-Status: Owner approved on 2026-08-13
+Status: Owner approved; version 4 approved by manifest-quality review 0053
 
 ## Approved decision
 
-Version 3 of the read-only compiled semantic model defined here is approved as the
+Version 4 of the read-only compiled semantic model defined here is approved as the
 single derived representation shared by PML reference resolution, obligation
-enumeration, and downstream inspection tools. Version 3 supersedes version 2 to
-carry the structured concept-state condition shape and the concept `required_by`
-inverse link owner approved for task 27 (see the version 3 delta below); no other
-format-version 1 or 2 producers or consumers remain supported.
+enumeration, and downstream inspection tools. Version 4 supersedes version 3 to
+carry the unified derived `terms` index (see the version 4 delta below); no other
+format-version 1, 2, or 3 producers or consumers remain supported.
 
-This specification does not change the PML language. It uses the behavior,
-transition, signal, relationship, use-case, and obligation semantics approved in
-[0010](0010-behavior-transition-model.md), as amended by
+This specification incorporates the approved vocabulary semantics and uses the
+behavior, transition, signal, relationship, use-case, and obligation semantics
+approved in [0010](0010-behavior-transition-model.md), as amended by
 [0013](0013-bare-behavior-reference-normalization.md). It also approves the Unicode
 scalar-string and string-key loading preconditions required for deterministic JSON
 tooling; those preconditions are input well-formedness, not product meaning. It
 does not authorize schema, validator, compiler, command, formatter, bindings,
 probe, lock, state, or web UI implementation before owner approval. Owner approval
-was given explicitly on 2026-08-13; implementation may now proceed in the delivery
-order defined below.
+was given explicitly through the approved decisions recorded above; implementation
+may now proceed in the delivery order defined below.
 
 ## Purpose and authority boundary
 
@@ -158,12 +157,31 @@ Paths name semantic objects, not files. The compiled model contains no source fi
 paths or YAML layout metadata, so compiling the same merged definition as one file
 or as an equivalent modular directory produces the same model.
 
-## Version 3 delta
+## Version 4 delta
 
-Version 3 replaces the previously approved version 2 grammar. Independent
-compilers and consumers MUST emit and accept `format_version: 3` and MUST NOT
-accept `format_version: 1` or `format_version: 2` as a synonym. The version-3
-changes are:
+Version 4 replaces the previously approved version 3 grammar. Independent
+compilers and consumers MUST emit and accept `format_version: 4` and MUST NOT
+accept `format_version: 1`, `format_version: 2`, or `format_version: 3` as a
+synonym. The version-4 changes are:
+
+- The compiled model gains a required `terms` array. It contains one record for
+  every vocabulary term, actor, and concept, with `id`, `source_kind`, `meaning`,
+  and `forbidden_synonyms`; it is sorted by `id`, then `source_kind` to make
+  actor/concept ID ties deterministic. Existing `vocabulary` records retain their
+  approved shape.
+- Actors and concepts may declare `forbidden_synonyms` using the vocabulary
+  synonym-list shape. A vocabulary term whose case-folded ID, with underscores
+  treated as spaces, equals an actor or concept ID is invalid with
+  `PML-E-VOCABULARY-DUPLICATE`.
+
+Every other version-3 rule (identity, obligation inventory, closed enums,
+canonical JSON encoding, definition digest) remains as approved, subject to the
+byte change for `format_version` documented in the encoding section.
+
+## Version 3 delta (superseded, historical)
+
+Version 3 replaced the previously approved version 2 grammar. It is retained here
+only to record what version 3 changed from version 2. The version-3 changes were:
 
 - Authored `behaviors.<id>.conditions` items may be either a prose statement or a
   closed structured mapping `{concept: <concept-id>, state: <state>}`. Structured
@@ -180,16 +198,15 @@ changes are:
   one per distinct behavior whose structured conditions name the concept, sorted
   lexically. Concepts with no structured requirer serialize `required_by: []`.
 
-Every other version-2 rule (identity, obligation inventory, closed enums,
-canonical JSON encoding, definition digest) remains as approved, subject to the
-byte change for `format_version` documented in the encoding section.
+Every other version-2 rule carried into version 3 except where the version-3
+changes above superseded it.
 
 ## Version 2 delta (superseded, historical)
 
 Version 2 is superseded by version 3 above. It is retained here only to record
-what version 2 changed from version 1; a conforming version-3 producer or
+what version 2 changed from version 1; a conforming version-4 producer or
 consumer MUST NOT accept `format_version: 2` and MUST NOT apply the version-2
-requirements below to a version-3 model. The version-2 changes were:
+requirements below to a version-4 model. The version-2 changes were:
 
 - `compiled-surface-state` became an object with optional `shows: list[obligation-id]`
   and optional `contains: list[authored-text]`, at least one of which is present.
@@ -203,10 +220,10 @@ requirements below to a version-3 model. The version-2 changes were:
 
 Every other version-1 rule (identity, ordering, canonical JSON encoding,
 definition digest, obligation inventory, closed enums) carried into version 2,
-and every version-2 rule likewise carries into version 3 except where the
-version-3 delta above supersedes it.
+and every version-2 rule likewise carries into version 4 except where the
+version-3 or version-4 delta above supersedes it.
 
-## Version 3 JSON structure
+## Version 4 JSON structure
 
 Every object below is closed: implementations MUST NOT add unlisted properties.
 Properties marked `?` are omitted when their authored value is absent; they are not
@@ -216,11 +233,12 @@ strings preserve authored Unicode text exactly.
 ```text
 compiled-model = {
   format: "pml.compiled",
-  format_version: 3,
+  format_version: 4,
   language_version: "0.1-draft",
   definition_digest: sha256-digest,
   project: compiled-project,
   vocabulary: list[compiled-vocabulary-term],
+  terms: list[compiled-term],
   actors: list[compiled-actor],
   concepts: list[compiled-concept],
   architecture: list[compiled-architecture-decision],
@@ -244,6 +262,13 @@ compiled-project = {
 
 compiled-vocabulary-term = {
   term: authored-term,
+  meaning: authored-text,
+  forbidden_synonyms: list[authored-text]
+}
+
+compiled-term = {
+  id: authored-term | actor-id | concept-id,
+  source_kind: "vocabulary" | "actor" | "concept",
   meaning: authored-text,
   forbidden_synonyms: list[authored-text]
 }
@@ -454,7 +479,7 @@ The model has these consistency invariants:
   or another compiled edge.
 
 The `definition_digest` uses the already approved definition-digest algorithm,
-made fully explicit here for the version 3 byte contract. After complete schema
+made fully explicit here for the version 4 byte contract. After complete schema
 and semantic validation, apply the approved reference canonicalization from
 [0013](0013-bare-behavior-reference-normalization.md), then encode the resulting
 canonical definition with this compact canonical definition JSON algorithm:
@@ -595,7 +620,7 @@ use-case goal.
 
 ## Stable obligations
 
-Version 3 uses these closed `obligation-kind` values and definitions:
+Version 4 uses these closed `obligation-kind` values and definitions:
 
 | `kind` | `definition` | Stable ID |
 | --- | --- | --- |
@@ -648,7 +673,8 @@ The rules are:
    Do not trim, case-fold, Unicode-normalize, or reflow it.
 2. Preserve authored sequence order in every array copied from an authored YAML
    sequence. The exhaustive set is:
-   `vocabulary[].forbidden_synonyms`, `concepts[].states`, `features[].actors`,
+   `vocabulary[].forbidden_synonyms`, `actors[].forbidden_synonyms`,
+   `concepts[].forbidden_synonyms`, `concepts[].states`, `features[].actors`,
    `features[].related_to`, `features[].architecture`, `behaviors[].related_to`,
    `features[].experience.surfaces[].contains`,
    `features[].experience.surfaces[].accessibility`,
@@ -667,6 +693,7 @@ The rules are:
    | Array | Sort key |
    | --- | --- |
    | top-level `vocabulary` | `term` |
+   | top-level `terms` | tuple `(id, source_kind)` |
    | top-level `actors` | `id` |
    | top-level `concepts` | `id` |
    | top-level `architecture` | `path` |
@@ -712,11 +739,11 @@ The rules are:
 5. Sort each symmetric relationship's two `endpoints` lexically before using the
    endpoint tuple as its identity and sort `declared_by` lexically by semantic
    path. Emit only one relationship record per endpoint pair.
-6. These rules exhaust every array in version 3. A future format change that adds
+6. These rules exhaust every array in version 4. A future format change that adds
    an array MUST assign it either source-sequence preservation or an explicit total
    sort key before that format version is approved.
 7. Serialize the ordered model with the canonical JSON algorithm below. No other
-   JSON layout or escape spelling conforms to version 3.
+   JSON layout or escape spelling conforms to version 4.
 8. Do not include timestamps, source paths, machine paths, random identifiers,
    generated state, or environment-dependent values.
 
@@ -737,8 +764,8 @@ trailing spaces, and ends with exactly one line feed after the top-level value.
 
 Emit values as follows:
 
-- The version-3 model's only number is `format_version`, emitted as the single
-  ASCII byte `3`. The model contains no booleans or nulls; absent optional
+- The version-4 model's only number is `format_version`, emitted as the single
+  ASCII byte `4`. The model contains no booleans or nulls; absent optional
   properties are omitted as specified above.
 - An empty object is `{}` and an empty array is `[]`.
 - A non-empty object begins with `{`. For each property in Unicode scalar-value
@@ -939,8 +966,8 @@ structure cannot represent it without changing this contract.
 The original owner-approved delivery order for the compiled model produced
 version 1 and was later re-executed to produce versions 2 and 3. It is retained
 below only as historical delivery record; it does not impose additional
-requirements on a version-3 producer or consumer beyond those already stated in
-the version-3 JSON structure, stable obligations, determinism, and canonical
+requirements on a version-4 producer or consumer beyond those already stated in
+the version-4 JSON structure, stable obligations, determinism, and canonical
 JSON encoding sections above:
 
 1. Add the `non-string-key` and `invalid-unicode-scalar` restricted-loading

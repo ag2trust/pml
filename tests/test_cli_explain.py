@@ -53,7 +53,7 @@ project:
   name: Explain Test
   purpose: Exercise compiled-model explain lookups.
 vocabulary:
-  shared:
+  shared_term:
     meaning: A term that collides with flat record identities.
   domains.core.features.f:
     meaning: A term that collides with a feature path.
@@ -154,10 +154,9 @@ def test_explain_renders_each_flat_identity_collision_in_compiled_category_order
 
     captured = capsys.readouterr()
     assert captured.err == ""
-    assert captured.out.index("Vocabulary term\n") < captured.out.index("Actor\n")
     assert captured.out.index("Actor\n") < captured.out.index("Concept\n")
     assert captured.out.index("Concept\n") < captured.out.index("Signal\n")
-    assert captured.out.count("  Authored:\n") == 4
+    assert captured.out.count("  Authored:\n") == 3
     assert "producer:" in captured.out
 
 
@@ -255,7 +254,7 @@ def test_compiled_indexes_provide_reverse_and_inverse_lookup_views(tmp_path: Pat
     behavior = "domains.core.features.f.behaviors.b"
     use_case = "domains.core.features.f.use_cases.u"
 
-    assert indexes.reverse["shared"] == ("vocabulary", "actors", "concepts", "signals")
+    assert indexes.reverse["shared"] == ("actors", "concepts", "signals")
     assert indexes.reverse[use_case] == ("use_cases", "obligations")
     assert indexes.relationships_for_endpoint(feature)[0]["declared_by"] == [
         "domains.core.features.g"

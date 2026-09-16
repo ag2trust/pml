@@ -15,6 +15,7 @@ vocabulary:
 actors:
   zed:
     meaning: The last actor by ID.
+    forbidden_synonyms: [operator]
   ada:
     meaning: The first actor by ID.
 
@@ -24,6 +25,7 @@ concepts:
   a_record:
     states: [ready, draft]
     meaning: A record whose authored state order is retained.
+    forbidden_synonyms: [entry]
 
 rules:
   z_rule:

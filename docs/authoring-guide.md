@@ -141,6 +141,8 @@ actors:
   member: {meaning: An authenticated person with access.}
 ```
 
+This is rejected with `PML-E-VOCABULARY-DUPLICATE`.
+
 ### Put an obligation in an experience surface
 
 ```yaml
