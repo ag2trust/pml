@@ -109,6 +109,8 @@ instance ceases to exist. `from` and `to` MUST differ. A completion may define
 both an inline signal and `transitions`. A declared state is a non-empty state
 token that is neither `*` nor `none` and does not contain ` -> `; the sentinels
 and separator are reserved so transition endpoints have one interpretation.
+State tokens cannot contain line-break characters, so state graph output remains
+single-line.
 
 Transitions are completion-owned product semantics. They do not define
 persistence, messaging, workflow order, or an implementation mechanism. Each
@@ -322,7 +324,8 @@ attention_view_update:
 ```text
 identifier = [a-z][a-z0-9_]*
 statement = non-empty text
-state-token = non-empty text excluding "*", "none", and the substring " -> "
+state-token = non-empty single-line text excluding "*", "none", and the
+  substring " -> "
 declared-actor-id = identifier resolving to one declared actor
 concept-id = identifier resolving to one declared product concept
 declared-signal-id = identifier resolving to one inline signal definition
