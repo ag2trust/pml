@@ -10,7 +10,7 @@ is implemented across the schema, semantic validation, conformance examples,
 obligation resolution, bindings, probes, state consumers, and authoring
 documentation.
 
-The owner-approved version 2 compiled semantic model in
+The owner-approved version 3 compiled semantic model in
 [`docs/specs/0011-compiled-semantic-model.md`](docs/specs/0011-compiled-semantic-model.md)
 is implemented through canonical serialization and `pml compile --json`.
 

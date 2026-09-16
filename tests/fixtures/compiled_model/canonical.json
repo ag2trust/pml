@@ -139,6 +139,7 @@
     {
       "id": "a_record",
       "meaning": "A record whose authored state order is retained.",
+      "required_by": [],
       "states": [
         "ready",
         "draft"
@@ -147,6 +148,7 @@
     {
       "id": "z_record",
       "meaning": "The last concept by ID.",
+      "required_by": [],
       "states": []
     }
   ],
@@ -266,7 +268,7 @@
     }
   ],
   "format": "pml.compiled",
-  "format_version": 2,
+  "format_version": 3,
   "language_version": "0.1-draft",
   "obligations": [
     {

@@ -84,7 +84,15 @@ conditions, trigger, outcome, failures, rules, related_to
 
 Behaviors cannot contain behaviors or architecture references. `conditions` is an
 optional unique list of one through seven product-state statements that all must
-hold when the trigger occurs. If they do not, the behavior does not apply.
+hold when the trigger occurs. If they do not, the behavior does not apply. Each
+item is either a prose statement or a closed structured mapping
+`{concept: <concept-id>, state: <state>}` naming one declared state of one
+declared concept. Prefer the structured form whenever the condition is exactly a
+concept state; the validator resolves `concept` against declared concepts and
+`state` against that concept's declared `states`, and rejects two structured
+conditions that name the same concept in one behavior. Unknown concepts and
+undeclared states are validation errors (`PML-E-CONDITION-CONCEPT` and
+`PML-E-CONDITION-STATE`).
 
 `trigger` is either a direct `statement`, a signal reference, or a closed ID-keyed
 `one_of` map of two through seven such alternatives. Each trigger occurrence

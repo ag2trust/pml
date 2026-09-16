@@ -269,6 +269,26 @@ def _surface_references(
     return references
 
 
+def _concept_required_by(
+    resolution: ResolvedDefinition,
+) -> dict[str, list[str]]:
+    """Return per-concept behaviors whose structured conditions name the concept."""
+
+    references: dict[str, set[str]] = {}
+    for behavior_path, behavior in resolution.behaviors.items():
+        conditions = behavior.get("conditions")
+        if not isinstance(conditions, list):
+            continue
+        for item in conditions:
+            if not isinstance(item, dict):
+                continue
+            concept = item.get("concept")
+            if not isinstance(concept, str):
+                continue
+            references.setdefault(concept, set()).add(behavior_path)
+    return {concept: sorted(paths) for concept, paths in references.items()}
+
+
 def _relationships(
     resolution: ResolvedDefinition,
 ) -> list[dict[str, Any]]:
@@ -395,7 +415,10 @@ def _build_compiled_model(
                 conditions = behavior.get("conditions")
                 if isinstance(conditions, list):
                     compiled_behavior["conditions"] = {
-                        "statements": list(conditions),
+                        "statements": [
+                            dict(item) if isinstance(item, dict) else item
+                            for item in conditions
+                        ],
                         "obligation": f"{behavior_path}.conditions",
                     }
                 behaviors.append(compiled_behavior)
@@ -454,9 +477,10 @@ def _build_compiled_model(
         compiled_obligations, key=lambda obligation: obligation["id"]
     )
 
+    concept_required_by = _concept_required_by(resolution)
     model = {
         "format": "pml.compiled",
-        "format_version": 2,
+        "format_version": 3,
         "language_version": "0.1-draft",
         "definition_digest": definition_digest(document),
         "project": {
@@ -487,6 +511,7 @@ def _build_compiled_model(
                 "id": concept_id,
                 "meaning": definition["meaning"],
                 "states": _sequence(definition.get("states")),
+                "required_by": concept_required_by.get(concept_id, []),
             }
             for concept_id, definition in sorted(resolution.concepts.items())
         ],
