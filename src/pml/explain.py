@@ -96,7 +96,7 @@ def is_supported_model(model: Mapping[str, Any]) -> bool:
     return (
         model.get("format") == "pml.compiled"
         and type(model.get("format_version")) is int
-        and model.get("format_version") == 2
+        and model.get("format_version") == 3
     )
 
 
@@ -227,7 +227,11 @@ def _record_fields(
     if category == "actors":
         return _selected(record, "id", "meaning"), [], []
     if category == "concepts":
-        return _selected(record, "id", "meaning", "states"), [], []
+        return (
+            _selected(record, "id", "meaning", "states"),
+            [],
+            _selected(record, "required_by"),
+        )
     if category == "architecture":
         return (
             _selected(record, "id", "category", "selection", "rationale"),

@@ -1545,3 +1545,164 @@ def test_compiled_model_records_surfaces_inverse_on_referenced_failure(
     assert referenced["surfaces"] == [
         "domains.notes.features.creation.experience.surfaces.creation_flow.states.target"
     ]
+
+
+def _conditions_document(conditions: list) -> dict:
+    return {
+        "pml": "0.1-draft",
+        "project": {
+            "id": "sample",
+            "name": "Sample",
+            "purpose": "Exercise structured behavior conditions.",
+        },
+        "actors": {"member": {"meaning": "A participant."}},
+        "concepts": {
+            "testimonial": {
+                "meaning": "A submitted testimonial.",
+                "states": ["draft", "polished"],
+            }
+        },
+        "domains": {
+            "reviews": {
+                "purpose": "Manage testimonials.",
+                "features": {
+                    "publishing": {
+                        "purpose": "Publish testimonials.",
+                        "behaviors": {
+                            "publish": {
+                                "conditions": conditions,
+                                "trigger": {
+                                    "statement": "A Member requests publication."
+                                },
+                                "outcome": {
+                                    "statement": "The testimonial is published."
+                                },
+                            }
+                        },
+                    }
+                },
+            }
+        },
+    }
+
+
+def test_structured_concept_state_condition_compiles() -> None:
+    from pml.validator import validate_document
+
+    document = _conditions_document(
+        [{"concept": "testimonial", "state": "polished"}]
+    )
+
+    resolution = validate_document(document)
+
+    assert resolution.diagnostics == ()
+    behavior = resolution.compiled_model["behaviors"][0]
+    assert behavior["conditions"]["statements"] == [
+        {"concept": "testimonial", "state": "polished"}
+    ]
+    testimonial = next(
+        concept
+        for concept in resolution.compiled_model["concepts"]
+        if concept["id"] == "testimonial"
+    )
+    assert testimonial["required_by"] == [
+        {
+            "state": "polished",
+            "behavior": "domains.reviews.features.publishing.behaviors.publish",
+        }
+    ]
+
+
+def test_structured_condition_with_prose_item_preserves_authored_order() -> None:
+    from pml.validator import validate_document
+
+    document = _conditions_document(
+        [
+            {"concept": "testimonial", "state": "polished"},
+            "The Member has verified their identity.",
+        ]
+    )
+
+    resolution = validate_document(document)
+
+    assert resolution.diagnostics == ()
+    behavior = resolution.compiled_model["behaviors"][0]
+    assert behavior["conditions"]["statements"] == [
+        {"concept": "testimonial", "state": "polished"},
+        "The Member has verified their identity.",
+    ]
+
+
+def test_structured_condition_unknown_concept_is_rejected() -> None:
+    from pml.validator import validate_document
+
+    document = _conditions_document(
+        [{"concept": "unknown", "state": "polished"}]
+    )
+
+    resolution = validate_document(document)
+
+    assert [(item.path, item.code) for item in resolution.diagnostics] == [
+        (
+            "domains.reviews.features.publishing.behaviors.publish.conditions[0].concept",
+            "PML-E-CONDITION-CONCEPT",
+        )
+    ]
+    assert resolution.compiled_model is None
+
+
+def test_structured_condition_undeclared_state_is_rejected() -> None:
+    from pml.validator import validate_document
+
+    document = _conditions_document(
+        [{"concept": "testimonial", "state": "archived"}]
+    )
+
+    resolution = validate_document(document)
+
+    assert [(item.path, item.code) for item in resolution.diagnostics] == [
+        (
+            "domains.reviews.features.publishing.behaviors.publish.conditions[0].state",
+            "PML-E-CONDITION-STATE",
+        )
+    ]
+    assert resolution.compiled_model is None
+
+
+def test_duplicate_concept_in_one_behaviors_conditions_is_rejected() -> None:
+    from pml.validator import validate_document
+
+    document = _conditions_document(
+        [
+            {"concept": "testimonial", "state": "draft"},
+            {"concept": "testimonial", "state": "polished"},
+        ]
+    )
+
+    resolution = validate_document(document)
+
+    assert [(item.path, item.code) for item in resolution.diagnostics] == [
+        (
+            "domains.reviews.features.publishing.behaviors.publish.conditions[1].concept",
+            "PML-E-CONDITION-CONCEPT",
+        )
+    ]
+    assert resolution.compiled_model is None
+
+
+def test_pml_explain_concept_lists_required_by_behaviors() -> None:
+    from pml.explain import explain_compiled_model
+    from pml.validator import validate_document
+
+    document = _conditions_document(
+        [{"concept": "testimonial", "state": "polished"}]
+    )
+    resolution = validate_document(document)
+    assert resolution.diagnostics == ()
+
+    result = explain_compiled_model(resolution.compiled_model, "testimonial")
+
+    assert result.output is not None
+    assert "required_by" in result.output
+    assert "domains.reviews.features.publishing.behaviors.publish" in result.output
+    assert "polished" in result.output

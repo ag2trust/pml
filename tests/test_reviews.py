@@ -60,8 +60,8 @@ def test_reviewed_product_example_is_valid() -> None:
 @pytest.mark.parametrize(
     "model",
     [
-        {"format": "pml.compiled", "format_version": 1},
-        {"format": "pml.other", "format_version": 2},
+        {"format": "pml.compiled", "format_version": 2},
+        {"format": "pml.other", "format_version": 3},
         {"format": "pml.compiled", "format_version": True},
         {},
     ],

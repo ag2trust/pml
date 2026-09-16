@@ -39,6 +39,23 @@ attention_handling:
 instant of the trigger. If a condition does not hold, this behavior does not
 apply; author a separate behavior if the product must respond to that case.
 
+Each condition item is either a prose statement or a structured mapping
+`{concept: <concept-id>, state: <state>}` naming one declared state of one
+declared concept:
+
+```yaml
+conditions:
+  - concept: inbox_item
+    state: needs_attention
+  - The Member is authorized to record decisions.
+```
+
+Prefer the structured form whenever the condition is exactly a concept state:
+it lets tooling check the reference against declared `concepts.<id>.states`, and
+`pml explain <concept>` lists which behaviors require each state. Two structured
+conditions cannot name the same concept in one behavior — split the behavior
+instead.
+
 `trigger` is required. It is either one `statement`, one signal reference, or a
 closed `one_of` map of alternatives. Each alternative occurrence starts a new
 evaluation; trigger alternatives are not globally exclusive.

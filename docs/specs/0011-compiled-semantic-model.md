@@ -4,12 +4,12 @@ Status: Owner approved on 2026-08-13
 
 ## Approved decision
 
-Version 2 of the read-only compiled semantic model defined here is approved as the
+Version 3 of the read-only compiled semantic model defined here is approved as the
 single derived representation shared by PML reference resolution, obligation
-enumeration, and downstream inspection tools. Version 2 supersedes the previously
-approved version 1 to carry the surface-state and obligation shape changes owner
-approved for task 16 (see the version 2 delta below); no other format-version 1
-producers or consumers remain supported.
+enumeration, and downstream inspection tools. Version 3 supersedes version 2 to
+carry the structured concept-state condition shape and the concept `required_by`
+inverse link owner approved for task 27 (see the version 3 delta below); no other
+format-version 1 or 2 producers or consumers remain supported.
 
 This specification does not change the PML language. It uses the behavior,
 transition, signal, relationship, use-case, and obligation semantics approved in
@@ -158,9 +158,32 @@ Paths name semantic objects, not files. The compiled model contains no source fi
 paths or YAML layout metadata, so compiling the same merged definition as one file
 or as an equivalent modular directory produces the same model.
 
+## Version 3 delta
+
+Version 3 replaces the previously approved version 2 grammar. Independent
+compilers and consumers MUST emit and accept `format_version: 3` and MUST NOT
+accept `format_version: 1` or `format_version: 2` as a synonym. The version-3
+changes are:
+
+- Authored `behaviors.<id>.conditions` items may be either a prose statement or a
+  closed structured mapping `{concept: <concept-id>, state: <state>}`. Structured
+  items resolve `concept` against declared concepts and `state` against that
+  concept's declared `states`. Unknown concepts, undeclared states, and two
+  structured conditions naming the same concept in one behavior are validation
+  errors (`PML-E-CONDITION-CONCEPT` and `PML-E-CONDITION-STATE`).
+- The compiled `behavior.conditions.statements` list preserves authored order and
+  contains structured `{concept, state}` objects for structured items and strings
+  for prose items. The single applicability obligation at
+  `<behavior-path>.conditions` remains a `conditions` obligation whose definition
+  carries the same list.
+- Each compiled `concept` gains a `required_by` inverse list of
+  `{state, behavior}` records, one per structured condition that names the
+  concept, sorted by `(state, behavior)`. Concepts with no structured requirer
+  serialize `required_by: []`.
+
 ## Version 2 delta
 
-Version 2 replaces the previously approved version 1 grammar. Independent
+Version 2 replaced the previously approved version 1 grammar. Independent
 compilers and consumers MUST emit and accept `format_version: 2` and MUST NOT
 accept `format_version: 1` as a synonym; the two versions describe incompatible
 `experience.surfaces` and obligation shapes. The version-2 changes are:

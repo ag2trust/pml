@@ -30,10 +30,16 @@ class CompiledActor(TypedDict):
     meaning: str
 
 
+class ConceptRequirer(TypedDict):
+    state: str
+    behavior: Path
+
+
 class CompiledConcept(TypedDict):
     id: str
     meaning: str
     states: list[str]
+    required_by: list[ConceptRequirer]
 
 
 class CompiledArchitectureDecision(TypedDict):
@@ -86,8 +92,16 @@ class CompiledFeature(TypedDict):
     architecture: list[Path]
 
 
+class StructuredCondition(TypedDict):
+    concept: str
+    state: str
+
+
+ConditionStatement: TypeAlias = str | StructuredCondition
+
+
 class CompiledConditions(TypedDict):
-    statements: list[str]
+    statements: list[ConditionStatement]
     obligation: ObligationId
 
 
@@ -220,7 +234,7 @@ class CompiledUseCaseMembership(TypedDict):
 
 
 class ConditionsDefinition(TypedDict):
-    statements: list[str]
+    statements: list[ConditionStatement]
 
 
 class StatementDefinition(TypedDict):
@@ -322,7 +336,7 @@ CompiledObligation: TypeAlias = (
 
 class CompiledModel(TypedDict):
     format: Literal["pml.compiled"]
-    format_version: Literal[2]
+    format_version: Literal[3]
     language_version: Literal["0.1-draft"]
     definition_digest: str
     project: CompiledProject

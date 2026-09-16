@@ -58,7 +58,8 @@ domains:
         behaviors:
           assistant_creation:
             conditions:
-              - The Member is authenticated and may create another Assistant.
+              - concept: assistant
+                state: draft
             trigger:
               statement: The Member provides valid configuration and requests creation.
             outcome:

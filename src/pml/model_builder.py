@@ -269,6 +269,31 @@ def _surface_references(
     return references
 
 
+def _concept_required_by(
+    resolution: ResolvedDefinition,
+) -> dict[str, list[dict[str, str]]]:
+    """Return per-concept behaviors whose structured conditions require each state."""
+
+    references: dict[str, list[dict[str, str]]] = {}
+    for behavior_path, behavior in resolution.behaviors.items():
+        conditions = behavior.get("conditions")
+        if not isinstance(conditions, list):
+            continue
+        for item in conditions:
+            if not isinstance(item, dict):
+                continue
+            concept = item.get("concept")
+            state = item.get("state")
+            if not (isinstance(concept, str) and isinstance(state, str)):
+                continue
+            references.setdefault(concept, []).append(
+                {"behavior": behavior_path, "state": state}
+            )
+    for entries in references.values():
+        entries.sort(key=lambda entry: (entry["state"], entry["behavior"]))
+    return references
+
+
 def _relationships(
     resolution: ResolvedDefinition,
 ) -> list[dict[str, Any]]:
@@ -395,7 +420,10 @@ def _build_compiled_model(
                 conditions = behavior.get("conditions")
                 if isinstance(conditions, list):
                     compiled_behavior["conditions"] = {
-                        "statements": list(conditions),
+                        "statements": [
+                            dict(item) if isinstance(item, dict) else item
+                            for item in conditions
+                        ],
                         "obligation": f"{behavior_path}.conditions",
                     }
                 behaviors.append(compiled_behavior)
@@ -454,9 +482,10 @@ def _build_compiled_model(
         compiled_obligations, key=lambda obligation: obligation["id"]
     )
 
+    concept_required_by = _concept_required_by(resolution)
     model = {
         "format": "pml.compiled",
-        "format_version": 2,
+        "format_version": 3,
         "language_version": "0.1-draft",
         "definition_digest": definition_digest(document),
         "project": {
@@ -487,6 +516,7 @@ def _build_compiled_model(
                 "id": concept_id,
                 "meaning": definition["meaning"],
                 "states": _sequence(definition.get("states")),
+                "required_by": concept_required_by.get(concept_id, []),
             }
             for concept_id, definition in sorted(resolution.concepts.items())
         ],
