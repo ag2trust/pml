@@ -121,6 +121,64 @@ def test_explain_summary_keeps_transition_kinds_and_wraps_complete_text() -> Non
     assert all(len(line) <= 100 for line in project.output.splitlines())
 
 
+def test_explain_summary_lists_failure_completion_signals_as_produced() -> None:
+    model = _compiled(ROOT / "examples" / "behavior-one-of-output.pml.yaml")
+    feature = explain_compiled_model(model, "domains.email.features.triage")
+    behavior = explain_compiled_model(
+        model, "domains.email.features.triage.behaviors.importance_decision"
+    )
+    signals = "email_processing_failed, important_email_processed, ordinary_email_processed"
+
+    assert feature.output is not None
+    assert f"importance_decision | 1 | one_of:2 | one_of:2 | {signals} | none | 1" in feature.output
+    assert behavior.output is not None
+    assert """  Signals produced:
+    email_processing_failed
+    important_email_processed
+    ordinary_email_processed
+""" in behavior.output
+
+
+def test_explain_summary_renders_a_subjectless_global_signal(tmp_path: Path, capsys) -> None:
+    source = tmp_path / "global-signal.pml.yaml"
+    source.write_text(
+        """pml: "0.1-draft"
+project:
+  id: global_signal
+  name: Global signal
+  purpose: Exercise a signal without a subject.
+domains:
+  core:
+    purpose: Exercise global signals.
+    features:
+      producer:
+        purpose: Produce a global signal.
+        behaviors:
+          emit:
+            trigger:
+              statement: A participant requests an update.
+            outcome:
+              statement: The update is available.
+              signal:
+                id: update_available
+                meaning: An update is available to all participants.
+""",
+        encoding="utf-8",
+    )
+
+    assert cli.main(["explain", str(source), "update_available"]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert captured.out == """Signal: update_available
+  Meaning: An update is available to all participants.
+  Subject: none
+  Produced by: domains.core.features.producer.behaviors.emit
+  Consumed by:
+    none
+"""
+
+
 def _collision_manifest(tmp_path: Path) -> Path:
     source = tmp_path / "collisions.pml.yaml"
     source.write_text(

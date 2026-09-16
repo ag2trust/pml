@@ -426,7 +426,7 @@ def _feature_behavior_table(record: Record, indexes: CompiledModelIndexes) -> li
             str(condition_count),
             _trigger_kind(behavior["trigger"]),
             _outcome_kind(behavior["outcome"]),
-            _comma_or_none(_transition_signals(behavior["outcome"])),
+            _comma_or_none(_produced_signals(behavior)),
             _comma_or_none(_transition_signals(behavior["trigger"])),
             str(len(behavior["failures"])),
         )
@@ -451,6 +451,17 @@ def _transition_cases(transition: Record) -> Sequence[Record]:
 
 def _transition_signals(transition: Record) -> list[str]:
     return [case["signal"] for case in _transition_cases(transition) if "signal" in case]
+
+
+def _produced_signals(behavior: Record) -> list[str]:
+    """Return every signal emitted by a behavior's outcome or failures."""
+
+    return sorted(
+        {
+            *_transition_signals(behavior["outcome"]),
+            *(failure["signal"] for failure in behavior["failures"] if "signal" in failure),
+        }
+    )
 
 
 def _rule_entries(paths: Sequence[str], indexes: CompiledModelIndexes) -> list[str]:
@@ -510,7 +521,7 @@ def _render_behavior_summary(record: Record, indexes: CompiledModelIndexes) -> s
             [f"{failure['id']}: {failure['statement']}" for failure in record["failures"]],
         )
     )
-    lines.extend(_summary_entries("  ", "Signals produced", _transition_signals(record["outcome"])))
+    lines.extend(_summary_entries("  ", "Signals produced", _produced_signals(record)))
     lines.extend(_summary_entries("  ", "Signals consumed", _transition_signals(record["trigger"])))
     lines.extend(
         _summary_entries(
@@ -569,7 +580,7 @@ def _render_use_case_summary(record: Record, indexes: CompiledModelIndexes) -> s
 def _render_signal_summary(record: Record) -> str:
     lines = [f"Signal: {record['id']}"]
     lines.extend(_summary_line("  ", "Meaning", record["meaning"]))
-    lines.extend(_summary_line("  ", "Subject", record["subject"]))
+    lines.extend(_summary_line("  ", "Subject", record.get("subject", "none")))
     lines.extend(_summary_line("  ", "Produced by", record["producer"]["behavior"]))
     lines.extend(
         _summary_entries(
