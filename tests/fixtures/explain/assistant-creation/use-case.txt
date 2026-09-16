@@ -1,0 +1,6 @@
+Use case: domains.assistants.features.creation.use_cases.create_from_scratch
+  Goal: Create and begin using an Assistant.
+  Scope: domains.assistants.features.creation
+  Obligation path: domains.assistants.features.creation.use_cases.create_from_scratch
+  Surfaces:
+    none

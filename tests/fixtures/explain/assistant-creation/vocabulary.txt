@@ -1,0 +1,4 @@
+Vocabulary term: Assistant
+  Meaning: A Customer-owned AI worker configured by a Member.
+  Forbidden synonyms:
+    none

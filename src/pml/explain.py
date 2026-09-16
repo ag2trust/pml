@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import json
+import textwrap
 from types import MappingProxyType
 from typing import Any
 
@@ -174,11 +175,16 @@ def build_compiled_model_indexes(model: Mapping[str, Any]) -> CompiledModelIndex
     )
 
 
-def explain_compiled_model(model: Mapping[str, Any], canonical_id: str) -> ExplainResult:
+def explain_compiled_model(
+    model: Mapping[str, Any], canonical_id: str, *, raw: bool = False
+) -> ExplainResult:
     """Render every matching record from a supported compiled model.
 
     The format check deliberately precedes building any index or reading record
     collections, as required of every compiled-model consumer.
+
+    The default is the stable, concise human summary.  ``raw`` deliberately
+    retains the original complete record rendering for diagnosis and snapshots.
     """
 
     if not is_supported_model(model):
@@ -196,15 +202,35 @@ def explain_compiled_model(model: Mapping[str, Any], canonical_id: str) -> Expla
             diagnostic=f"{canonical_id}: [unknown-id] no compiled record matches this ID"
         )
 
-    return ExplainResult(
-        output="\n\n".join(
-            _render_record(category, record, indexes) for category, record in matches
+    if raw:
+        rendered = (
+            _render_raw_record(category, record, indexes) for category, record in matches
         )
-        + "\n"
-    )
+    else:
+        rendered = _render_summary_matches(matches, indexes)
+    return ExplainResult(output="\n\n".join(rendered) + "\n")
 
 
-def _render_record(
+def _render_summary_matches(
+    matches: Sequence[tuple[str, Record]], indexes: CompiledModelIndexes
+) -> list[str]:
+    """Render concise summaries without duplicating a use-case obligation.
+
+    A use case and its stable obligation deliberately share one canonical ID.
+    The summary renders the user-facing use-case record once, including its
+    obligation path and surfaces, while raw mode preserves both compiled
+    records exactly as before.
+    """
+
+    matched_categories = {category for category, _ in matches}
+    return [
+        _render_summary_record(category, record, indexes)
+        for category, record in matches
+        if not (category == "obligations" and record["kind"] == "use_case" and "use_cases" in matched_categories)
+    ]
+
+
+def _render_raw_record(
     category: str, record: Record, indexes: CompiledModelIndexes
 ) -> str:
     label = next(item.label for item in _REQUESTABLE_CATEGORIES if item.name == category)
@@ -220,6 +246,420 @@ def _render_record(
             "Derived coupling", list(feature_coupling(indexes.model, record["path"]).items())
         )
     return "\n".join(sections)
+
+
+_SUMMARY_WIDTH = 100
+
+
+def _render_summary_record(
+    category: str, record: Record, indexes: CompiledModelIndexes
+) -> str:
+    """Render the fixed human-facing summary for one requestable record."""
+
+    if category == "project":
+        return _render_scope_summary("Project", record, record["id"], "domains", indexes)
+    if category == "vocabulary":
+        return _render_term_summary(record)
+    if category == "actors":
+        return _render_meaning_summary("Actor", record, record["id"])
+    if category == "concepts":
+        return _render_concept_summary(record, indexes)
+    if category == "architecture":
+        return _render_architecture_summary(record, indexes)
+    if category == "domains":
+        return _render_scope_summary("Domain", record, record["path"], "features", indexes)
+    if category == "features":
+        return _render_feature_summary(record, indexes)
+    if category == "behaviors":
+        return _render_behavior_summary(record, indexes)
+    if category == "use_cases":
+        return _render_use_case_summary(record, indexes)
+    if category == "signals":
+        return _render_signal_summary(record)
+    if category == "obligations":
+        return _render_obligation_summary(record)
+    raise AssertionError(f"unknown compiled record category {category!r}")
+
+
+def _render_scope_summary(
+    label: str,
+    record: Record,
+    identity: str,
+    child_field: str,
+    indexes: CompiledModelIndexes,
+) -> str:
+    lines = [f"{label}: {identity}"]
+    lines.extend(_summary_line("  ", "Purpose", record["purpose"]))
+    lines.append(f"  {child_field.title()}:")
+    children = record[child_field]
+    if not children:
+        lines.append("    none")
+    else:
+        category = "domains" if child_field == "domains" else "features"
+        for child_path in children:
+            child = indexes.categories[category][child_path]
+            behavior_count = _child_behavior_count(child, category, indexes)
+            rule_count = _descendant_rule_count(child["path"], indexes)
+            lines.extend(
+                _summary_value(
+                    "    ",
+                    f"{child['id']}: {behavior_count} behaviors, {rule_count} rules",
+                )
+            )
+    return "\n".join(lines)
+
+
+def _child_behavior_count(
+    record: Record, category: str, indexes: CompiledModelIndexes
+) -> int:
+    if category == "features":
+        return len(record["behaviors"])
+    return sum(
+        len(feature["behaviors"])
+        for feature in indexes.categories["features"].values()
+        if feature["domain"] == record["path"]
+    )
+
+
+def _descendant_rule_count(scope: str, indexes: CompiledModelIndexes) -> int:
+    return sum(
+        obligation["kind"] == "rule"
+        and (obligation["node"] == scope or obligation["node"].startswith(f"{scope}."))
+        for obligation in indexes.categories["obligations"].values()
+    )
+
+
+def _render_term_summary(record: Record) -> str:
+    lines = [f"Vocabulary term: {record['term']}"]
+    lines.extend(_summary_line("  ", "Meaning", record["meaning"]))
+    lines.extend(_summary_entries("  ", "Forbidden synonyms", record.get("forbidden_synonyms", ())))
+    return "\n".join(lines)
+
+
+def _render_meaning_summary(label: str, record: Record, identity: str) -> str:
+    lines = [f"{label}: {identity}"]
+    lines.extend(_summary_line("  ", "Meaning", record["meaning"]))
+    return "\n".join(lines)
+
+
+def _render_concept_summary(record: Record, indexes: CompiledModelIndexes) -> str:
+    lines = [f"Concept: {record['id']}"]
+    lines.extend(_summary_line("  ", "Meaning", record["meaning"]))
+    lines.extend(_summary_entries("  ", "States", record.get("states", ())))
+    required_by = _required_state_entries(record, indexes)
+    if required_by:
+        lines.extend(_summary_entries("  ", "Required by", required_by))
+    return "\n".join(lines)
+
+
+def _required_state_entries(record: Record, indexes: CompiledModelIndexes) -> list[str]:
+    entries: list[str] = []
+    for behavior_path in record.get("required_by", ()):
+        behavior = indexes.categories["behaviors"].get(behavior_path)
+        if behavior is None:
+            continue
+        conditions = behavior.get("conditions")
+        if not isinstance(conditions, Mapping):
+            continue
+        for condition in conditions.get("statements", ()):
+            if isinstance(condition, Mapping) and condition.get("concept") == record["id"]:
+                entries.append(f"{behavior_path}: {condition['state']}")
+    return entries
+
+
+def _render_architecture_summary(record: Record, indexes: CompiledModelIndexes) -> str:
+    lines = [f"Architecture decision: {record['path']}"]
+    lines.extend(_summary_line("  ", "Category", record["category"]))
+    lines.extend(_summary_line("  ", "Selection", record["selection"]))
+    lines.extend(_summary_line("  ", "Rationale", record["rationale"]))
+    constraints = [
+        obligation
+        for obligation in indexes.obligations_for_node(record["path"])
+        if obligation["kind"] == "architecture_constraint"
+    ]
+    lines.extend(
+        _summary_entries(
+            "  ",
+            "Constraints",
+            [
+                f"{_tail_after(obligation['id'], '.constraints.')}: "
+                f"{obligation['definition']['statement']}"
+                for obligation in constraints
+            ],
+        )
+    )
+    return "\n".join(lines)
+
+
+def _render_feature_summary(record: Record, indexes: CompiledModelIndexes) -> str:
+    lines = [f"Feature: {record['path']}"]
+    lines.extend(_summary_line("  ", "Purpose", record["purpose"]))
+    lines.extend(_feature_behavior_table(record, indexes))
+    lines.extend(
+        _summary_entries(
+            "  ",
+            "Rules",
+            _rule_entries(record.get("rule_obligations", ()), indexes),
+        )
+    )
+    lines.extend(
+        _summary_entries(
+            "  ",
+            "Use cases",
+            _use_case_entries(record.get("use_cases", ()), indexes),
+        )
+    )
+    lines.append(_feature_coupling_line(record, indexes))
+    return "\n".join(lines)
+
+
+def _feature_behavior_table(record: Record, indexes: CompiledModelIndexes) -> list[str]:
+    lines = ["  Behaviors:", "    ID | Conditions | Trigger | Outcome | Produced | Consumed | Failures"]
+    for behavior_path in record["behaviors"]:
+        behavior = indexes.categories["behaviors"][behavior_path]
+        conditions = behavior.get("conditions")
+        condition_count = (
+            len(conditions.get("statements", ())) if isinstance(conditions, Mapping) else 0
+        )
+        values = (
+            behavior["id"],
+            str(condition_count),
+            _trigger_kind(behavior["trigger"]),
+            _outcome_kind(behavior["outcome"]),
+            _comma_or_none(_transition_signals(behavior["outcome"])),
+            _comma_or_none(_transition_signals(behavior["trigger"])),
+            str(len(behavior["failures"])),
+        )
+        lines.append(f"    {' | '.join(values)}")
+    return lines
+
+
+def _trigger_kind(transition: Record) -> str:
+    if transition["kind"] == "one_of":
+        return f"one_of:{len(transition['cases'])}"
+    case = transition["case"]
+    return f"signal:{case['signal']}" if "signal" in case else "statement"
+
+
+def _outcome_kind(transition: Record) -> str:
+    return "direct" if transition["kind"] == "direct" else f"one_of:{len(transition['cases'])}"
+
+
+def _transition_cases(transition: Record) -> Sequence[Record]:
+    return (transition["case"],) if transition["kind"] == "direct" else transition["cases"]
+
+
+def _transition_signals(transition: Record) -> list[str]:
+    return [case["signal"] for case in _transition_cases(transition) if "signal" in case]
+
+
+def _rule_entries(paths: Sequence[str], indexes: CompiledModelIndexes) -> list[str]:
+    return [
+        f"{_tail_after(path, '.rules.')}: "
+        f"{indexes.categories['obligations'][path]['definition']['statement']}"
+        for path in paths
+    ]
+
+
+def _use_case_entries(paths: Sequence[str], indexes: CompiledModelIndexes) -> list[str]:
+    return [
+        f"{use_case['id']}: {use_case['goal']} ({len(use_case['behaviors'])} behaviors)"
+        for path in paths
+        if (use_case := indexes.categories["use_cases"].get(path)) is not None
+    ]
+
+
+def _feature_coupling_line(record: Record, indexes: CompiledModelIndexes) -> str:
+    coupling = feature_coupling(indexes.model, record["path"])
+    producer_features = sorted(
+        {
+            signal["producer_feature"]
+            for signal in coupling["signals_consumed"]
+            if signal["producer_feature"] != record["path"]
+        }
+    )
+    produced_signal_ids = {signal["id"] for signal in coupling["signals_produced"]}
+    behavior_features = {
+        behavior["path"]: behavior["feature"] for behavior in indexes.categories["behaviors"].values()
+    }
+    consumer_features = sorted(
+        {
+            behavior_features[consumer["behavior"]]
+            for signal in indexes.categories["signals"].values()
+            if signal["id"] in produced_signal_ids
+            for consumer in signal["consumers"]
+            if behavior_features[consumer["behavior"]] != record["path"]
+        }
+    )
+    return (
+        f"  Coupling: producer features ({len(producer_features)}): "
+        f"{_comma_or_none(producer_features)}; consumer features ({len(consumer_features)}): "
+        f"{_comma_or_none(consumer_features)}"
+    )
+
+
+def _render_behavior_summary(record: Record, indexes: CompiledModelIndexes) -> str:
+    lines = [f"Behavior: {record['path']}"]
+    lines.extend(_summary_entries("  ", "Conditions", _condition_entries(record)))
+    lines.extend(_summary_entries("  ", "Trigger", _transition_entries("trigger", record["trigger"])))
+    lines.extend(_summary_entries("  ", "Outcome", _transition_entries("outcome", record["outcome"])))
+    lines.extend(
+        _summary_entries(
+            "  ",
+            "Failures",
+            [f"{failure['id']}: {failure['statement']}" for failure in record["failures"]],
+        )
+    )
+    lines.extend(_summary_entries("  ", "Signals produced", _transition_signals(record["outcome"])))
+    lines.extend(_summary_entries("  ", "Signals consumed", _transition_signals(record["trigger"])))
+    lines.extend(
+        _summary_entries(
+            "  ",
+            "Obligation paths",
+            [obligation["id"] for obligation in indexes.obligations_for_node(record["path"])],
+        )
+    )
+    lines.extend(_summary_entries("  ", "Related to", _related_nodes(record, indexes)))
+    lines.extend(_summary_entries("  ", "Use cases", record.get("use_cases", ())))
+    return "\n".join(lines)
+
+
+def _condition_entries(record: Record) -> list[str]:
+    conditions = record.get("conditions")
+    if not isinstance(conditions, Mapping):
+        return []
+    entries = []
+    for position, condition in enumerate(conditions.get("statements", ()), start=1):
+        if isinstance(condition, Mapping):
+            entries.append(f"{condition['concept']}: {condition['state']}")
+        else:
+            entries.append(f"{position}: {condition}")
+    return entries
+
+
+def _transition_entries(label: str, transition: Record) -> list[str]:
+    entries = []
+    for case in _transition_cases(transition):
+        case_id = label if transition["kind"] == "direct" else case["id"]
+        value = case["statement"] if "statement" in case else f"signal {case['signal']}"
+        entries.append(f"{case_id}: {value}")
+    return entries
+
+
+def _related_nodes(record: Record, indexes: CompiledModelIndexes) -> list[str]:
+    """List both authored and incoming endpoints of symmetric relationships."""
+
+    related = set(record.get("related_to", ()))
+    for relationship in indexes.relationships_for_endpoint(record["path"]):
+        related.update(endpoint for endpoint in relationship["endpoints"] if endpoint != record["path"])
+    return sorted(related)
+
+
+def _render_use_case_summary(record: Record, indexes: CompiledModelIndexes) -> str:
+    obligation = indexes.categories["obligations"].get(record["obligation"])
+    surfaces = obligation.get("surfaces", ()) if obligation is not None else ()
+    lines = [f"Use case: {record['path']}"]
+    lines.extend(_summary_line("  ", "Goal", record["goal"]))
+    lines.extend(_summary_line("  ", "Scope", record["feature"]))
+    lines.extend(_summary_line("  ", "Obligation path", record["obligation"]))
+    lines.extend(_summary_entries("  ", "Surfaces", surfaces))
+    return "\n".join(lines)
+
+
+def _render_signal_summary(record: Record) -> str:
+    lines = [f"Signal: {record['id']}"]
+    lines.extend(_summary_line("  ", "Meaning", record["meaning"]))
+    lines.extend(_summary_line("  ", "Subject", record["subject"]))
+    lines.extend(_summary_line("  ", "Produced by", record["producer"]["behavior"]))
+    lines.extend(
+        _summary_entries(
+            "  ", "Consumed by", [consumer["behavior"] for consumer in record["consumers"]]
+        )
+    )
+    return "\n".join(lines)
+
+
+def _render_obligation_summary(record: Record) -> str:
+    label = {
+        "rule": "Rule",
+        "use_case": "Use case obligation",
+        "architecture_constraint": "Architecture constraint",
+    }.get(record["kind"], "Obligation")
+    definition = record["definition"]
+    lines = [f"{label}: {record['id']}"]
+    if "statement" in definition:
+        lines.extend(_summary_line("  ", "Statement", definition["statement"]))
+    elif "signal" in definition:
+        lines.extend(_summary_line("  ", "Signal", definition["signal"]))
+    elif "statements" in definition:
+        lines.extend(_summary_entries("  ", "Conditions", _definition_condition_entries(definition)))
+    elif "goal" in definition:
+        lines.extend(_summary_line("  ", "Goal", definition["goal"]))
+    elif "outcomes" in definition:
+        lines.extend(_summary_entries("  ", "Outcomes", definition["outcomes"]))
+        lines.extend(_summary_entries("  ", "Failures", definition["failures"]))
+    elif "alternatives" in definition:
+        lines.extend(_summary_entries("  ", "Alternatives", definition["alternatives"]))
+    lines.extend(_summary_line("  ", "Scope", record["node"]))
+    lines.extend(_summary_line("  ", "Obligation path", record["id"]))
+    lines.extend(_summary_entries("  ", "Surfaces", record.get("surfaces", ())))
+    return "\n".join(lines)
+
+
+def _definition_condition_entries(definition: Record) -> list[str]:
+    return [
+        f"{condition['concept']}: {condition['state']}"
+        if isinstance(condition, Mapping)
+        else f"{position}: {condition}"
+        for position, condition in enumerate(definition["statements"], start=1)
+    ]
+
+
+def _summary_line(indent: str, label: str, value: Any) -> list[str]:
+    return _wrap_summary(_plain_text(value), f"{indent}{label}: ")
+
+
+def _summary_value(indent: str, value: Any) -> list[str]:
+    return _wrap_summary(_plain_text(value), indent)
+
+
+def _summary_entries(indent: str, title: str, entries: Sequence[Any]) -> list[str]:
+    lines = [f"{indent}{title}:"]
+    if not entries:
+        return lines + [f"{indent}  none"]
+    for entry in entries:
+        lines.extend(_summary_value(f"{indent}  ", entry))
+    return lines
+
+
+def _wrap_summary(value: str, initial_indent: str) -> list[str]:
+    return textwrap.wrap(
+        value,
+        width=_SUMMARY_WIDTH,
+        initial_indent=initial_indent,
+        subsequent_indent=" " * len(initial_indent),
+        break_long_words=True,
+        break_on_hyphens=False,
+    ) or [initial_indent.rstrip()]
+
+
+def _plain_text(value: Any) -> str:
+    """Keep scalar text readable when authored text contains control characters."""
+
+    text = str(value)
+    escapes = {"\b": r"\b", "\t": r"\t", "\n": r"\n", "\f": r"\f", "\r": r"\r"}
+    return "".join(
+        escapes.get(character, f"\\u{ord(character):04x}" if ord(character) < 32 else character)
+        for character in text
+    )
+
+
+def _comma_or_none(values: Sequence[str]) -> str:
+    return ", ".join(values) if values else "none"
+
+
+def _tail_after(value: str, marker: str) -> str:
+    return value.rsplit(marker, maxsplit=1)[-1]
 
 
 def _record_fields(

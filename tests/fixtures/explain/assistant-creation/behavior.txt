@@ -1,0 +1,23 @@
+Behavior: domains.assistants.features.creation.behaviors.assistant_creation
+  Conditions:
+    assistant: draft
+  Trigger:
+    trigger: The Member provides valid configuration and requests creation.
+  Outcome:
+    outcome: The Assistant is created for the Member's organization and can respond to a message.
+  Failures:
+    rejected: No partial Assistant remains and the Member receives an actionable explanation.
+  Signals produced:
+    assistant_created
+  Signals consumed:
+    none
+  Obligation paths:
+    domains.assistants.features.creation.behaviors.assistant_creation.completion
+    domains.assistants.features.creation.behaviors.assistant_creation.conditions
+    domains.assistants.features.creation.behaviors.assistant_creation.failures.rejected
+    domains.assistants.features.creation.behaviors.assistant_creation.outcome
+    domains.assistants.features.creation.behaviors.assistant_creation.trigger
+  Related to:
+    none
+  Use cases:
+    domains.assistants.features.creation.use_cases.create_from_scratch

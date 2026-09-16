@@ -782,24 +782,38 @@ all-or-nothing diagnostic behavior above.
 ### `pml explain`
 
 Explain resolves its requested canonical ID against the compiled indexes and shows
-the authored text plus direct semantic links: owning hierarchy, transition cases,
-producer or consumer signals, use-case memberships, symmetric relationships, and
-stable obligations. It must distinguish authored fields from derived inverse
-links and must not present a generated summary as approved intent.
+the fixed, plain-text summary for each matching record. This summary is a stable
+human-facing contract: for the same supported compiled model and requested ID,
+field order, record order, wording, and wrapping are deterministic with the same
+guarantees as `pml explain --raw`. Long text wraps at 100 columns with indentation
+and is never truncated. The summary does not serialize maps or lists as JSON.
 
-For a feature record, explain also renders a `Derived coupling` section after the
-derived inverse links. It is a read-only projection, not a field in the compiled
-JSON model, with these fields in this order:
+The summary shapes are:
 
-1. `signals_produced`: one entry per signal whose producer behavior belongs to
-   the feature, ordered by signal ID, with `id` and `producer_behavior`.
-2. `signals_consumed`: one entry per signal consumed by any behavior in the
-   feature, ordered by signal ID, with `id` and `producer_feature`. A signal is
-   listed once even if several behaviors in the feature consume it.
-3. `distinct_producer_feature_count`: the number of distinct producer features
-   in `signals_consumed`, excluding the explained feature itself. Thus this count
-   is the fan-in count used by `PML-W-SIGNAL-FAN-IN`; same-feature consumption is
-   visible in `signals_consumed` but does not increase the count.
+- Feature: purpose; a behavior table with ID, condition count, trigger kind,
+  outcome kind, produced signals, consumed signals, and failure count; direct
+  rules as `id: statement`; use cases as `id: goal (n behaviors)`; and one
+  coupling line listing distinct producer and consumer features. Trigger kinds
+  are `statement`, `signal:<id>`, or `one_of:<n>`; outcome kinds are `direct` or
+  `one_of:<n>`.
+- Behavior: conditions, trigger cases, outcome cases, and failures as labeled
+  text lines; produced and consumed signals; one obligation path per line;
+  `related_to`; and use-case memberships.
+- Concept: meaning, one state per line, and behaviors requiring one of its
+  states when structured conditions provide that information.
+- Rule and use case: respectively the statement or goal, scope, obligation path,
+  and any surface states that show the obligation.
+- Domain and project: purpose plus one line per child stating its behavior count
+  and its descendant rule count.
+
+Other requestable compiled records use the same fixed plain-text approach. All
+counts, obligation paths, memberships, signal links, surfaces, and coupling are
+read-only derived projections, not approved intent.
+
+`pml explain --raw` retains the complete pre-summary compiled-record rendering.
+It is the diagnostic view for authored, structural, and inverse fields, including
+the full feature coupling projection. Its bytes remain deterministic and unchanged
+by the default summary contract.
 
 ### `pml graph`
 
