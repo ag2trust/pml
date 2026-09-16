@@ -24,12 +24,26 @@
       "type": "string",
       "minLength": 1
     },
+    "stateToken": {
+      "allOf": [
+        {"$ref": "#/$defs/nonEmpty"},
+        {"not": {"enum": ["*", "none"]}},
+        {"not": {"pattern": " -> "}}
+      ]
+    },
     "stringList": {
       "type": "array",
       "minItems": 1,
       "maxItems": 7,
       "uniqueItems": true,
       "items": {"$ref": "#/$defs/nonEmpty"}
+    },
+    "stateList": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/stateToken"}
     },
     "idList": {
       "type": "array",
@@ -104,7 +118,7 @@
       "required": ["meaning"],
       "properties": {
         "meaning": {"$ref": "#/$defs/nonEmpty"},
-        "states": {"$ref": "#/$defs/stringList"},
+        "states": {"$ref": "#/$defs/stateList"},
         "forbidden_synonyms": {"$ref": "#/$defs/forbiddenSynonymList"}
       }
     },
@@ -309,10 +323,11 @@
       "type": "object",
       "maxProperties": 3,
       "propertyNames": {"$ref": "#/$defs/id"},
-      "additionalProperties": {
-        "type": "string",
-        "pattern": "^.+ -> .+$"
-      }
+      "additionalProperties": {"$ref": "#/$defs/stateTransition"}
+    },
+    "stateTransition": {
+      "type": "string",
+      "pattern": "^(?!.* -> .* -> ).+ -> .+$"
     },
     "inlineSignal": {
       "type": "object",

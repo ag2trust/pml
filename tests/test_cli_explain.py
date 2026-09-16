@@ -50,7 +50,7 @@ def test_raw_explain_queries_each_requestable_compiled_category(
     ("canonical_id", "snapshot"),
     [
         ("project", "project.txt"),
-        ("Assistant", "vocabulary.txt"),
+        ("Customer", "vocabulary.txt"),
         ("member", "actor.txt"),
         ("assistant", "concept.txt"),
         ("domains.assistants", "domain.txt"),
@@ -534,7 +534,7 @@ domains:
     prefix = "domains.notes.features.lifecycle.behaviors"
 
     for behavior in (f"{prefix}.direct", f"{prefix}.alternatives"):
-        assert cli.main(["explain", str(source), behavior]) == 0
+        assert cli.main(["explain", str(source), behavior, "--raw"]) == 0
         rendered = capsys.readouterr().out
         authored, remaining = rendered.split(
             "  Derived identity/structural:\n", maxsplit=1
@@ -548,7 +548,7 @@ domains:
         f"{prefix}.alternatives.outcome.create",
         f"{prefix}.alternatives.failures.removed",
     ):
-        assert cli.main(["explain", str(source), obligation]) == 0
+        assert cli.main(["explain", str(source), obligation, "--raw"]) == 0
         rendered = capsys.readouterr().out
         authored, remaining = rendered.split(
             "  Derived identity/structural:\n", maxsplit=1

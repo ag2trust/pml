@@ -77,6 +77,47 @@ def test_transition_map_accepts_at_most_three_concepts() -> None:
     assert "schema" in _diagnostic_codes(document)
 
 
+@pytest.mark.parametrize("state", ["*", "none", "draft -> review"])
+def test_concept_states_reserve_transition_sentinels_and_separator(state: str) -> None:
+    diagnostics = validate_document(_document(states=[state])).diagnostics
+
+    assert any(
+        item.code == "schema" and item.path == "concepts.note.states[0]"
+        for item in diagnostics
+    )
+
+
+def test_transition_has_exactly_one_reserved_separator() -> None:
+    diagnostics = validate_document(_document({"note": "draft -> active -> none"})).diagnostics
+
+    assert any(
+        item.code == "schema"
+        and item.path.endswith("outcome")
+        for item in diagnostics
+    )
+
+
+def test_state_token_with_spaces_remains_a_transition_endpoint() -> None:
+    document = _document({"note": "none -> in review"}, states=["in review", "active"])
+    behaviors = document["domains"]["notes"]["features"]["handling"]["behaviors"]
+    behaviors["activate"] = {
+        "trigger": {"statement": "A Member activates a Note."},
+        "outcome": {
+            "statement": "The Note becomes active.",
+            "transitions": {"note": "in review -> active"},
+        },
+    }
+    behaviors["remove"] = {
+        "trigger": {"statement": "A Member removes an active Note."},
+        "outcome": {
+            "statement": "The active Note ceases to exist.",
+            "transitions": {"note": "active -> none"},
+        },
+    }
+
+    assert validate_document(document).diagnostics == ()
+
+
 def test_state_warnings_cover_unreachable_dead_end_and_unproduced_condition() -> None:
     diagnostics = validate_document(
         _document({"note": "none -> draft"}, condition="active")

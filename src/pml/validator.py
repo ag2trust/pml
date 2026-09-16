@@ -764,9 +764,10 @@ def _transition_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
                 continue
             if not isinstance(value, str):
                 continue
-            from_state, separator, to_state = value.partition(" -> ")
-            if not separator:
+            endpoints = value.split(" -> ")
+            if len(endpoints) != 2:
                 continue
+            from_state, to_state = endpoints
             declared = concept_states[concept_id]
             invalid: list[str] = []
             if from_state not in {"*", "none"} and from_state not in declared:

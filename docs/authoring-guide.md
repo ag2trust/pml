@@ -73,7 +73,9 @@ Do not use the superseded `context` or `output` fields.
 When a completion changes a declared concept state, add its optional `transitions`
 map. Each map key is a concept ID and its value is `"<from> -> <to>"`. `from` may
 be a declared state, `*`, or `none`; `to` is a declared state or `none`. Use
-`none` when the instance comes into existence or ceases to exist.
+`none` when the instance comes into existence or ceases to exist. A declared
+state cannot be `*` or `none` or contain ` -> `, because those spellings are
+reserved by the transition syntax.
 
 ```yaml
 assistant_creation:

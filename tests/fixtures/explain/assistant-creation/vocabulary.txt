@@ -1,4 +1,5 @@
-Vocabulary term: Assistant
-  Meaning: A Customer-owned AI worker configured by a Member.
+Vocabulary term: Customer
+  Meaning: An organization that owns product resources.
   Forbidden synonyms:
-    none
+    tenant
+    client

@@ -106,7 +106,9 @@ map of at most three concept IDs to `"<from> -> <to>"` strings. `from` is one
 declared state of the named concept, `*` for any state, or `none` when the
 instance comes into existence. `to` is one declared state or `none` when the
 instance ceases to exist. `from` and `to` MUST differ. A completion may define
-both an inline signal and `transitions`.
+both an inline signal and `transitions`. A declared state is a non-empty state
+token that is neither `*` nor `none` and does not contain ` -> `; the sentinels
+and separator are reserved so transition endpoints have one interpretation.
 
 Transitions are completion-owned product semantics. They do not define
 persistence, messaging, workflow order, or an implementation mechanism. Each
@@ -320,6 +322,7 @@ attention_view_update:
 ```text
 identifier = [a-z][a-z0-9_]*
 statement = non-empty text
+state-token = non-empty text excluding "*", "none", and the substring " -> "
 declared-actor-id = identifier resolving to one declared actor
 concept-id = identifier resolving to one declared product concept
 declared-signal-id = identifier resolving to one inline signal definition
@@ -329,7 +332,7 @@ behavior-reference = identifier | behavior-id, resolved under 0013
 relationship-reference = identifier | feature-or-behavior-id, resolved under 0013
 rule-map = the closed ID-keyed rule map defined by the language
 
-condition-item = statement | {concept: concept-id, state: non-empty text}
+condition-item = statement | {concept: concept-id, state: state-token}
 conditions = unique list[condition-item] with 1..7 items,
   no two structured items sharing the same concept
 direct-trigger = {statement: statement} | {signal: declared-signal-id}
@@ -350,8 +353,8 @@ outcome = completion-case | {
   one_of: map[identifier, completion-case] with 2..7 entries
 }
 failure-map = map[identifier, completion-case] with 1..7 entries
-transition-from = declared state of the named concept | "*" | "none"
-transition-to = declared state of the named concept | "none"
+transition-from = declared state-token of the named concept | "*" | "none"
+transition-to = declared state-token of the named concept | "none"
 state-transition = "<transition-from> -> <transition-to>", with distinct endpoints
 transition-map = map[concept-id, state-transition] with at most 3 entries
 behavior-reference-list = unique list[behavior-reference] with 1..7 items

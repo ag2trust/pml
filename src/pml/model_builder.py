@@ -39,7 +39,7 @@ def _signal_reference(definition: Mapping[str, Any]) -> str | None:
 def _transition_parts(value: str) -> tuple[str, str]:
     """Split a schema-valid authored transition into its endpoint spellings."""
 
-    from_state, _, to_state = value.partition(" -> ")
+    from_state, to_state = value.split(" -> ")
     return from_state, to_state
 
 

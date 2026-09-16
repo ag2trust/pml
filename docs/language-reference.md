@@ -51,7 +51,9 @@ Each actor has one required `meaning` and may declare `forbidden_synonyms`.
 Each concept has one required `meaning`, may declare `forbidden_synonyms`, and
 may list unordered semantic `states`. Completion transitions name how behavior
 completions move one concept instance between those states. Concepts do not
-declare storage, classes, tables, or organizational ownership.
+declare storage, classes, tables, or organizational ownership. Each state is a
+non-empty state token that is neither `*` nor `none` and does not contain
+` -> `; those spellings are reserved to keep transition endpoints unambiguous.
 
 ## Behavioral objects
 

@@ -605,7 +605,7 @@ technical event interpretation.
 ### Signal coupling diagnostics
 
 The owner-approved signal-coupling checks are advisory diagnostics derived only
-from a complete version-2 compiled model. They add neither a PML construct nor a
+from a complete version-5 compiled model. They add neither a PML construct nor a
 compiled-model field, relationship, obligation, or causal edge. Warnings do not
 prevent compilation or any read-only compiled-model consumer from receiving the
 complete model.
