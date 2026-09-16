@@ -184,25 +184,27 @@ Every other version-2 rule (identity, obligation inventory, closed enums,
 canonical JSON encoding, definition digest) remains as approved, subject to the
 byte change for `format_version` documented in the encoding section.
 
-## Version 2 delta
+## Version 2 delta (superseded, historical)
 
-Version 2 replaced the previously approved version 1 grammar. Independent
-compilers and consumers MUST emit and accept `format_version: 2` and MUST NOT
-accept `format_version: 1` as a synonym; the two versions describe incompatible
-`experience.surfaces` and obligation shapes. The version-2 changes are:
+Version 2 is superseded by version 3 above. It is retained here only to record
+what version 2 changed from version 1; a conforming version-3 producer or
+consumer MUST NOT accept `format_version: 2` and MUST NOT apply the version-2
+requirements below to a version-3 model. The version-2 changes were:
 
-- `compiled-surface-state` is an object with optional `shows: list[obligation-id]`
+- `compiled-surface-state` became an object with optional `shows: list[obligation-id]`
   and optional `contains: list[authored-text]`, at least one of which is present.
-  Version 1's mandatory `statements` list is removed.
-- `compiled-obligation` gains an optional `surfaces: list[surface-state-path]`
+  Version 1's mandatory `statements` list was removed.
+- `compiled-obligation` gained an optional `surfaces: list[surface-state-path]`
   field that appears only on obligations of kind `rule`, `outcome`, or
   `failure`, and only when at least one surface state references the obligation
   through `shows`. All other obligation kinds omit it.
-- Determinism adds one sort key: obligation `surfaces` lists are sorted by
+- Determinism added one sort key: obligation `surfaces` lists are sorted by
   surface-state path.
 
 Every other version-1 rule (identity, ordering, canonical JSON encoding,
-definition digest, obligation inventory, closed enums) remains as approved.
+definition digest, obligation inventory, closed enums) carried into version 2,
+and every version-2 rule likewise carries into version 3 except where the
+version-3 delta above supersedes it.
 
 ## Version 3 JSON structure
 
@@ -893,14 +895,19 @@ or field meanings requires a new format version and explicit owner approval. A
 language revision also requires a new compiled format version when the current
 structure cannot represent it without changing this contract.
 
-With owner approval granted, delivery follows the repository order:
+The original owner-approved delivery order for the compiled model produced
+version 1 and was later re-executed to produce versions 2 and 3. It is retained
+below only as historical delivery record; it does not impose additional
+requirements on a version-3 producer or consumer beyond those already stated in
+the version-3 JSON structure, stable obligations, determinism, and canonical
+JSON encoding sections above:
 
 1. Add the `non-string-key` and `invalid-unicode-scalar` restricted-loading
    diagnostics without changing any other accepted syntax or validation outcome.
 2. Add negative conformance cases for numeric, boolean, null, sequence, and mapping
    keys; escaped high and low surrogates; and adjacent escaped surrogate code
    points. Add a positive case containing a supplementary Unicode scalar.
-3. Define the version 2 JSON Schema and shared in-memory types.
+3. Define the versioned JSON Schema and shared in-memory types.
 4. Refactor reference resolution and stable obligation enumeration to populate the
    model without changing validation outcomes.
 5. Add compiled-model conformance fixtures plus deterministic serialization
