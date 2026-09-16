@@ -10,6 +10,12 @@
     "probe": {"$ref": "#/$defs/id"},
     "verifies": {"type": "string", "pattern": "^(?:project\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.rules\\.[a-z][a-z0-9_]*|domains\\.[a-z][a-z0-9_]*\\.features\\.[a-z][a-z0-9_]*(?:\\.(?:rules|use_cases)\\.[a-z][a-z0-9_]*|\\.behaviors\\.[a-z][a-z0-9_]*\\.(?:(?:rules|failures)\\.[a-z][a-z0-9_]*|conditions|completion|trigger(?:\\.[a-z][a-z0-9_]*)?|outcome(?:\\.[a-z][a-z0-9_]*)?))|architecture\\.[a-z][a-z0-9_]*\\.constraints\\.[a-z][a-z0-9_]*)$"},
     "env": {"$ref": "#/$defs/id"},
+    "setup": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {"oneOf": [{"$ref": "#/$defs/httpStep"}, {"$ref": "#/$defs/cliStep"}, {"$ref": "#/$defs/sessionStep"}]}
+    },
     "steps": {
       "type": "array",
       "minItems": 1,

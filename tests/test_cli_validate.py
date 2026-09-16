@@ -41,3 +41,28 @@ def test_validate_warnings_succeed_unless_strict(tmp_path: Path, capsys) -> None
     captured = capsys.readouterr()
     assert captured.out == "PML INVALID: 1 violation(s)\n"
     assert captured.err == warning
+
+
+def test_warning_diagnostics_do_not_block_compiled_or_fallback_commands(
+    tmp_path: Path, capsys
+) -> None:
+    source = _warning_manifest(tmp_path)
+    warning = (
+        "domains.notes.features.creation.rules: [warning] [PML-W-RULE-COUNT] "
+        "rules maps should contain no more than 7 rules\n"
+    )
+
+    assert main(["explain", str(source), "project"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.startswith("Project\n")
+    assert captured.err == warning
+
+    assert main(["graph", str(source)]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.startswith("digraph pml {\n")
+    assert captured.err == warning
+
+    assert main(["obligations", str(source)]) == 0
+    captured = capsys.readouterr()
+    assert "domains.notes.features.creation.rules.rule_0\n" in captured.out
+    assert captured.err == warning

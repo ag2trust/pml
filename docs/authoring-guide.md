@@ -89,6 +89,105 @@ independently verifiable invariant. Transition statements are normative by their
 authored position and do not require those markers. Split distinct rules,
 outcome alternatives, and failures into separate ID-keyed entries.
 
+## Do not
+
+AI authors often create duplicate obligations, competing definitions, or
+implementation-shaped behaviors. Keep each statement in the language field that
+owns its meaning, name product concepts and actors explicitly, and split
+capabilities rather than relocating their complexity.
+
+### Restate a transition as a rule
+
+```yaml
+# Wrong
+rules:
+  item_handled: {statement: An Inbox Item MUST be handled when a Member handles it.}
+
+# Right
+behaviors:
+  item_handling:
+    trigger: {statement: A Member records a handling decision.}
+    outcome: {statement: The Inbox Item is handled.}
+```
+
+### Define a term twice
+
+```yaml
+# Wrong
+vocabulary:
+  Member: {meaning: A person who uses the product.}
+actors:
+  member: {meaning: An authenticated person with access.}
+
+# Right
+actors:
+  member: {meaning: An authenticated person with access.}
+```
+
+### Put an obligation in an experience surface
+
+```yaml
+# Wrong
+experience:
+  surfaces:
+    inbox: {contains: [The handled Inbox Item MUST be absent.]}
+
+# Right
+behaviors:
+  attention_view_update:
+    outcome: {statement: The handled Inbox Item is absent from the needs-attention view.}
+```
+
+### Use a generic quantifier with no subject
+
+```yaml
+# Wrong
+rules:
+  ownership: {statement: Customer ownership MUST be enforced for every affected resource.}
+
+# Right
+rules:
+  ownership: {statement: A Member MUST access only Inbox Items belonging to the Member's Customer.}
+```
+
+### Mirror an implementation unit
+
+```yaml
+# Wrong
+behaviors:
+  inbox_screen:
+    trigger: {statement: A Member opens the Inbox screen.}
+    outcome: {statement: The Inbox screen is displayed.}
+
+# Right
+behaviors:
+  inbox_item_opening:
+    trigger: {statement: A Member selects an Inbox Item.}
+    outcome: {statement: The selected Inbox Item is available for review.}
+```
+
+### Move rules up to evade a count
+
+```yaml
+# Wrong
+domains:
+  inbox:
+    rules:
+      preserve_read_state: {statement: An opened Inbox Item MUST retain whether it needs attention.}
+    features:
+      item_handling: {purpose: Handle Inbox Items.}
+
+# Right
+domains:
+  inbox:
+    features:
+      item_opening:
+        purpose: Open Inbox Items.
+        rules:
+          preserve_read_state: {statement: An opened Inbox Item MUST retain whether it needs attention.}
+      item_handling: {purpose: Handle Inbox Items.}
+```
+
 ## Relate behavior without inventing control flow
 
 Use `related_to` for a broader, symmetric association or change-impact relation

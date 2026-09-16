@@ -291,7 +291,17 @@ def ingest_report(
             record["probe_fingerprint"] = canonical_hash(probes[probe_id])
             if "evidence" in check:
                 record["artifacts"] = check["evidence"]
-            evidence.setdefault("deterministic_probe", {})[probe_id] = record
+            probe_lane = evidence.setdefault("deterministic_probe", {})
+            prior = probe_lane.get(probe_id)
+            if (
+                check["result"] == "inconclusive"
+                and prior is not None
+                and prior.get("result") in {"passed", "failed", "blocked"}
+                and prior.get("probe_fingerprint") == record["probe_fingerprint"]
+                and prior.get("input_fingerprint") == current_input
+            ):
+                continue
+            probe_lane[probe_id] = record
         elif check["method"] == "agent_judgment":
             record["reproduction"] = check["reproduction"]
             evidence["agent_judgment"] = record

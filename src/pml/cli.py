@@ -131,10 +131,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         if document is not None:
             resolution = validate_document(document)
             diagnostics = list(resolution.diagnostics)
-        if diagnostics:
-            for diagnostic in diagnostics:
+        errors = [diagnostic for diagnostic in diagnostics if diagnostic.severity == "error"]
+        warnings = [diagnostic for diagnostic in diagnostics if diagnostic.severity == "warning"]
+        for diagnostic in warnings:
+            print(diagnostic.format(), file=sys.stderr)
+        if errors:
+            for diagnostic in errors:
                 print(diagnostic.format(), file=sys.stderr)
-            print(f"PML INVALID: {len(diagnostics)} violation(s)", file=sys.stderr)
+            print(f"PML INVALID: {len(errors)} violation(s)", file=sys.stderr)
             return 1
         assert document is not None
         assert resolution.compiled_model is not None
@@ -151,10 +155,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         if document is not None:
             resolution = validate_document(document)
             diagnostics = list(resolution.diagnostics)
-        if diagnostics:
-            for diagnostic in diagnostics:
+        errors = [diagnostic for diagnostic in diagnostics if diagnostic.severity == "error"]
+        warnings = [diagnostic for diagnostic in diagnostics if diagnostic.severity == "warning"]
+        for diagnostic in warnings:
+            print(diagnostic.format(), file=sys.stderr)
+        if errors:
+            for diagnostic in errors:
                 print(diagnostic.format(), file=sys.stderr)
-            print(f"PML INVALID: {len(diagnostics)} violation(s)", file=sys.stderr)
+            print(f"PML INVALID: {len(errors)} violation(s)", file=sys.stderr)
             return 1
         assert document is not None
         assert resolution.compiled_model is not None
@@ -195,10 +203,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     path = args.manifest
     diagnostics = validate_file(path)
-    for diagnostic in diagnostics:
+    errors = [diagnostic for diagnostic in diagnostics if diagnostic.severity == "error"]
+    warnings = [diagnostic for diagnostic in diagnostics if diagnostic.severity == "warning"]
+    for diagnostic in errors:
         print(diagnostic.format())
-    if diagnostics:
-        print(f"PML INVALID: {len(diagnostics)} violation(s)")
+    for diagnostic in warnings:
+        print(diagnostic.format(), file=sys.stderr)
+    if errors:
+        print(f"PML INVALID: {len(errors)} violation(s)")
         return 1
     if args.command == "status":
         document, _ = load_document(path)
