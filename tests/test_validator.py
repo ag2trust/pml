@@ -189,6 +189,30 @@ def test_feature_rule_restatement_warns_for_the_best_matching_outcome() -> None:
     ]
 
 
+def test_feature_rule_restatement_warns_for_a_structured_condition() -> None:
+    document = _conditions_document(
+        [{"concept": "testimonial", "state": "polished"}]
+    )
+    feature = document["domains"]["reviews"]["features"]["publishing"]
+    feature["rules"] = {
+        "polished_testimonial": {
+            "statement": "The Testimonial MUST be polished."
+        }
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert [(item.path, item.code, item.message, item.severity) for item in diagnostics] == [
+        (
+            "domains.reviews.features.publishing.rules.polished_testimonial.statement",
+            "PML-W-RULE-RESTATEMENT",
+            "rule statement restates "
+            "'domains.reviews.features.publishing.behaviors.publish.conditions[0]'",
+            "warning",
+        )
+    ]
+
+
 def test_unrelated_feature_rule_does_not_warn_for_restatement() -> None:
     document, feature = _cardinality_document()
     feature["rules"] = {
@@ -2089,7 +2113,11 @@ def test_structured_condition_concept_counts_as_a_feature_local_term() -> None:
     document = _conditions_document(
         [{"concept": "testimonial", "state": "polished"}]
     )
-    document["domains"]["reviews"]["features"]["publishing"]["rules"] = {
+    feature = document["domains"]["reviews"]["features"]["publishing"]
+    feature["behaviors"]["publish"]["outcome"] = {
+        "statement": "Publication succeeds."
+    }
+    feature["rules"] = {
         "polished_visible": {
             "statement": "A Testimonial MUST remain visible when polished."
         }

@@ -237,6 +237,19 @@ def _transition_statements(
             yield f"{transition_path}.one_of.{alternative_id}.statement", statement
 
 
+def _condition_text(condition: Any) -> str | None:
+    """Return comparable text for a prose or structured condition."""
+
+    if isinstance(condition, str):
+        return condition
+    condition_map = _mapping(condition)
+    concept = condition_map.get("concept")
+    state = condition_map.get("state")
+    if isinstance(concept, str) and isinstance(state, str):
+        return f"{concept} {state}"
+    return None
+
+
 def _feature_statements(
     feature: dict[str, Any], feature_path: str
 ) -> list[tuple[str, str]]:
@@ -249,8 +262,9 @@ def _feature_statements(
         conditions = behavior_map.get("conditions")
         if isinstance(conditions, list):
             for index, condition in enumerate(conditions):
-                if isinstance(condition, str):
-                    statements.append((f"{behavior_path}.conditions[{index}]", condition))
+                text = _condition_text(condition)
+                if text is not None:
+                    statements.append((f"{behavior_path}.conditions[{index}]", text))
         statements.extend(
             _transition_statements(
                 behavior_map.get("trigger"), f"{behavior_path}.trigger"
@@ -394,8 +408,9 @@ def _behavior_texts(behavior: dict[str, Any]) -> Iterable[str]:
     conditions = behavior.get("conditions")
     if isinstance(conditions, dict):
         for statement in conditions.get("statements", []):
-            if isinstance(statement, str):
-                yield statement
+            text = _condition_text(statement)
+            if text is not None:
+                yield text
 
     for transition_name in ("trigger", "outcome"):
         transition = behavior.get(transition_name)
