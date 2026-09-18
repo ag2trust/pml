@@ -58,6 +58,53 @@ def test_transition_rejects_undeclared_or_identical_states(transition: str) -> N
     ]
 
 
+@pytest.mark.parametrize(
+    ("completion", "transition", "path"),
+    [
+        (
+            "outcome",
+            "database -> active",
+            "domains.notes.features.handling.behaviors.change.outcome.transitions.note",
+        ),
+        (
+            "alternative",
+            "none -> database",
+            "domains.notes.features.handling.behaviors.change.outcome.one_of.created.transitions.note",
+        ),
+        (
+            "failure",
+            "database -> none",
+            "domains.notes.features.handling.behaviors.change.failures.removed.transitions.note",
+        ),
+    ],
+)
+def test_completion_transition_endpoints_reject_implementation_detail(
+    completion: str, transition: str, path: str
+) -> None:
+    document = _document(states=["database", "active"])
+    behavior = document["domains"]["notes"]["features"]["handling"]["behaviors"]["change"]
+    transitions = {"note": transition}
+    if completion == "outcome":
+        behavior["outcome"]["transitions"] = transitions
+    elif completion == "alternative":
+        behavior["outcome"] = {
+            "one_of": {
+                "created": {"statement": "The Note is created.", "transitions": transitions},
+                "unchanged": {"statement": "The Note remains unchanged."},
+            }
+        }
+    else:
+        behavior["failures"] = {
+            "removed": {"statement": "The Note is removed.", "transitions": transitions}
+        }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert [(item.path, item.code) for item in diagnostics] == [
+        (path, "implementation-detail")
+    ]
+
+
 def test_transition_map_accepts_at_most_three_concepts() -> None:
     document = _document({"note": "none -> draft"})
     document["concepts"].update(  # type: ignore[index]

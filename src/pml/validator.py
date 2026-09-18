@@ -266,6 +266,34 @@ def _is_transition_text(parts: tuple[Any, ...]) -> bool:
     )
 
 
+def _is_completion_transition_endpoint(parts: tuple[Any, ...]) -> bool:
+    """Return whether a value is a completion-owned state-transition endpoint."""
+
+    return (
+        len(parts) == 9
+        and parts[0] == "domains"
+        and parts[2] == "features"
+        and parts[4] == "behaviors"
+        and parts[6] == "outcome"
+        and parts[7] == "transitions"
+    ) or (
+        len(parts) == 11
+        and parts[0] == "domains"
+        and parts[2] == "features"
+        and parts[4] == "behaviors"
+        and parts[6] == "outcome"
+        and parts[7] == "one_of"
+        and parts[9] == "transitions"
+    ) or (
+        len(parts) == 10
+        and parts[0] == "domains"
+        and parts[2] == "features"
+        and parts[4] == "behaviors"
+        and parts[6] == "failures"
+        and parts[8] == "transitions"
+    )
+
+
 def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -754,6 +782,7 @@ def _semantic_diagnostics(
                         )
                     )
         transition_text = _is_transition_text(parts)
+        completion_transition_endpoint = _is_completion_transition_endpoint(parts)
         is_normative = (bool(parts) and parts[-1] in normative_fields) or transition_text
         if is_normative:
             if not transition_text and not NORMATIVE_MARKER.search(value):
@@ -781,6 +810,17 @@ def _semantic_diagnostics(
                         "behavior transitions must describe observable product semantics, not implementation details",
                     )
                 )
+        if (
+            completion_transition_endpoint
+            and TRANSITION_IMPLEMENTATION_DETAIL.search(value)
+        ):
+            diagnostics.append(
+                Diagnostic(
+                    _path(parts),
+                    "implementation-detail",
+                    "behavior transitions must describe observable product semantics, not implementation details",
+                )
+            )
 
     diagnostics.extend(_surface_diagnostics(document))
     diagnostics.extend(_condition_diagnostics(document))
