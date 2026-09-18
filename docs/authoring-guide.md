@@ -239,6 +239,7 @@ between a feature or behavior and another feature or behavior. Use a bare behavi
 ID for a target in the same feature, and a fully qualified semantic path otherwise.
 It does not imply causality or execution order; signals and
 triggers express causal relationships.
+Add `related_to` whenever a change in the other node could change what this node must say; the tooling adds concept and signal relations on its own, and an authored entry is never redundant.
 
 Keep `architecture` at feature scope. It records an owner-approved technical
 constraint associated with a capability, not with an individual transition.
