@@ -72,7 +72,7 @@ def test_warning_diagnostics_do_not_block_compiled_or_fallback_commands(
 
     assert main(["explain", str(source), "project"]) == 0
     captured = capsys.readouterr()
-    assert captured.out.startswith("Project\n")
+    assert captured.out.startswith("Project: sample_product\n")
     assert captured.err == warning
 
     assert main(["graph", str(source)]) == 0

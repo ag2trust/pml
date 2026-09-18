@@ -1017,7 +1017,7 @@ def test_rejects_probe_without_coverage_binding(tmp_path: Path) -> None:
     assert any(item.code == "unbound-probe" for item in diagnostics)
 
 
-def test_reports_missing_verification_plan_without_follow_on_errors(
+def test_ingestion_rejects_an_unbound_obligation(
     tmp_path: Path,
 ) -> None:
     definition, _ = load_document(ROOT / "examples" / "minimal.pml.yaml")
@@ -1027,7 +1027,7 @@ def test_reports_missing_verification_plan_without_follow_on_errors(
     bindings = yaml.safe_load(bindings_path.read_text())
     plans = bindings["bindings"]["domains.notes.features.creation"]["verification"]
     del plans[OBLIGATION]
-    bindings_path.write_text(yaml.safe_dump(bindings, sort_keys=False))
+    approve_bindings(product, bindings)
     probe_path = tmp_path / "preserve.probe.yaml"
     report_path = tmp_path / "report.yaml"
     write_probe(probe_path)

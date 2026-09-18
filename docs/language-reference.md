@@ -23,7 +23,7 @@ must not mirror code, framework, repository, service, or infrastructure structur
 |---|---:|---|
 | `pml` | yes | Language version; `"0.1-draft"`. |
 | `project` | yes | Product identity and purpose. |
-| `vocabulary` | no | Canonical terms and forbidden synonyms. |
+| `vocabulary` | no | Canonical terms that are neither actors nor concepts, and their forbidden synonyms. |
 | `actors` | no | People, systems, or processes participating in behavior. |
 | `concepts` | no | Meaningful product entities and their semantic states. |
 | `rules` | no | Project-wide normative obligations. |
@@ -38,18 +38,20 @@ must not mirror code, framework, repository, service, or infrastructure structur
 
 ### `vocabulary.<Term>`
 
-`meaning` is required. `forbidden_synonyms` is optional. Vocabulary is used only
-when terminology enforcement is valuable; product concepts do not depend on it.
+`meaning` is required. `forbidden_synonyms` is optional. Vocabulary holds only
+terms that are neither actors nor concepts, when terminology enforcement is
+valuable.
 
 ### `actors.<id>`
 
-Each actor has one required `meaning`.
+Each actor has one required `meaning` and may declare `forbidden_synonyms`.
 
 ### `concepts.<id>`
 
-Each concept has one required `meaning` and may list unordered semantic `states`.
-Rules and behaviors describe valid transitions. Concepts do not declare
-storage, classes, tables, or organizational ownership.
+Each concept has one required `meaning`, may declare `forbidden_synonyms`, and
+may list unordered semantic `states`. Rules and behaviors describe valid
+transitions. Concepts do not declare storage, classes, tables, or organizational
+ownership.
 
 ## Behavioral objects
 

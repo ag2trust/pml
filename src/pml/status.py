@@ -22,11 +22,23 @@ from pml.project_state import (
 from pml.validator import Diagnostic
 
 
+STATUS_SIGNALS = (
+    "FAILED",
+    "BLOCKED",
+    "VERIFIED",
+    "PARTIAL",
+    "STALE",
+    "UNVERIFIED",
+    "UNBOUND",
+)
+
+
 @dataclass(frozen=True)
 class ObligationStatus:
     obligation_id: str
     signal: str
     verified_coverage: float
+    plan: str
 
     @property
     def verification_percent(self) -> float:
@@ -54,6 +66,16 @@ def _lane_records(method: str, evidence: dict[str, Any]) -> list[dict[str, Any]]
     return [value]
 
 
+def _plan_summary(plan: dict[str, Any]) -> str:
+    """Return the compact, deterministic verification-plan display value."""
+
+    return (
+        f"probes:{len(plan.get('probes', {}))} "
+        f"agent:{float(plan.get('agent_judgment', 0)):g} "
+        f"human:{float(plan.get('human_attestation', 0)):g}"
+    )
+
+
 def derive_obligation_status(
     obligation: Obligation,
     state: dict[str, Any],
@@ -71,6 +93,7 @@ def derive_obligation_status(
         "agent_judgment": plan.get("agent_judgment", 0),
         "human_attestation": plan.get("human_attestation", 0),
     }
+    has_plan = any(bool(configured) for configured in methods.values())
     for method, configured in methods.items():
         if not configured:
             continue
@@ -111,9 +134,16 @@ def derive_obligation_status(
         signal = "PARTIAL"
     elif has_prior and not current_results:
         signal = "STALE"
-    else:
+    elif has_plan:
         signal = "UNVERIFIED"
-    return ObligationStatus(obligation.id, signal, min(verified_coverage, 1.0))
+    else:
+        signal = "UNBOUND"
+    return ObligationStatus(
+        obligation.id,
+        signal,
+        min(verified_coverage, 1.0),
+        _plan_summary(plan),
+    )
 
 
 def product_status(

@@ -1,4 +1,4 @@
-"""Shared in-memory types for the closed PML compiled-model v2 contract.
+"""Shared in-memory types for the closed PML compiled-model v4 contract.
 
 These types describe derived data only.  They intentionally do not compile,
 validate, or reinterpret authored PML definitions.
@@ -21,6 +21,13 @@ class CompiledProject(TypedDict):
 
 class CompiledVocabularyTerm(TypedDict):
     term: str
+    meaning: str
+    forbidden_synonyms: list[str]
+
+
+class CompiledTerm(TypedDict):
+    id: str
+    source_kind: Literal["vocabulary", "actor", "concept"]
     meaning: str
     forbidden_synonyms: list[str]
 
@@ -331,11 +338,12 @@ CompiledObligation: TypeAlias = (
 
 class CompiledModel(TypedDict):
     format: Literal["pml.compiled"]
-    format_version: Literal[3]
+    format_version: Literal[4]
     language_version: Literal["0.1-draft"]
     definition_digest: str
     project: CompiledProject
     vocabulary: list[CompiledVocabularyTerm]
+    terms: list[CompiledTerm]
     actors: list[CompiledActor]
     concepts: list[CompiledConcept]
     architecture: list[CompiledArchitectureDecision]

@@ -477,10 +477,40 @@ def _build_compiled_model(
         compiled_obligations, key=lambda obligation: obligation["id"]
     )
 
+    vocabulary = _mapping(document.get("vocabulary"))
+    terms = [
+        {
+            "id": term,
+            "source_kind": "vocabulary",
+            "meaning": definition["meaning"],
+            "forbidden_synonyms": _sequence(definition.get("forbidden_synonyms")),
+        }
+        for term, definition in vocabulary.items()
+    ]
+    terms.extend(
+        {
+            "id": actor_id,
+            "source_kind": "actor",
+            "meaning": definition["meaning"],
+            "forbidden_synonyms": _sequence(definition.get("forbidden_synonyms")),
+        }
+        for actor_id, definition in resolution.actors.items()
+    )
+    terms.extend(
+        {
+            "id": concept_id,
+            "source_kind": "concept",
+            "meaning": definition["meaning"],
+            "forbidden_synonyms": _sequence(definition.get("forbidden_synonyms")),
+        }
+        for concept_id, definition in resolution.concepts.items()
+    )
+    terms.sort(key=lambda term: (term["id"], term["source_kind"]))
+
     concept_required_by = _concept_required_by(resolution)
     model = {
         "format": "pml.compiled",
-        "format_version": 3,
+        "format_version": 4,
         "language_version": "0.1-draft",
         "definition_digest": definition_digest(document),
         "project": {
@@ -498,10 +528,9 @@ def _build_compiled_model(
                     definition.get("forbidden_synonyms")
                 ),
             }
-            for term, definition in sorted(
-                _mapping(document.get("vocabulary")).items()
-            )
+            for term, definition in sorted(vocabulary.items())
         ],
+        "terms": terms,
         "actors": [
             {"id": actor_id, "meaning": definition["meaning"]}
             for actor_id, definition in sorted(resolution.actors.items())

@@ -171,6 +171,7 @@ def test_resolver_emits_complete_model_for_definition_with_lint_warnings() -> No
         "definition_digest",
         "project",
         "vocabulary",
+        "terms",
         "actors",
         "concepts",
         "architecture",

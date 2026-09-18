@@ -1,4 +1,4 @@
-"""Golden-byte conformance for compiled-model v2 serialization."""
+"""Golden-byte conformance for compiled-model v4 serialization."""
 
 from __future__ import annotations
 
@@ -127,6 +127,7 @@ def test_map_materialized_and_derived_arrays_use_their_total_sort_keys() -> None
 
     for collection, key in (
         ("vocabulary", "term"),
+        ("terms", "id"),
         ("actors", "id"),
         ("concepts", "id"),
         ("architecture", "path"),
@@ -210,11 +211,17 @@ def test_authored_sequence_arrays_retain_source_order() -> None:
     behavior = _record(model["behaviors"], "id", "a_start")
     use_case = _record(model["use_cases"], "id", "z_flow")
     vocabulary = _record(model["vocabulary"], "term", "éclair")
+    actor_term = _record(model["terms"], "id", "zed")
+    concept_term = _record(model["terms"], "id", "a_record")
     concept = _record(model["concepts"], "id", "a_record")
     surface = _record(feature["experience"]["surfaces"], "id", "a_workspace")
     state = _record(surface["states"], "id", "z_ready")
 
     assert vocabulary["forbidden_synonyms"] == ["later_term", "earlier_term"]
+    assert actor_term["source_kind"] == "actor"
+    assert actor_term["forbidden_synonyms"] == ["operator"]
+    assert concept_term["source_kind"] == "concept"
+    assert concept_term["forbidden_synonyms"] == ["entry"]
     assert concept["states"] == ["ready", "draft"]
     assert feature["actors"] == ["zed", "ada"]
     assert feature["architecture"] == ["architecture.z_runtime", "architecture.a_store"]
@@ -254,6 +261,49 @@ def test_authored_sequence_arrays_retain_source_order() -> None:
         "statements"
     ]
     assert use_case_obligation["definition"]["behaviors"] == use_case["behaviors"]
+
+
+def test_compiled_terms_unify_vocabulary_actors_and_concepts() -> None:
+    _, model = _compile(FIXTURES / "canonical.pml.yaml")
+
+    assert model["terms"] == [
+        {
+            "id": "Alpha",
+            "source_kind": "vocabulary",
+            "meaning": "The first term by scalar-value ordering.",
+            "forbidden_synonyms": [],
+        },
+        {
+            "id": "a_record",
+            "source_kind": "concept",
+            "meaning": "A record whose authored state order is retained.",
+            "forbidden_synonyms": ["entry"],
+        },
+        {
+            "id": "ada",
+            "source_kind": "actor",
+            "meaning": "The first actor by ID.",
+            "forbidden_synonyms": [],
+        },
+        {
+            "id": "z_record",
+            "source_kind": "concept",
+            "meaning": "The last concept by ID.",
+            "forbidden_synonyms": [],
+        },
+        {
+            "id": "zed",
+            "source_kind": "actor",
+            "meaning": "The last actor by ID.",
+            "forbidden_synonyms": ["operator"],
+        },
+        {
+            "id": "éclair",
+            "source_kind": "vocabulary",
+            "meaning": "A basic non-ASCII vocabulary term.",
+            "forbidden_synonyms": ["later_term", "earlier_term"],
+        },
+    ]
 
 
 def test_architecture_references_are_resolved_without_reordering_authored_refs() -> None:

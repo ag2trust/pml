@@ -579,6 +579,50 @@ def test_feature_rule_with_punctuation_bearing_vocabulary_term_warns() -> None:
     ]
 
 
+@pytest.mark.parametrize("registry", ["actors", "concepts"])
+def test_vocabulary_term_cannot_duplicate_an_actor_or_concept(
+    registry: str,
+) -> None:
+    document, _ = _cardinality_document()
+    document["vocabulary"] = {
+        "Feedback Request": {"meaning": "A request for product feedback."}
+    }
+    document.setdefault(registry, {})["feedback_request"] = {
+        "meaning": "A request for product feedback."
+    }
+
+    resolution = validate_document(document)
+
+    assert [(item.path, item.code) for item in resolution.diagnostics] == [
+        ("vocabulary.Feedback Request", "PML-E-VOCABULARY-DUPLICATE")
+    ]
+    assert resolution.compiled_model is None
+
+
+def test_forbidden_synonym_on_a_concept_is_enforced() -> None:
+    document, feature = _cardinality_document()
+    document["concepts"] = {
+        "feedback_request": {
+            "meaning": "A request for product feedback.",
+            "forbidden_synonyms": ["submission"],
+        }
+    }
+    feature["behaviors"]["note_creation"]["outcome"]["statement"] = (
+        "The submission becomes visible."
+    )
+
+    resolution = validate_document(document)
+
+    assert [(item.path, item.code, item.message) for item in resolution.diagnostics] == [
+        (
+            "domains.notes.features.creation.behaviors.note_creation.outcome.statement",
+            "forbidden-term",
+            "use canonical term 'feedback_request' instead of 'submission'",
+        )
+    ]
+    assert resolution.compiled_model is None
+
+
 def test_minimal_example_is_valid() -> None:
     assert validate_file(ROOT / "examples" / "minimal.pml.yaml") == []
 
@@ -2035,7 +2079,7 @@ def test_pml_explain_concept_lists_required_by_behaviors() -> None:
     result = explain_compiled_model(resolution.compiled_model, "testimonial")
 
     assert result.output is not None
-    assert "required_by" in result.output
+    assert "Required by" in result.output
     assert "domains.reviews.features.publishing.behaviors.publish" in result.output
 
 

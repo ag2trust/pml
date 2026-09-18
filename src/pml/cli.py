@@ -26,9 +26,23 @@ from pml.project_state import (
     validate_product_state,
     validate_architecture_state,
 )
-from pml.status import architecture_status, product_status
+from pml.status import STATUS_SIGNALS, architecture_status, product_status
 from pml.serialization import serialize_compiled_model
 from pml.validator import Diagnostic, load_document, validate_document, validate_file
+
+
+def _status_summary(nodes) -> str:
+    obligations = [
+        obligation for node in nodes for obligation in node.obligations
+    ]
+    counts = {
+        signal: sum(obligation.signal == signal for obligation in obligations)
+        for signal in STATUS_SIGNALS
+    }
+    rendered_counts = " ".join(
+        f"{signal}={counts[signal]}" for signal in STATUS_SIGNALS
+    )
+    return f"PML STATUS: obligations={len(obligations)} {rendered_counts}"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -54,6 +68,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     explain_parser.add_argument("manifest", type=Path)
     explain_parser.add_argument("canonical_id")
+    explain_parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="render the complete legacy compiled-record view",
+    )
     graph_parser = subparsers.add_parser(
         "graph", help="write the explicit compiled graph as deterministic DOT"
     )
@@ -142,7 +161,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         assert document is not None
         assert resolution.compiled_model is not None
-        result = explain_compiled_model(resolution.compiled_model, args.canonical_id)
+        result = explain_compiled_model(
+            resolution.compiled_model, args.canonical_id, raw=args.raw
+        )
         if result.diagnostic is not None:
             print(result.diagnostic, file=sys.stderr)
             return result.exit_code
@@ -242,7 +263,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         for node in nodes:
             print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
             for obligation in node.obligations:
-                print(f"  {obligation.obligation_id} {obligation.signal} {obligation.verification_percent:.0f}%")
+                print(
+                    f"  {obligation.obligation_id} {obligation.signal} "
+                    f"{obligation.verification_percent:.0f}% plan={obligation.plan}"
+                )
+        print(_status_summary(nodes))
         return 0
     if args.command == "architecture-status":
         document, _ = load_document(path)
@@ -278,7 +303,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         for node in nodes:
             print(f"{node.node_id} implementation={node.implementation_percent:.0f}% verification={node.verification_percent:.0f}%")
             for obligation in node.obligations:
-                print(f"  {obligation.obligation_id} {obligation.signal} {obligation.verification_percent:.0f}%")
+                print(
+                    f"  {obligation.obligation_id} {obligation.signal} "
+                    f"{obligation.verification_percent:.0f}% plan={obligation.plan}"
+                )
         return 0
     if args.command == "validate-probes":
         document, _ = load_document(path)

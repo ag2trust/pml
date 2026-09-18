@@ -721,12 +721,6 @@ def _bindings_semantic_diagnostics(
             item.id: item for item in enumerate_obligations(definition, node_id)
         }
         configured = set(binding.get("verification", {}))
-        for obligation_id in sorted(set(expected).difference(configured)):
-            diagnostics.append(Diagnostic(
-                f"{path}:bindings.{node_id}.verification",
-                "missing-verification-plan",
-                f"obligation '{obligation_id}' has no verification plan",
-            ))
         for obligation_id in sorted(configured.difference(expected)):
             diagnostics.append(Diagnostic(
                 f"{path}:bindings.{node_id}.verification.{obligation_id}",
@@ -770,12 +764,6 @@ def _bindings_semantic_diagnostics(
             for item in enumerate_architecture_obligations(definition, node_id)
         }
         configured = set(binding.get("verification", {}))
-        for obligation_id in sorted(set(expected).difference(configured)):
-            diagnostics.append(Diagnostic(
-                f"{path}:architecture.{decision_id}.verification",
-                "missing-verification-plan",
-                f"constraint '{obligation_id}' has no verification plan",
-            ))
         for obligation_id in sorted(configured.difference(expected)):
             diagnostics.append(Diagnostic(
                 f"{path}:architecture.{decision_id}.verification.{obligation_id}",

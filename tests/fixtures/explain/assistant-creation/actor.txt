@@ -1,0 +1,2 @@
+Actor: member
+  Meaning: An authenticated person belonging to one Customer.

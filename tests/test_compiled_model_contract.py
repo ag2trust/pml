@@ -29,7 +29,7 @@ def _model() -> dict[str, object]:
     feature = "domains.notes.features.handling"
     return {
         "format": "pml.compiled",
-        "format_version": 3,
+        "format_version": 4,
         "language_version": "0.1-draft",
         "definition_digest": "sha256:" + "0" * 64,
         "project": {
@@ -40,6 +40,20 @@ def _model() -> dict[str, object]:
             "domains": ["domains.notes"],
         },
         "vocabulary": [],
+        "terms": [
+            {
+                "id": "member",
+                "source_kind": "actor",
+                "meaning": "A member.",
+                "forbidden_synonyms": [],
+            },
+            {
+                "id": "note",
+                "source_kind": "concept",
+                "meaning": "A note.",
+                "forbidden_synonyms": [],
+            },
+        ],
         "actors": [{"id": "member", "meaning": "A member."}],
         "concepts": [{"id": "note", "meaning": "A note.", "states": [], "required_by": []}],
         "architecture": [],
@@ -76,11 +90,11 @@ def _messages(errors: object) -> list[str]:
     return messages
 
 
-def test_schema_accepts_complete_v2_model() -> None:
+def test_schema_accepts_complete_v4_model() -> None:
     assert list(_validator().iter_errors(_model())) == []
 
 
-def test_schema_accepts_every_v2_variant() -> None:
+def test_schema_accepts_every_v4_variant() -> None:
     model = _model()
     feature = "domains.notes.features.handling"
     behavior = feature + ".behaviors.handle_note"
@@ -114,7 +128,7 @@ def test_schema_accepts_every_v2_variant() -> None:
     ("mutate", "expected"),
     [
         (lambda model: model.pop("signals"), "'signals' is a required property"),
-        (lambda model: model.__setitem__("format_version", 2), "3 was expected"),
+        (lambda model: model.__setitem__("format_version", 3), "4 was expected"),
         (lambda model: model["project"].__setitem__("extra", "no"), "Additional properties are not allowed"),  # type: ignore[union-attr]
         (lambda model: model["features"][0].__setitem__("experience", None), "None is not of type 'object'"),  # type: ignore[index,union-attr]
         (lambda model: model["behaviors"][0]["trigger"].__setitem__("case", {"obligation": "x", "statement": "x", "signal": "s"}), "is not valid under any of the given schemas"),  # type: ignore[index,union-attr]
@@ -431,7 +445,7 @@ def test_shared_types_preserve_required_and_optional_contract_fields() -> None:
 
     assert CompiledModel.__required_keys__ == frozenset({
         "format", "format_version", "language_version", "definition_digest", "project",
-        "vocabulary", "actors", "concepts", "architecture", "domains", "features",
+        "vocabulary", "terms", "actors", "concepts", "architecture", "domains", "features",
         "behaviors", "use_cases", "signals", "relationships", "use_case_memberships", "obligations",
     })
     assert "experience" in feature_hints

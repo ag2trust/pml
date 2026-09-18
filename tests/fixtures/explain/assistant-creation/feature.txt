@@ -1,0 +1,15 @@
+Feature: domains.assistants.features.creation
+  Purpose: Allow a Member to create a usable Assistant.
+  Behaviors:
+    ID | Conditions | Trigger | Outcome | Produced | Consumed | Failures
+    assistant_creation | 1 | statement | direct | assistant_created | none | 1
+    created_assistant_visibility | 0 | signal:assistant_created | direct | none | assistant_created | 0
+  Rules:
+    atomic_failure: WHEN creation fails, THE SYSTEM MUST leave no partial Assistant.
+    credentials_not_exposed: Credentials MUST NOT be exposed to the browser.
+    customer_ownership: Customer ownership MUST be enforced for every affected resource.
+    entitlement: A Member MUST enable only capabilities available to the Member's Customer.
+    ownership: A Member MUST create an Assistant only for the Member's Customer.
+  Use cases:
+    create_from_scratch: Create and begin using an Assistant. (2 behaviors)
+  Coupling: producer features (0): none; consumer features (0): none

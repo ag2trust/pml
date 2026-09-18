@@ -25,7 +25,7 @@ The owner-approved behavior transition model in
 [`docs/specs/0010-behavior-transition-model.md`](docs/specs/0010-behavior-transition-model.md)
 is implemented across the schema, semantic validation, conformance examples,
 obligation resolution, bindings, probes, state consumers, and authoring
-documentation. The owner-approved version 3 compiled semantic model in
+documentation. The owner-approved version 4 compiled semantic model in
 [`docs/specs/0011-compiled-semantic-model.md`](docs/specs/0011-compiled-semantic-model.md)
 is implemented through canonical serialization and `pml compile --json`.
 
@@ -84,8 +84,12 @@ Explain one canonical compiled-model ID with:
 .venv/bin/pml explain pml.yaml <canonical-id>
 ```
 
-`pml explain` is a read-only human-readable view of the validated compiled model;
-it does not load or modify bindings, probes, locks, evidence, or generated state.
+`pml explain` is a read-only human-readable summary of the validated compiled
+model; it does not load or modify bindings, probes, locks, evidence, or generated
+state. Its fixed per-kind summary is deterministic and wraps long text without
+truncation. Use `pml explain pml.yaml <canonical-id> --raw` for the complete
+legacy compiled-record view when diagnosing the model; `--raw` is deterministic
+too and preserves that rendering byte-for-byte.
 
 Write the complete explicit graph as deterministic Graphviz DOT bytes with:
 
@@ -221,7 +225,7 @@ pml architecture-status definition.pml.yaml product/
 - [Bindings boundary](docs/specs/0005-bindings-boundary.md) — owner policy, lock pins, and product-local state.
 - [Architecture decisions](docs/specs/0006-architecture-decisions.md) — approved registry and separate conformance semantics.
 - [Behavior transition model](docs/specs/0010-behavior-transition-model.md) — approved transition grammar and migration guidance.
-- [Canonical compiled semantic model](docs/specs/0011-compiled-semantic-model.md) — approved version 3 derived model and JSON contract.
+- [Canonical compiled semantic model](docs/specs/0011-compiled-semantic-model.md) — approved version 4 derived model and JSON contract.
 - [Bare behavior reference normalization](docs/specs/0013-bare-behavior-reference-normalization.md) — approved same-feature reference and digest canonicalization rules.
 - [Human review workflow](docs/specs/0012-human-review-workflow.md) — digest-bound review metadata and interactive review.
 
