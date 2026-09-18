@@ -215,6 +215,69 @@ domains:
     assert rendered.index(first_membership) < rendered.index(second_membership)
 
 
+def test_graph_distinguishes_authored_and_derived_relationship_edges(
+    tmp_path: Path, capsys
+) -> None:
+    source = _write_manifest(
+        tmp_path,
+        "derived-relationships.pml.yaml",
+        """pml: "0.1-draft"
+project: {id: derived_relationships, name: Derived relationships, purpose: Render relationship provenance.}
+concepts:
+  note: {meaning: A Note., states: [draft, published]}
+domains:
+  notes:
+    purpose: Holds related note features.
+    features:
+      create:
+        purpose: Create a note.
+        related_to: [domains.notes.features.archive]
+        behaviors:
+          create:
+            trigger: {statement: A member creates a note.}
+            outcome:
+              statement: The note enters draft.
+              signal: {id: note_created, meaning: A note was created.}
+              transitions: {note: none -> draft}
+      publish:
+        purpose: Publish a note.
+        behaviors:
+          publish:
+            trigger: {statement: A member publishes a note.}
+            outcome:
+              statement: The note becomes published.
+              transitions: {note: draft -> published}
+      notify:
+        purpose: Notify a member.
+        behaviors:
+          notify:
+            trigger: {signal: note_created}
+            outcome: {statement: The member is notified.}
+      archive:
+        purpose: Archive a note.
+        behaviors:
+          archive:
+            trigger: {statement: A member archives a note.}
+            outcome: {statement: The note is archived.}
+""",
+    )
+
+    assert cli.main(["graph", str(source)]) == 0
+    rendered = capsys.readouterr().out
+    assert (
+        '"domains.notes.features.archive" -> "domains.notes.features.create" '
+        '[dir="none", kind="related_to", style="dashed"]'
+    ) in rendered
+    assert (
+        '"domains.notes.features.create" -> "domains.notes.features.publish" '
+        '[dir="none", kind="derived", style="dashed"]'
+    ) in rendered
+    assert (
+        '"domains.notes.features.create" -> "domains.notes.features.notify" '
+        '[dir="none", kind="derived", style="dashed"]'
+    ) in rendered
+
+
 def test_graph_is_deterministic_for_reordered_source_maps(tmp_path: Path, capsys) -> None:
     first = _write_manifest(
         tmp_path,
