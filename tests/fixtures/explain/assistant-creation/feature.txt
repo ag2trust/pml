@@ -12,4 +12,6 @@ Feature: domains.assistants.features.creation
     ownership: A Member MUST create an Assistant only for the Member's Customer.
   Use cases:
     create_from_scratch: Create and begin using an Assistant. (2 behaviors)
+  Related to:
+    none
   Coupling: producer features (0): none; consumer features (0): none

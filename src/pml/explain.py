@@ -409,6 +409,7 @@ def _render_feature_summary(record: Record, indexes: CompiledModelIndexes) -> st
             _use_case_entries(record.get("use_cases", ()), indexes),
         )
     )
+    lines.extend(_summary_entries("  ", "Related to", _relationship_entries(record, indexes)))
     lines.append(_feature_coupling_line(record, indexes))
     return "\n".join(lines)
 
@@ -530,7 +531,7 @@ def _render_behavior_summary(record: Record, indexes: CompiledModelIndexes) -> s
             [obligation["id"] for obligation in indexes.obligations_for_node(record["path"])],
         )
     )
-    lines.extend(_summary_entries("  ", "Related to", _related_nodes(record, indexes)))
+    lines.extend(_summary_entries("  ", "Related to", _relationship_entries(record, indexes)))
     lines.extend(_summary_entries("  ", "Use cases", record.get("use_cases", ())))
     return "\n".join(lines)
 
@@ -557,13 +558,21 @@ def _transition_entries(label: str, transition: Record) -> list[str]:
     return entries
 
 
-def _related_nodes(record: Record, indexes: CompiledModelIndexes) -> list[str]:
-    """List both authored and incoming endpoints of symmetric relationships."""
+def _relationship_entries(record: Record, indexes: CompiledModelIndexes) -> list[str]:
+    """Render the canonical relationship union for a feature or behavior."""
 
-    related = set(record.get("related_to", ()))
-    for relationship in indexes.relationships_for_endpoint(record["path"]):
-        related.update(endpoint for endpoint in relationship["endpoints"] if endpoint != record["path"])
-    return sorted(related)
+    path = record["path"]
+    return [
+        f"{next(endpoint for endpoint in relationship['endpoints'] if endpoint != path)} "
+        f"(source: {relationship['source']})"
+        for relationship in indexes.relationships_for_endpoint(path)
+    ]
+
+
+def _authored_related_to(record: Record) -> list[dict[str, str]]:
+    """Preserve each authored target while making its source explicit."""
+
+    return [{"target": target, "source": "authored"} for target in record["related_to"]]
 
 
 def _render_use_case_summary(record: Record, indexes: CompiledModelIndexes) -> str:
@@ -712,8 +721,11 @@ def _record_fields(
         )
         inverse.append(("relationships", indexes.relationships_for_endpoint(record["path"])))
         inverse.append(("use_case_memberships", indexes.memberships_for_behavior(record["path"])))
+        authored = _selected(record, "id", "purpose", "actors", "experience")
+        authored.append(("related_to", _authored_related_to(record)))
+        authored.extend(_selected(record, "architecture"))
         return (
-            _selected(record, "id", "purpose", "actors", "experience", "related_to", "architecture"),
+            authored,
             _selected(record, "path", "domain"),
             inverse,
         )
@@ -767,7 +779,7 @@ def _behavior_fields(record: Record) -> tuple[list[tuple[str, Any]], list[tuple[
     structural.append(
         ("failures", [dict(_selected(failure, "id", "obligation")) for failure in failures])
     )
-    authored.extend(_selected(record, "related_to"))
+    authored.append(("related_to", _authored_related_to(record)))
     return authored, structural
 
 
