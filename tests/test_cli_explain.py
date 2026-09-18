@@ -270,6 +270,68 @@ domains:
     return source
 
 
+def _relationship_union_manifest(tmp_path: Path) -> Path:
+    source = tmp_path / "relationship-union.pml.yaml"
+    source.write_text(
+        """pml: "0.1-draft"
+project:
+  id: relationship_union
+  name: Relationship union
+  purpose: Exercise source-tagged relationship presentation.
+concepts:
+  record:
+    meaning: A record.
+    states: [draft]
+domains:
+  core:
+    purpose: Exercise relationship sources.
+    features:
+      alpha:
+        purpose: Produce a record update.
+        related_to: [domains.core.features.beta]
+        behaviors:
+          produce:
+            related_to: [domains.core.features.beta]
+            conditions:
+              - concept: record
+                state: draft
+            trigger:
+              statement: A participant starts production.
+            outcome:
+              statement: The record update is available.
+              signal:
+                id: ready
+                meaning: A record update is available.
+      beta:
+        purpose: Receive authored relationships.
+        rules:
+          retain:
+            statement: The product MUST retain the authored relationship.
+      gamma:
+        purpose: Observe the record.
+        behaviors:
+          observe:
+            conditions:
+              - concept: record
+                state: draft
+            trigger:
+              statement: A participant observes the record.
+            outcome:
+              statement: The record remains observable.
+      delta:
+        purpose: Consume the update.
+        behaviors:
+          consume:
+            trigger:
+              signal: ready
+            outcome:
+              statement: The update is consumed.
+""",
+        encoding="utf-8",
+    )
+    return source
+
+
 def _compiled(source: Path):  # type: ignore[no-untyped-def]
     document, diagnostics = load_document(source)
     assert document is not None
@@ -344,6 +406,36 @@ def test_explain_feature_coupling_section_snapshot(tmp_path: Path, capsys) -> No
       - {"id": "ready", "producer_feature": "domains.core.features.producer"}
     distinct_producer_feature_count: 1
 """
+
+
+def test_explain_shows_source_tagged_authored_and_derived_relationships(
+    tmp_path: Path, capsys
+) -> None:
+    source = _relationship_union_manifest(tmp_path)
+    feature = "domains.core.features.alpha"
+    behavior = feature + ".behaviors.produce"
+
+    assert cli.main(["explain", str(source), feature]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert "    domains.core.features.beta (source: authored)" in captured.out
+    assert "    domains.core.features.delta (source: signal:ready)" in captured.out
+    assert "    domains.core.features.gamma (source: concept:record)" in captured.out
+
+    assert cli.main(["explain", str(source), behavior]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert "    domains.core.features.beta (source: authored)" in captured.out
+
+    assert cli.main(["explain", str(source), behavior, "--raw"]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert "    related_to:\n" in captured.out
+    assert '      - {"target": "domains.core.features.beta", "source": "authored"}' in captured.out
+    assert '"source": "authored"' in captured.out
 
 
 def test_explain_renders_use_case_and_obligation_and_membership_from_both_sides(
