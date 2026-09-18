@@ -144,3 +144,71 @@ def test_authored_relationship_takes_precedence_over_concept_derivation() -> Non
             "source": "authored",
         }
     ]
+
+
+def test_high_concept_collision_keeps_one_source_per_feature_pair() -> None:
+    """Compile the schema bounds without retaining every concept provenance tag."""
+
+    concept_ids = [f"concept_{index}" for index in range(25)]
+    features: dict[str, dict[str, Any]] = {}
+    for feature_index in range(625):
+        behaviors = {}
+        for behavior_index, start in enumerate(range(0, len(concept_ids), 7)):
+            behaviors[f"observe_{behavior_index}"] = {
+                "conditions": [
+                    {"concept": concept_id, "state": "ready"}
+                    for concept_id in concept_ids[start : start + 7]
+                ],
+                "trigger": {"statement": "A Member observes a Concept."},
+                "outcome": {"statement": "The Concept remains observable."},
+            }
+        feature = {"purpose": "Observe concepts.", "behaviors": behaviors}
+        if feature_index == 0:
+            feature["related_to"] = ["domains.domain_0.features.feature_1"]
+        features[f"feature_{feature_index}"] = feature
+
+    document = {
+        "pml": "0.1-draft",
+        "project": {
+            "id": "collision",
+            "name": "Collision",
+            "purpose": "Compile maximum concept collisions.",
+        },
+        "concepts": {
+            concept_id: {"meaning": "A Concept.", "states": ["ready"]}
+            for concept_id in concept_ids
+        },
+        "domains": {
+            f"domain_{domain_index}": {
+                "purpose": "Contain features.",
+                "features": {
+                    feature_id: features[feature_id]
+                    for feature_id in list(features)[
+                        domain_index * 25 : (domain_index + 1) * 25
+                    ]
+                },
+            }
+            for domain_index in range(25)
+        },
+    }
+
+    resolution = validate_document(document)
+
+    assert resolution.diagnostics == ()
+    assert resolution.compiled_model is not None
+    relationships = resolution.compiled_model["relationships"]
+    assert len(relationships) == 625 * 624 // 2
+    authored_relationship_found = False
+    for relationship in relationships:
+        if relationship["endpoints"] == [
+            "domains.domain_0.features.feature_0",
+            "domains.domain_0.features.feature_1",
+        ]:
+            authored_relationship_found = True
+            assert relationship["declared_by"] == [
+                "domains.domain_0.features.feature_0"
+            ]
+            assert relationship["source"] == "authored"
+        else:
+            assert relationship["source"] == "concept:concept_0"
+    assert authored_relationship_found

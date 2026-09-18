@@ -436,31 +436,41 @@ def derive_relationships(
     """
 
     declarations: dict[tuple[str, str], set[str]] = {}
-    sources: dict[tuple[str, str], set[str]] = {}
+    sources: dict[tuple[str, str], str] = {}
+
+    def record_derived_source(endpoints: tuple[str, str], source: str) -> None:
+        """Keep the deterministic source candidate without retaining provenance."""
+
+        previous = sources.get(endpoints)
+        if previous is None or (previous != "authored" and source < previous):
+            sources[endpoints] = source
+
     for node_path, node in resolution.nodes.items():
         for target in _sequence(node.get("related_to")):
             if not isinstance(target, str):
                 continue
             endpoints = tuple(sorted((node_path, target)))
             declarations.setdefault(endpoints, set()).add(node_path)
-            sources.setdefault(endpoints, set()).add("authored")
+            sources[endpoints] = "authored"
 
     features_by_concept: dict[str, set[str]] = {}
     for feature_path, concepts in _concepts_by_feature(resolution).items():
         for concept_id in concepts:
             features_by_concept.setdefault(concept_id, set()).add(feature_path)
     for concept_id, features in features_by_concept.items():
+        source = f"concept:{concept_id}"
         for endpoints in combinations(sorted(features), 2):
-            sources.setdefault(endpoints, set()).add(f"concept:{concept_id}")
+            record_derived_source(endpoints, source)
 
     consumers = _signal_consumers_by_feature(resolution)
     for signal_id, signal in resolution.signals.items():
         producer = _feature_path(signal.behavior)
+        source = f"signal:{signal_id}"
         for consumer in consumers.get(signal_id, set()):
             if producer == consumer:
                 continue
             endpoints = tuple(sorted((producer, consumer)))
-            sources.setdefault(endpoints, set()).add(f"signal:{signal_id}")
+            record_derived_source(endpoints, source)
 
     return [
         cast(
@@ -469,11 +479,7 @@ def derive_relationships(
                 "kind": "related_to",
                 "endpoints": list(endpoints),
                 "declared_by": sorted(declarations.get(endpoints, ())),
-                "source": (
-                    "authored"
-                    if "authored" in sources[endpoints]
-                    else min(sources[endpoints])
-                ),
+                "source": sources[endpoints],
             },
         )
         for endpoints in sorted(sources)
