@@ -13,11 +13,18 @@ from pml.explain import (
 )
 
 
-GraphMeaning = Literal["causal", "related_to", "use_case_membership", "state"]
+GraphMeaning = Literal[
+    "causal",
+    "related_to",
+    "derived",
+    "use_case_membership",
+    "state",
+]
 GraphOrigin = Literal[
     "producer_to_signal",
     "signal_to_consumer_trigger",
     "related_to",
+    "derived",
     "use_case_membership",
     "state_transition",
 ]
@@ -82,11 +89,12 @@ def iter_explicit_graph_edges(
 
     for relationship in indexes.relationships:
         source, target = relationship["endpoints"]
+        is_authored = relationship["source"] == "authored"
         yield ExplicitGraphEdge(
             source=source,
             target=target,
-            meaning="related_to",
-            origin="related_to",
+            meaning="related_to" if is_authored else "derived",
+            origin="related_to" if is_authored else "derived",
             declared_by=tuple(relationship["declared_by"]),
         )
 
@@ -146,6 +154,8 @@ def _dot_edge(edge: ExplicitGraphEdge) -> str:
         attributes = '[kind="causal", style="solid"]'
     elif edge.meaning == "related_to":
         attributes = '[dir="none", kind="related_to", style="dashed"]'
+    elif edge.meaning == "derived":
+        attributes = '[dir="none", kind="derived", style="dashed"]'
     elif edge.meaning == "use_case_membership":
         attributes = '[dir="none", kind="use_case_membership", style="dotted"]'
     else:
