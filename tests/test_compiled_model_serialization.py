@@ -1,4 +1,4 @@
-"""Golden-byte conformance for compiled-model v4 serialization."""
+"""Golden-byte conformance for compiled-model v5 serialization."""
 
 from __future__ import annotations
 

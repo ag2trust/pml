@@ -13,12 +13,13 @@ from pml.explain import (
 )
 
 
-GraphMeaning = Literal["causal", "related_to", "use_case_membership"]
+GraphMeaning = Literal["causal", "related_to", "use_case_membership", "state"]
 GraphOrigin = Literal[
     "producer_to_signal",
     "signal_to_consumer_trigger",
     "related_to",
     "use_case_membership",
+    "state_transition",
 ]
 
 
@@ -31,6 +32,7 @@ class ExplicitGraphEdge:
     meaning: GraphMeaning
     origin: GraphOrigin
     declared_by: tuple[str, ...] = ()
+    label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -96,6 +98,17 @@ def iter_explicit_graph_edges(
             origin="use_case_membership",
         )
 
+    for concept in indexes.categories["concepts"].values():
+        concept_id = concept["id"]
+        for transition in concept["transitions"]:
+            yield ExplicitGraphEdge(
+                source=_state_endpoint(concept_id, transition["from"]),
+                target=_state_endpoint(concept_id, transition["to"]),
+                meaning="state",
+                origin="state_transition",
+                label=transition["completion"],
+            )
+
 
 def serialize_graph_dot(model_or_indexes: Mapping[str, Any] | CompiledModelIndexes) -> bytes:
     """Serialize the complete explicit graph with the approved DOT bytes."""
@@ -133,6 +146,17 @@ def _dot_edge(edge: ExplicitGraphEdge) -> str:
         attributes = '[kind="causal", style="solid"]'
     elif edge.meaning == "related_to":
         attributes = '[dir="none", kind="related_to", style="dashed"]'
-    else:
+    elif edge.meaning == "use_case_membership":
         attributes = '[dir="none", kind="use_case_membership", style="dotted"]'
+    else:
+        assert edge.label is not None
+        attributes = (
+            f'[kind="state", label={_dot_string(edge.label)}, style="solid"]'
+        )
     return f"  {_dot_string(edge.source)} -> {_dot_string(edge.target)} {attributes};"
+
+
+def _state_endpoint(concept_id: str, state: str) -> str:
+    """Return a concept-qualified DOT node ID for one state endpoint."""
+
+    return f"concepts.{concept_id}.states.{state}"

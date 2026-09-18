@@ -537,6 +537,46 @@ def test_assistant_creation_example_has_lint_warnings() -> None:
             "PML-W-RULE-SCOPE",
             "warning",
         ),
+        (
+            "concepts.assistant.states[0]",
+            "PML-W-STATE-DEAD-END",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[0]",
+            "PML-W-STATE-UNREACHABLE",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[1]",
+            "PML-W-STATE-DEAD-END",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[2]",
+            "PML-W-STATE-DEAD-END",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[2]",
+            "PML-W-STATE-UNREACHABLE",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[3]",
+            "PML-W-STATE-DEAD-END",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[3]",
+            "PML-W-STATE-UNREACHABLE",
+            "warning",
+        ),
+        (
+            "domains.assistants.features.creation.behaviors.assistant_creation.conditions[0].state",
+            "PML-W-CONDITION-STATE-UNPRODUCED",
+            "warning",
+        ),
     ]
 
 

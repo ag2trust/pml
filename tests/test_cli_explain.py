@@ -491,6 +491,73 @@ def test_explain_preserves_authored_and_derived_classification(capsys) -> None:
     assert "stable_obligations:" in inverse
 
 
+def test_explain_renders_completion_transitions_as_authored_data(
+    tmp_path: Path, capsys
+) -> None:
+    source = tmp_path / "completion-transitions.pml.yaml"
+    source.write_text(
+        """pml: "0.1-draft"
+project: {id: transitions, name: Transitions, purpose: Explain completion transitions.}
+concepts:
+  note:
+    meaning: A Note with a lifecycle.
+    states: [draft, active]
+domains:
+  notes:
+    purpose: Manage Notes.
+    features:
+      lifecycle:
+        purpose: Move Notes through a lifecycle.
+        behaviors:
+          direct:
+            trigger: {statement: A Member removes an active Note.}
+            outcome:
+              statement: The active Note ceases to exist.
+              transitions: {note: active -> none}
+          alternatives:
+            trigger: {statement: A Member changes a Note.}
+            outcome:
+              one_of:
+                create:
+                  statement: The Note enters draft.
+                  transitions: {note: none -> draft}
+                activate:
+                  statement: The Note becomes active.
+                  transitions: {note: draft -> active}
+            failures:
+              removed:
+                statement: The active Note ceases to exist.
+                transitions: {note: active -> none}
+""",
+        encoding="utf-8",
+    )
+    prefix = "domains.notes.features.lifecycle.behaviors"
+
+    for behavior in (f"{prefix}.direct", f"{prefix}.alternatives"):
+        assert cli.main(["explain", str(source), behavior, "--raw"]) == 0
+        rendered = capsys.readouterr().out
+        authored, remaining = rendered.split(
+            "  Derived identity/structural:\n", maxsplit=1
+        )
+        structural, _ = remaining.split("  Derived inverse links:\n", maxsplit=1)
+        assert '"transitions"' in authored
+        assert '"transitions"' not in structural
+
+    for obligation in (
+        f"{prefix}.direct.outcome",
+        f"{prefix}.alternatives.outcome.create",
+        f"{prefix}.alternatives.failures.removed",
+    ):
+        assert cli.main(["explain", str(source), obligation, "--raw"]) == 0
+        rendered = capsys.readouterr().out
+        authored, remaining = rendered.split(
+            "  Derived identity/structural:\n", maxsplit=1
+        )
+        structural, _ = remaining.split("  Derived inverse links:\n", maxsplit=1)
+        assert "definition.transitions" in authored
+        assert "definition.transitions" not in structural
+
+
 def test_explain_lists_referencing_surface_state_on_obligation(capsys) -> None:
     obligation = (
         "domains.a_work.features.workspace.behaviors.a_start.outcome.z_saved"

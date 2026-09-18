@@ -49,9 +49,13 @@ Each actor has one required `meaning` and may declare `forbidden_synonyms`.
 ### `concepts.<id>`
 
 Each concept has one required `meaning`, may declare `forbidden_synonyms`, and
-may list unordered semantic `states`. Rules and behaviors describe valid
-transitions. Concepts do not declare storage, classes, tables, or organizational
-ownership.
+may list unordered semantic `states`. Completion transitions name how behavior
+completions move one concept instance between those states. Concepts do not
+declare storage, classes, tables, or organizational ownership. Each state is a
+non-empty state token that is neither `*` nor `none` and does not contain
+` -> `, begin `-> `, end ` ->`, or contain a line-break character; those
+spellings are reserved to keep transition endpoints unambiguous and graph output
+single-line.
 
 ## Behavioral objects
 
@@ -104,7 +108,21 @@ initiates one evaluation; its alternatives are not globally exclusive.
 map of two through seven mutually exclusive successful completions. Optional
 `failures` is an ID-keyed map of one through seven unsuccessful completions. Every
 initiated evaluation completes exactly one outcome or authored failure. Each direct
-completion requires a local `statement` and may define one inline `signal`.
+completion requires a local `statement` and may define one inline `signal`, a
+`transitions` map with at most three concept-ID keys, or both. Each map value is
+exactly `"<from> -> <to>"`: `from` is a declared state, `*`, or `none`; `to` is a
+declared state or `none`. `none` means the concept instance comes into existence
+or ceases to exist, and `*` means any current state. A transition cannot retain
+the same state. Unknown concepts and undeclared or identical states are validation
+errors (`PML-E-TRANSITION-CONCEPT` and `PML-E-TRANSITION-STATE`).
+
+Transitions are product semantics, not persistence or messaging instructions.
+Tooling warns from the complete definition when a declared state is never produced
+(`PML-W-STATE-UNREACHABLE`), has no transition out (`PML-W-STATE-DEAD-END`), or a
+structured condition requires a state no completion produces
+(`PML-W-CONDITION-STATE-UNPRODUCED`). A concept with no transitions produces none
+of these warnings.
+
 Transition statements are normative by position, so they do not require `MUST` or
 `MUST NOT`.
 

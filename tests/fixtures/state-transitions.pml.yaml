@@ -1,0 +1,40 @@
+pml: "0.1-draft"
+
+project:
+  id: state_transitions
+  name: State Transitions
+  purpose: Exercise the explicit product state graph.
+
+concepts:
+  note:
+    meaning: A Note with an explicit lifecycle.
+    states: [draft, active]
+
+domains:
+  notes:
+    purpose: Manage Notes.
+    features:
+      lifecycle:
+        purpose: Move a Note through its lifecycle.
+        behaviors:
+          create:
+            trigger:
+              statement: A Member creates a Note.
+            outcome:
+              statement: The Note enters its draft state.
+              transitions:
+                note: none -> draft
+          activate:
+            trigger:
+              statement: A Member activates a Note.
+            outcome:
+              statement: The Note becomes active.
+              transitions:
+                note: draft -> active
+          remove:
+            trigger:
+              statement: A Member removes an active Note.
+            outcome:
+              statement: The active Note ceases to exist.
+              transitions:
+                note: active -> none

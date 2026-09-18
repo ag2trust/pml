@@ -1,4 +1,4 @@
-"""Shared in-memory types for the closed PML compiled-model v4 contract.
+"""Shared in-memory types for the closed PML compiled-model v5 contract.
 
 These types describe derived data only.  They intentionally do not compile,
 validate, or reinterpret authored PML definitions.
@@ -42,6 +42,19 @@ class CompiledConcept(TypedDict):
     meaning: str
     states: list[str]
     required_by: list[Path]
+    transitions: list["CompiledConceptTransition"]
+
+
+CompiledCompletionTransition = TypedDict(
+    "CompiledCompletionTransition",
+    {"concept": str, "from": str, "to": str},
+)
+
+
+CompiledConceptTransition = TypedDict(
+    "CompiledConceptTransition",
+    {"from": str, "to": str, "completion": ObligationId},
+)
 
 
 class CompiledArchitectureDecision(TypedDict):
@@ -152,6 +165,7 @@ class CompiledOutcomeCase(TypedDict):
     obligation: ObligationId
     statement: str
     signal: NotRequired[str]
+    transitions: NotRequired[list[CompiledCompletionTransition]]
 
 
 class CompiledOutcomeAlternative(TypedDict):
@@ -159,6 +173,7 @@ class CompiledOutcomeAlternative(TypedDict):
     obligation: ObligationId
     statement: str
     signal: NotRequired[str]
+    transitions: NotRequired[list[CompiledCompletionTransition]]
 
 
 class DirectOutcome(TypedDict):
@@ -180,6 +195,7 @@ class CompiledFailure(TypedDict):
     obligation: ObligationId
     statement: str
     signal: NotRequired[str]
+    transitions: NotRequired[list[CompiledCompletionTransition]]
 
 
 class CompiledBehavior(TypedDict):
@@ -253,6 +269,7 @@ class SignalDefinition(StatementDefinition):
     """A completion definition with a required statement and optional signal."""
 
     signal: NotRequired[str]
+    transitions: NotRequired[list[CompiledCompletionTransition]]
 
 
 class CompletionDefinition(TypedDict):
@@ -338,7 +355,7 @@ CompiledObligation: TypeAlias = (
 
 class CompiledModel(TypedDict):
     format: Literal["pml.compiled"]
-    format_version: Literal[4]
+    format_version: Literal[5]
     language_version: Literal["0.1-draft"]
     definition_digest: str
     project: CompiledProject

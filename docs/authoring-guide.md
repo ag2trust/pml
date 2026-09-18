@@ -68,6 +68,31 @@ Rejections and cancellations that do not prevent success are separate behaviors.
 
 Do not use the superseded `context` or `output` fields.
 
+## Declare product state changes on completions
+
+When a completion changes a declared concept state, add its optional `transitions`
+map. Each map key is a concept ID and its value is `"<from> -> <to>"`. `from` may
+be a declared state, `*`, or `none`; `to` is a declared state or `none`. Use
+`none` when the instance comes into existence or ceases to exist. A declared
+state cannot be `*` or `none`, contain ` -> `, begin `-> `, or end ` ->`,
+because those spellings overlap the transition syntax; it also cannot contain a
+line-break character.
+
+```yaml
+assistant_creation:
+  trigger:
+    statement: A Member requests Assistant creation.
+  outcome:
+    statement: The Assistant is available for the Member.
+    transitions:
+      assistant: none -> active
+```
+
+Declare at most three concept transitions on one completion. These are product
+semantics, not persistence or messaging instructions. The validator checks the
+named concept and states, and warns when declared state-machine paths cannot
+produce or leave a state.
+
 ## Connect behaviors with optional inline signals
 
 A completion may define one optional inline signal. The defining outcome or

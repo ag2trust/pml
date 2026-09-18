@@ -4,8 +4,9 @@ Product Manifest Language (PML) is a small, opinionated, declarative language fo
 describing what a software product is and what it must do.
 
 PML captures product concepts, actors, features, behavior transitions, rules, use cases,
-optional completion signals, relationships, experiences, and selected owner-mandated
-architecture without prescribing code organization, APIs, database schemas, or tests.
+optional completion signals and concept state transitions, relationships, experiences,
+and selected owner-mandated architecture without prescribing code organization, APIs,
+database schemas, or tests.
 
 The intended workflow is:
 
@@ -25,7 +26,7 @@ The owner-approved behavior transition model in
 [`docs/specs/0010-behavior-transition-model.md`](docs/specs/0010-behavior-transition-model.md)
 is implemented across the schema, semantic validation, conformance examples,
 obligation resolution, bindings, probes, state consumers, and authoring
-documentation. The owner-approved version 4 compiled semantic model in
+documentation. The owner-approved version 5 compiled semantic model in
 [`docs/specs/0011-compiled-semantic-model.md`](docs/specs/0011-compiled-semantic-model.md)
 is implemented through canonical serialization and `pml compile --json`.
 
@@ -98,7 +99,8 @@ Write the complete explicit graph as deterministic Graphviz DOT bytes with:
 ```
 
 `pml graph` is read-only and emits only producer-completion-to-signal,
-signal-to-consumer-trigger, `related_to`, and use-case membership edges.
+signal-to-consumer-trigger, `related_to`, use-case membership, and concept
+state-transition edges.
 
 Review every unresolved feature, behavior, and stable obligation interactively with:
 
@@ -225,7 +227,7 @@ pml architecture-status definition.pml.yaml product/
 - [Bindings boundary](docs/specs/0005-bindings-boundary.md) — owner policy, lock pins, and product-local state.
 - [Architecture decisions](docs/specs/0006-architecture-decisions.md) — approved registry and separate conformance semantics.
 - [Behavior transition model](docs/specs/0010-behavior-transition-model.md) — approved transition grammar and migration guidance.
-- [Canonical compiled semantic model](docs/specs/0011-compiled-semantic-model.md) — approved version 4 derived model and JSON contract.
+- [Canonical compiled semantic model](docs/specs/0011-compiled-semantic-model.md) — approved version 5 derived model and JSON contract.
 - [Bare behavior reference normalization](docs/specs/0013-bare-behavior-reference-normalization.md) — approved same-feature reference and digest canonicalization rules.
 - [Human review workflow](docs/specs/0012-human-review-workflow.md) — digest-bound review metadata and interactive review.
 

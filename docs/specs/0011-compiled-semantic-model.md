@@ -1,14 +1,14 @@
 # PML canonical compiled semantic model
 
-Status: Owner approved; version 4 approved by manifest-quality review 0053
+Status: Owner approved; version 5 approved by manifest-quality review 0053
 
 ## Approved decision
 
-Version 4 of the read-only compiled semantic model defined here is approved as the
+Version 5 of the read-only compiled semantic model defined here is approved as the
 single derived representation shared by PML reference resolution, obligation
-enumeration, and downstream inspection tools. Version 4 supersedes version 3 to
-carry the unified derived `terms` index (see the version 4 delta below); no other
-format-version 1, 2, or 3 producers or consumers remain supported.
+enumeration, and downstream inspection tools. Version 5 supersedes version 4 to
+carry completion-owned concept transitions (see the version 5 delta below); no
+format-version 1 through 4 producers or consumers remain supported.
 
 This specification incorporates the approved vocabulary semantics and uses the
 behavior, transition, signal, relationship, use-case, and obligation semantics
@@ -157,12 +157,26 @@ Paths name semantic objects, not files. The compiled model contains no source fi
 paths or YAML layout metadata, so compiling the same merged definition as one file
 or as an equivalent modular directory produces the same model.
 
-## Version 4 delta
+## Version 5 delta
 
-Version 4 replaces the previously approved version 3 grammar. Independent
-compilers and consumers MUST emit and accept `format_version: 4` and MUST NOT
-accept `format_version: 1`, `format_version: 2`, or `format_version: 3` as a
-synonym. The version-4 changes are:
+Version 5 replaces the previously approved version 4 grammar. Independent
+compilers and consumers MUST emit and accept `format_version: 5` and MUST NOT
+accept versions 1 through 4 as a synonym. The version-5 changes are:
+
+- Every direct outcome, outcome alternative, and failure may carry an optional
+  `transitions` array. Its entries are canonical `{concept, from, to}` records
+  derived from the authored transition map and sorted by `concept`.
+- Every compiled concept gains a required `transitions` inverse array. Each
+  `{from, to, completion}` entry names the completion obligation that declares
+  the transition and is sorted by `(from, to, completion)`.
+
+Every other version-4 rule (identity, obligation inventory, closed enums,
+canonical JSON encoding, definition digest) remains as approved, subject to the
+byte change for `format_version` documented in the encoding section.
+
+## Version 4 delta (superseded, historical)
+
+Version 4 replaced version 3. Its changes were:
 
 - The compiled model gains a required `terms` array. It contains one record for
   every vocabulary term, actor, and concept, with `id`, `source_kind`, `meaning`,
@@ -173,10 +187,6 @@ synonym. The version-4 changes are:
   synonym-list shape. A vocabulary term whose case-folded ID, with underscores
   treated as spaces, equals an actor or concept ID is invalid with
   `PML-E-VOCABULARY-DUPLICATE`.
-
-Every other version-3 rule (identity, obligation inventory, closed enums,
-canonical JSON encoding, definition digest) remains as approved, subject to the
-byte change for `format_version` documented in the encoding section.
 
 ## Version 3 delta (superseded, historical)
 
@@ -204,9 +214,9 @@ changes above superseded it.
 ## Version 2 delta (superseded, historical)
 
 Version 2 is superseded by version 3 above. It is retained here only to record
-what version 2 changed from version 1; a conforming version-4 producer or
+what version 2 changed from version 1; a conforming version-5 producer or
 consumer MUST NOT accept `format_version: 2` and MUST NOT apply the version-2
-requirements below to a version-4 model. The version-2 changes were:
+requirements below to a version-5 model. The version-2 changes were:
 
 - `compiled-surface-state` became an object with optional `shows: list[obligation-id]`
   and optional `contains: list[authored-text]`, at least one of which is present.
@@ -220,10 +230,10 @@ requirements below to a version-4 model. The version-2 changes were:
 
 Every other version-1 rule (identity, ordering, canonical JSON encoding,
 definition digest, obligation inventory, closed enums) carried into version 2,
-and every version-2 rule likewise carries into version 4 except where the
-version-3 or version-4 delta above supersedes it.
+and every version-2 rule likewise carries into version 5 except where a later
+delta above supersedes it.
 
-## Version 4 JSON structure
+## Version 5 JSON structure
 
 Every object below is closed: implementations MUST NOT add unlisted properties.
 Properties marked `?` are omitted when their authored value is absent; they are not
@@ -233,7 +243,7 @@ strings preserve authored Unicode text exactly.
 ```text
 compiled-model = {
   format: "pml.compiled",
-  format_version: 4,
+  format_version: 5,
   language_version: "0.1-draft",
   definition_digest: sha256-digest,
   project: compiled-project,
@@ -282,7 +292,20 @@ compiled-concept = {
   id: concept-id,
   meaning: authored-text,
   states: list[authored-text],
-  required_by: list[behavior-path]
+  required_by: list[behavior-path],
+  transitions: list[compiled-concept-transition]
+}
+
+compiled-completion-transition = {
+  concept: concept-id,
+  from: authored-state | "*" | "none",
+  to: authored-state | "none"
+}
+
+compiled-concept-transition = {
+  from: authored-state | "*" | "none",
+  to: authored-state | "none",
+  completion: outcome-or-failure-obligation-id
 }
 
 compiled-architecture-decision = {
@@ -391,21 +414,24 @@ compiled-outcome =
 compiled-outcome-case = {
   obligation: obligation-id,
   statement: authored-text,
-  signal?: signal-id
+  signal?: signal-id,
+  transitions?: list[compiled-completion-transition]
 }
 
 compiled-outcome-alternative = {
   id: outcome-alternative-id,
   obligation: obligation-id,
   statement: authored-text,
-  signal?: signal-id
+  signal?: signal-id,
+  transitions?: list[compiled-completion-transition]
 }
 
 compiled-failure = {
   id: failure-id,
   obligation: obligation-id,
   statement: authored-text,
-  signal?: signal-id
+  signal?: signal-id,
+  transitions?: list[compiled-completion-transition]
 }
 
 compiled-use-case = {
@@ -479,7 +505,7 @@ The model has these consistency invariants:
   or another compiled edge.
 
 The `definition_digest` uses the already approved definition-digest algorithm,
-made fully explicit here for the version 4 byte contract. After complete schema
+made fully explicit here for the version 5 byte contract. After complete schema
 and semantic validation, apply the approved reference canonicalization from
 [0013](0013-bare-behavior-reference-normalization.md), then encode the resulting
 canonical definition with this compact canonical definition JSON algorithm:
@@ -579,7 +605,7 @@ technical event interpretation.
 ### Signal coupling diagnostics
 
 The owner-approved signal-coupling checks are advisory diagnostics derived only
-from a complete version-2 compiled model. They add neither a PML construct nor a
+from a complete version-5 compiled model. They add neither a PML construct nor a
 compiled-model field, relationship, obligation, or causal edge. Warnings do not
 prevent compilation or any read-only compiled-model consumer from receiving the
 complete model.
@@ -620,7 +646,7 @@ use-case goal.
 
 ## Stable obligations
 
-Version 4 uses these closed `obligation-kind` values and definitions:
+Version 5 uses these closed `obligation-kind` values and definitions:
 
 | `kind` | `definition` | Stable ID |
 | --- | --- | --- |
@@ -628,8 +654,8 @@ Version 4 uses these closed `obligation-kind` values and definitions:
 | `trigger` | `{statement: authored-text}` or `{signal: signal-id}` | direct: `<behavior-path>.trigger`; alternative: `<behavior-path>.trigger.<alternative-id>` |
 | `completion` | `{outcomes: list[obligation-id], failures: list[obligation-id]}` | `<behavior-path>.completion` |
 | `outcome_exclusivity` | `{alternatives: list[obligation-id]}` | `<behavior-path>.outcome` for `outcome.one_of` only |
-| `outcome` | `{statement: authored-text, signal?: signal-id}` | direct: `<behavior-path>.outcome`; alternative: `<behavior-path>.outcome.<alternative-id>` |
-| `failure` | `{statement: authored-text, signal?: signal-id}` | `<behavior-path>.failures.<failure-id>` |
+| `outcome` | `{statement: authored-text, signal?: signal-id, transitions?: list[compiled-completion-transition]}` | direct: `<behavior-path>.outcome`; alternative: `<behavior-path>.outcome.<alternative-id>` |
+| `failure` | `{statement: authored-text, signal?: signal-id, transitions?: list[compiled-completion-transition]}` | `<behavior-path>.failures.<failure-id>` |
 | `rule` | `{statement: authored-text}` | `<scope-path>.rules.<rule-id>` |
 | `use_case` | `{actor: actor-id, goal: authored-text, behaviors: list[behavior-path]}` | `<feature-path>.use_cases.<use-case-id>` |
 | `architecture_constraint` | `{statement: authored-text}` | `architecture.<decision-id>.constraints.<constraint-id>` |
@@ -707,6 +733,7 @@ The rules are:
    | `trigger.cases` | alternative `id` |
    | `outcome.cases` | alternative `id` |
    | `behaviors[].failures` | failure `id` |
+   | completion `transitions` | `concept` |
    | top-level `obligations` | obligation `id` |
 
 4. Sort every array of references or records derived from maps, inverse indexes,
@@ -733,17 +760,18 @@ The rules are:
    | `outcome_exclusivity` obligation `definition.alternatives` | obligation ID |
    | obligation `surfaces` (rule/outcome/failure) | surface-state path |
    | `concepts[].required_by` | behavior path |
+   | `concepts[].transitions` | tuple `(from, to, completion)` |
 
    The authored reference arrays named in rule 2 retain authored order instead;
    this table does not reorder them merely because their entries are references.
 5. Sort each symmetric relationship's two `endpoints` lexically before using the
    endpoint tuple as its identity and sort `declared_by` lexically by semantic
    path. Emit only one relationship record per endpoint pair.
-6. These rules exhaust every array in version 4. A future format change that adds
+6. These rules exhaust every array in version 5. A future format change that adds
    an array MUST assign it either source-sequence preservation or an explicit total
    sort key before that format version is approved.
 7. Serialize the ordered model with the canonical JSON algorithm below. No other
-   JSON layout or escape spelling conforms to version 4.
+   JSON layout or escape spelling conforms to version 5.
 8. Do not include timestamps, source paths, machine paths, random identifiers,
    generated state, or environment-dependent values.
 
@@ -764,8 +792,8 @@ trailing spaces, and ends with exactly one line feed after the top-level value.
 
 Emit values as follows:
 
-- The version-4 model's only number is `format_version`, emitted as the single
-  ASCII byte `4`. The model contains no booleans or nulls; absent optional
+- The version-5 model's only number is `format_version`, emitted as the single
+  ASCII byte `5`. The model contains no booleans or nulls; absent optional
   properties are omitted as specified above.
 - An empty object is `{}` and an empty array is `[]`.
 - A non-empty object begins with `{`. For each property in Unicode scalar-value
@@ -848,9 +876,10 @@ Graph consumes only explicit compiled edges:
 
 - directed producer-completion to signal to consumer-trigger edges;
 - symmetric `related_to` edges; and
-- use-case membership edges.
+- use-case membership edges; and
+- directed concept state-transition edges.
 
-It must visually distinguish those three meanings. It must not derive workflow
+It must visually distinguish those four meanings. It must not derive workflow
 order from use cases, direction from `related_to`, or a relationship from shared
 actors, concepts, words, or hierarchy.
 
@@ -882,11 +911,16 @@ equals the node ID. Causal endpoints are the exact completion and trigger
 obligation IDs from the compiled signal records; behavior paths must not
 substitute for obligation endpoints.
 
+A state endpoint is `concepts.<concept-id>.states.<endpoint>`, including the
+concept-qualified `none` endpoint. This keeps absence of instances of distinct
+concepts separate without inventing a relationship between them.
+
 **Edge order.** For each signal in compiled array order, emit the
 completion-to-signal edge followed by each signal-to-consumer-trigger edge in
 consumer array order. Then emit all relationships in compiled array order. Then
-emit all use-case memberships in compiled array order. All edges use the `->`
-DOT operator.
+emit all use-case memberships in compiled array order. Finally, emit every
+concept's transitions in compiled concept-array and transition-array order. All
+edges use the `->` DOT operator.
 
 **Edge attributes.** Each edge meaning uses exactly these attributes in the
 fixed alphabetical key order shown:
@@ -896,10 +930,13 @@ fixed alphabetical key order shown:
 | Causal (completion→signal and signal→trigger) | `[kind="causal", style="solid"]` |
 | Symmetric relationship | `[dir="none", kind="related_to", style="dashed"]` |
 | Use-case membership | `[dir="none", kind="use_case_membership", style="dotted"]` |
+| State transition | `[kind="state", label="<completion-path>", style="solid"]` |
 
 Reciprocal authored `related_to` declarations between the same pair collapse to
 one symmetric edge using the normalized endpoint pair from the compiled
 `relationships` array. Use-case membership edges carry no order or direction.
+State-transition labels are their exact compiled outcome or failure obligation
+paths; state edges add no persistence, messaging, or workflow interpretation.
 
 **Layout.** Use two-space indentation. Place one statement per line. Terminate
 every node and edge statement with a semicolon. End the output with exactly one
@@ -911,8 +948,8 @@ determined before escaping.
 
 #### Empty-graph example
 
-A compiled model with no signals, relationships, or use-case memberships
-produces:
+A compiled model with no signals, relationships, use-case memberships, or
+concept state transitions produces:
 
 ```
 digraph pml {
@@ -980,8 +1017,8 @@ structure cannot represent it without changing this contract.
 The original owner-approved delivery order for the compiled model produced
 version 1 and was later re-executed to produce versions 2 and 3. It is retained
 below only as historical delivery record; it does not impose additional
-requirements on a version-4 producer or consumer beyond those already stated in
-the version-4 JSON structure, stable obligations, determinism, and canonical
+requirements on a version-5 producer or consumer beyond those already stated in
+the version-5 JSON structure, stable obligations, determinism, and canonical
 JSON encoding sections above:
 
 1. Add the `non-string-key` and `invalid-unicode-scalar` restricted-loading

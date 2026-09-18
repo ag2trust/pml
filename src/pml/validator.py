@@ -266,6 +266,34 @@ def _is_transition_text(parts: tuple[Any, ...]) -> bool:
     )
 
 
+def _is_completion_transition_endpoint(parts: tuple[Any, ...]) -> bool:
+    """Return whether a value is a completion-owned state-transition endpoint."""
+
+    return (
+        len(parts) == 9
+        and parts[0] == "domains"
+        and parts[2] == "features"
+        and parts[4] == "behaviors"
+        and parts[6] == "outcome"
+        and parts[7] == "transitions"
+    ) or (
+        len(parts) == 11
+        and parts[0] == "domains"
+        and parts[2] == "features"
+        and parts[4] == "behaviors"
+        and parts[6] == "outcome"
+        and parts[7] == "one_of"
+        and parts[9] == "transitions"
+    ) or (
+        len(parts) == 10
+        and parts[0] == "domains"
+        and parts[2] == "features"
+        and parts[4] == "behaviors"
+        and parts[6] == "failures"
+        and parts[8] == "transitions"
+    )
+
+
 def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -521,6 +549,176 @@ def _condition_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
     return diagnostics
 
 
+def _completion_cases(
+    document: dict[str, Any],
+) -> Iterable[tuple[str, dict[str, Any]]]:
+    """Yield every direct completion with its canonical obligation path."""
+
+    for domain_id, domain in sorted(_mapping(document.get("domains")).items()):
+        if not isinstance(domain, dict):
+            continue
+        for feature_id, feature in sorted(_mapping(domain.get("features")).items()):
+            if not isinstance(feature, dict):
+                continue
+            for behavior_id, behavior in sorted(
+                _mapping(feature.get("behaviors")).items()
+            ):
+                if not isinstance(behavior, dict):
+                    continue
+                behavior_path = (
+                    f"domains.{domain_id}.features.{feature_id}"
+                    f".behaviors.{behavior_id}"
+                )
+                outcome = behavior.get("outcome")
+                if isinstance(outcome, dict):
+                    alternatives = outcome.get("one_of")
+                    if isinstance(alternatives, dict):
+                        for outcome_id, definition in sorted(alternatives.items()):
+                            if isinstance(definition, dict):
+                                yield f"{behavior_path}.outcome.{outcome_id}", definition
+                    else:
+                        yield f"{behavior_path}.outcome", outcome
+                for failure_id, definition in sorted(
+                    _mapping(behavior.get("failures")).items()
+                ):
+                    if isinstance(definition, dict):
+                        yield f"{behavior_path}.failures.{failure_id}", definition
+
+
+def _transition_diagnostics(document: dict[str, Any]) -> list[Diagnostic]:
+    """Resolve authored state-transition endpoints against declared concepts."""
+
+    concepts = _mapping(document.get("concepts"))
+    concept_states = {
+        concept_id: (
+            list(definition["states"])
+            if isinstance(definition.get("states"), list)
+            else []
+        )
+        for concept_id, definition in concepts.items()
+        if isinstance(definition, dict)
+    }
+    diagnostics: list[Diagnostic] = []
+    for completion_path, completion in _completion_cases(document):
+        transitions = completion.get("transitions")
+        if not isinstance(transitions, dict):
+            continue
+        for concept_id, value in sorted(transitions.items()):
+            path = f"{completion_path}.transitions.{concept_id}"
+            if concept_id not in concept_states:
+                diagnostics.append(
+                    Diagnostic(
+                        path,
+                        "PML-E-TRANSITION-CONCEPT",
+                        f"unknown concept '{concept_id}'",
+                    )
+                )
+                continue
+            if not isinstance(value, str):
+                continue
+            endpoints = value.split(" -> ")
+            if len(endpoints) != 2:
+                continue
+            from_state, to_state = endpoints
+            declared = concept_states[concept_id]
+            invalid: list[str] = []
+            if from_state not in {"*", "none"} and from_state not in declared:
+                invalid.append(from_state)
+            if to_state != "none" and to_state not in declared:
+                invalid.append(to_state)
+            if invalid:
+                diagnostics.append(
+                    Diagnostic(
+                        path,
+                        "PML-E-TRANSITION-STATE",
+                        (
+                            f"concept '{concept_id}' does not declare state "
+                            f"'{invalid[0]}'"
+                        ),
+                    )
+                )
+                continue
+            if from_state == to_state:
+                diagnostics.append(
+                    Diagnostic(
+                        path,
+                        "PML-E-TRANSITION-STATE",
+                        "transition from and to states must differ",
+                    )
+                )
+    return diagnostics
+
+
+def _state_transition_warnings(model: CompiledModel) -> list[Diagnostic]:
+    """Return complete-definition reachability advice for declared state machines."""
+
+    concepts = {concept["id"]: concept for concept in model["concepts"]}
+    warnings: list[Diagnostic] = []
+    for concept_id, concept in sorted(concepts.items()):
+        transitions = concept["transitions"]
+        if not transitions:
+            continue
+        produced = {
+            transition["to"]
+            for transition in transitions
+            if transition["to"] != "none"
+        }
+        outgoing = {transition["from"] for transition in transitions}
+        for index, state in enumerate(concept["states"]):
+            path = f"concepts.{concept_id}.states[{index}]"
+            if state not in produced:
+                warnings.append(
+                    Diagnostic(
+                        path,
+                        "PML-W-STATE-UNREACHABLE",
+                        f"declared state '{state}' has no completion transition into it",
+                        severity="warning",
+                    )
+                )
+            if state not in outgoing and "*" not in outgoing:
+                warnings.append(
+                    Diagnostic(
+                        path,
+                        "PML-W-STATE-DEAD-END",
+                        (
+                            f"declared state '{state}' has no completion transition "
+                            "out of it or into none"
+                        ),
+                        severity="warning",
+                    )
+                )
+
+    for behavior in model["behaviors"]:
+        conditions = behavior.get("conditions")
+        if not isinstance(conditions, dict):
+            continue
+        for index, condition in enumerate(conditions["statements"]):
+            if not isinstance(condition, dict):
+                continue
+            concept_id = condition["concept"]
+            state = condition["state"]
+            concept = concepts[concept_id]
+            if not concept["transitions"]:
+                continue
+            if any(
+                transition["to"] == state
+                for transition in concept["transitions"]
+            ):
+                continue
+            warnings.append(
+                Diagnostic(
+                    f"{behavior['path']}.conditions[{index}].state",
+                    "PML-W-CONDITION-STATE-UNPRODUCED",
+                    (
+                        f"condition requires state '{state}' of concept '{concept_id}', "
+                        "but no completion transition produces it"
+                    ),
+                    severity="warning",
+                )
+            )
+    return sorted(warnings, key=lambda diagnostic: (diagnostic.path, diagnostic.code))
+
+
 def _semantic_diagnostics(
     document: dict[str, Any],
     resolution: ResolvedDefinition | None = None,
@@ -584,6 +782,7 @@ def _semantic_diagnostics(
                         )
                     )
         transition_text = _is_transition_text(parts)
+        completion_transition_endpoint = _is_completion_transition_endpoint(parts)
         is_normative = (bool(parts) and parts[-1] in normative_fields) or transition_text
         if is_normative:
             if not transition_text and not NORMATIVE_MARKER.search(value):
@@ -611,9 +810,21 @@ def _semantic_diagnostics(
                         "behavior transitions must describe observable product semantics, not implementation details",
                     )
                 )
+        if (
+            completion_transition_endpoint
+            and TRANSITION_IMPLEMENTATION_DETAIL.search(value)
+        ):
+            diagnostics.append(
+                Diagnostic(
+                    _path(parts),
+                    "implementation-detail",
+                    "behavior transitions must describe observable product semantics, not implementation details",
+                )
+            )
 
     diagnostics.extend(_surface_diagnostics(document))
     diagnostics.extend(_condition_diagnostics(document))
+    diagnostics.extend(_transition_diagnostics(document))
 
     if resolution is None:
         resolution = resolve_references(document)
@@ -757,6 +968,7 @@ def validate_document(document: dict[str, Any]) -> ResolvedDefinition:
     compiled_model = _build_compiled_model(resolver.document, resolver, resolution)
     diagnostics.extend(rule_scope_warnings(compiled_model))
     diagnostics.extend(signal_coupling_warnings(compiled_model))
+    diagnostics.extend(_state_transition_warnings(compiled_model))
     return replace(
         resolution,
         diagnostics=tuple(diagnostics),

@@ -161,6 +161,46 @@ def test_resolver_emits_complete_model_for_definition_with_lint_warnings() -> No
             "PML-W-RULE-SCOPE",
             "warning",
         ),
+        (
+            "concepts.assistant.states[0]",
+            "PML-W-STATE-DEAD-END",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[0]",
+            "PML-W-STATE-UNREACHABLE",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[1]",
+            "PML-W-STATE-DEAD-END",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[2]",
+            "PML-W-STATE-DEAD-END",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[2]",
+            "PML-W-STATE-UNREACHABLE",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[3]",
+            "PML-W-STATE-DEAD-END",
+            "warning",
+        ),
+        (
+            "concepts.assistant.states[3]",
+            "PML-W-STATE-UNREACHABLE",
+            "warning",
+        ),
+        (
+            "domains.assistants.features.creation.behaviors.assistant_creation.conditions[0].state",
+            "PML-W-CONDITION-STATE-UNPRODUCED",
+            "warning",
+        ),
     ]
     assert model is not None
     assert list(Draft202012Validator(COMPILED_SCHEMA).iter_errors(model)) == []

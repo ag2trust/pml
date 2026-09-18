@@ -52,6 +52,23 @@ def test_assistant_creation_generic_warning_does_not_fail_validation(capsys) -> 
         "domains.assistants.features.creation.rules.credentials_not_exposed: "
         "[warning] [PML-W-RULE-SCOPE] rule mentions no term used in this feature; "
         "consider domain or project scope\n"
+        "concepts.assistant.states[0]: [warning] [PML-W-STATE-DEAD-END] declared state "
+        "'draft' has no completion transition out of it or into none\n"
+        "concepts.assistant.states[0]: [warning] [PML-W-STATE-UNREACHABLE] declared "
+        "state 'draft' has no completion transition into it\n"
+        "concepts.assistant.states[1]: [warning] [PML-W-STATE-DEAD-END] declared state "
+        "'active' has no completion transition out of it or into none\n"
+        "concepts.assistant.states[2]: [warning] [PML-W-STATE-DEAD-END] declared state "
+        "'paused' has no completion transition out of it or into none\n"
+        "concepts.assistant.states[2]: [warning] [PML-W-STATE-UNREACHABLE] declared "
+        "state 'paused' has no completion transition into it\n"
+        "concepts.assistant.states[3]: [warning] [PML-W-STATE-DEAD-END] declared state "
+        "'retired' has no completion transition out of it or into none\n"
+        "concepts.assistant.states[3]: [warning] [PML-W-STATE-UNREACHABLE] declared "
+        "state 'retired' has no completion transition into it\n"
+        "domains.assistants.features.creation.behaviors.assistant_creation.conditions[0].state: "
+        "[warning] [PML-W-CONDITION-STATE-UNPRODUCED] condition requires state 'draft' "
+        "of concept 'assistant', but no completion transition produces it\n"
     )
 
     assert main(["validate", str(source)]) == 0
