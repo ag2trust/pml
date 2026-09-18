@@ -335,7 +335,8 @@ def test_explain_feature_coupling_section_snapshot(tmp_path: Path, capsys) -> No
     behaviors:
       - "domains.core.features.consumer.behaviors.consume"
     stable_obligations: []
-    relationships: []
+    relationships:
+      - {"kind": "related_to", "endpoints": ["domains.core.features.consumer", "domains.core.features.producer"], "declared_by": [], "source": "signal:ready"}
     use_case_memberships: []
   Derived coupling:
     signals_produced: []

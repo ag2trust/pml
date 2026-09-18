@@ -244,6 +244,7 @@ class CompiledRelationship(TypedDict):
     kind: Literal["related_to"]
     endpoints: list[Path]
     declared_by: list[Path]
+    source: str
 
 
 class CompiledUseCaseMembership(TypedDict):
