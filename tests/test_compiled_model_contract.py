@@ -13,6 +13,7 @@ from pml.compiled_model import (
     CompiledBehavior,
     CompiledFeature,
     CompiledModel,
+    CompiledRelationship,
     CompiledSignal,
     SignalOnlyDefinition,
     StatementDefinition,
@@ -107,7 +108,7 @@ def test_schema_accepts_every_v5_variant() -> None:
     model["behaviors"][0]["failures"] = [{"id": "rejected", "obligation": behavior + ".failures.rejected", "statement": "The note is rejected.", "signal": "note_rejected"}]  # type: ignore[index]
     model["use_cases"] = [{"id": "handle", "path": feature + ".use_cases.handle", "feature": feature, "actor": "member", "goal": "Handle a note.", "behaviors": [behavior], "obligation": feature + ".use_cases.handle"}]
     model["signals"] = [{"id": "note_done", "meaning": "A note is done.", "subject": "note", "producer": {"behavior": behavior, "completion": behavior + ".outcome.handled"}, "consumers": [{"behavior": behavior, "trigger": behavior + ".trigger.ready"}]}]
-    model["relationships"] = [{"kind": "related_to", "endpoints": [feature, behavior], "declared_by": [feature]}]
+    model["relationships"] = [{"kind": "related_to", "endpoints": [feature, behavior], "declared_by": [feature], "source": "authored"}]
     model["use_case_memberships"] = [{"use_case": feature + ".use_cases.handle", "behavior": behavior}]
     model["obligations"] = [
         {"id": behavior + ".conditions", "node": behavior, "kind": "conditions", "definition": {"statements": ["A condition."]}},
@@ -251,9 +252,55 @@ def test_schema_rejects_empty_features_and_invalid_relationship_envelopes(mutate
     model = _model()
     mutate(model)
     assert any(
-        "non-empty" in message or "has non-unique elements" in message or "is not valid under any" in message
+        "non-empty" in message
+        or "has non-unique elements" in message
+        or "is not valid under any" in message
+        or "is a required property" in message
         for message in _messages(_validator().iter_errors(model))
     )
+
+
+@pytest.mark.parametrize(
+    ("source", "declared_by"),
+    [
+        ("authored", ["domains.notes.features.handling"]),
+        ("concept:note", []),
+        ("signal:note_done", []),
+    ],
+)
+def test_schema_accepts_source_tagged_relationships(
+    source: str, declared_by: list[str]
+) -> None:
+    model = _model()
+    feature = "domains.notes.features.handling"
+    behavior = feature + ".behaviors.handle_note"
+    model["relationships"] = [
+        {
+            "kind": "related_to",
+            "endpoints": [feature, behavior],
+            "declared_by": declared_by,
+            "source": source,
+        }
+    ]
+
+    assert list(_validator().iter_errors(model)) == []
+
+
+@pytest.mark.parametrize("source", ["concept:", "signal:note-done", "statement"])
+def test_schema_rejects_invalid_relationship_source(source: str) -> None:
+    model = _model()
+    feature = "domains.notes.features.handling"
+    behavior = feature + ".behaviors.handle_note"
+    model["relationships"] = [
+        {
+            "kind": "related_to",
+            "endpoints": [feature, behavior],
+            "declared_by": [],
+            "source": source,
+        }
+    ]
+
+    assert list(_validator().iter_errors(model))
 
 
 def test_schema_rejects_orphan_architecture_record() -> None:
@@ -442,6 +489,7 @@ def test_shared_types_preserve_required_and_optional_contract_fields() -> None:
     behavior_hints = get_type_hints(CompiledBehavior)
     feature_hints = get_type_hints(CompiledFeature)
     signal_hints = get_type_hints(CompiledSignal)
+    relationship_hints = get_type_hints(CompiledRelationship)
 
     assert CompiledModel.__required_keys__ == frozenset({
         "format", "format_version", "language_version", "definition_digest", "project",
@@ -452,7 +500,12 @@ def test_shared_types_preserve_required_and_optional_contract_fields() -> None:
     assert CompiledFeature.__optional_keys__ == frozenset({"experience"})
     assert CompiledBehavior.__optional_keys__ == frozenset({"conditions"})
     assert CompiledSignal.__optional_keys__ == frozenset({"subject"})
-    assert "format_version" in model_hints and "trigger" in behavior_hints and "producer" in signal_hints
+    assert (
+        "format_version" in model_hints
+        and "trigger" in behavior_hints
+        and "producer" in signal_hints
+        and "source" in relationship_hints
+    )
 
 
 def test_shared_types_represent_signal_only_trigger_obligations() -> None:

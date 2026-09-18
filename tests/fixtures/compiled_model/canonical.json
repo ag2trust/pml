@@ -526,7 +526,8 @@
         "domains.a_work.features.workspace",
         "domains.a_work.features.workspace.behaviors.z_finish"
       ],
-      "kind": "related_to"
+      "kind": "related_to",
+      "source": "authored"
     },
     {
       "declared_by": [
@@ -536,7 +537,8 @@
         "domains.a_work.features.workspace",
         "domains.z_archive.features.archive"
       ],
-      "kind": "related_to"
+      "kind": "related_to",
+      "source": "authored"
     },
     {
       "declared_by": [
@@ -546,7 +548,8 @@
         "domains.a_work.features.workspace.behaviors.a_start",
         "domains.a_work.features.workspace.behaviors.z_finish"
       ],
-      "kind": "related_to"
+      "kind": "related_to",
+      "source": "authored"
     },
     {
       "declared_by": [
@@ -556,7 +559,8 @@
         "domains.a_work.features.workspace.behaviors.a_start",
         "domains.z_archive.features.archive"
       ],
-      "kind": "related_to"
+      "kind": "related_to",
+      "source": "authored"
     }
   ],
   "signals": [

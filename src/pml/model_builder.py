@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from itertools import combinations
 from typing import Any, TYPE_CHECKING, cast
 
-from pml.compiled_model import CompiledModel, CompiledObligation
+from pml.compiled_model import (
+    CompiledModel,
+    CompiledObligation,
+    CompiledRelationship,
+)
 from pml.serialization import definition_digest
 from pml.validator import _ShowTargetIndex, _eligible_show_targets, resolve_show_entry
 
@@ -350,22 +355,137 @@ def _concept_transitions(
     return references
 
 
-def _relationships(
+def _feature_path(behavior_path: str) -> str:
+    """Return the containing feature path for a resolved behavior path."""
+
+    return behavior_path.rsplit(".behaviors.", 1)[0]
+
+
+def _completion_definitions(
+    behavior: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    """Return the behavior completion definitions that may name transitions."""
+
+    outcome = _mapping(behavior.get("outcome"))
+    alternatives = outcome.get("one_of")
+    if isinstance(alternatives, dict):
+        completions = list(alternatives.values())
+    else:
+        completions = [outcome]
+    completions.extend(_mapping(behavior.get("failures")).values())
+    return [completion for completion in completions if isinstance(completion, Mapping)]
+
+
+def _concepts_by_feature(
     resolution: ResolvedDefinition,
-) -> list[dict[str, Any]]:
+) -> dict[str, set[str]]:
+    """Return the concept IDs named by each feature's behavior definitions."""
+
+    references: dict[str, set[str]] = {}
+    for behavior_path, behavior in resolution.behaviors.items():
+        feature_path = _feature_path(behavior_path)
+        concepts = references.setdefault(feature_path, set())
+        for condition in _sequence(behavior.get("conditions")):
+            if isinstance(condition, Mapping):
+                concept = condition.get("concept")
+                if isinstance(concept, str):
+                    concepts.add(concept)
+        for completion in _completion_definitions(behavior):
+            for concept in _mapping(completion.get("transitions")):
+                concepts.add(concept)
+    for signal in resolution.signals.values():
+        subject = signal.definition.get("subject")
+        if isinstance(subject, str):
+            references.setdefault(_feature_path(signal.behavior), set()).add(subject)
+    return references
+
+
+def _signal_consumers_by_feature(
+    resolution: ResolvedDefinition,
+) -> dict[str, set[str]]:
+    """Return the consumer feature paths for each resolved signal ID."""
+
+    consumers: dict[str, set[str]] = {}
+    for behavior_path, behavior in resolution.behaviors.items():
+        trigger = _mapping(behavior.get("trigger"))
+        alternatives = trigger.get("one_of")
+        cases = (
+            alternatives.values()
+            if isinstance(alternatives, dict)
+            else (trigger,)
+        )
+        for case in cases:
+            if not isinstance(case, Mapping):
+                continue
+            signal_id = case.get("signal")
+            if isinstance(signal_id, str) and signal_id in resolution.signals:
+                consumers.setdefault(signal_id, set()).add(
+                    _feature_path(behavior_path)
+                )
+    return consumers
+
+
+def derive_relationships(
+    resolution: ResolvedDefinition,
+) -> list[CompiledRelationship]:
+    """Derive the complete, source-tagged relationship union from resolution.
+
+    Concept relations use only structured condition, transition, and signal
+    subject concept IDs. Signal relations use only resolved producer and consumer
+    feature IDs. Authored declarations take precedence over all derived sources.
+    """
+
     declarations: dict[tuple[str, str], set[str]] = {}
+    sources: dict[tuple[str, str], set[str]] = {}
     for node_path, node in resolution.nodes.items():
         for target in _sequence(node.get("related_to")):
+            if not isinstance(target, str):
+                continue
             endpoints = tuple(sorted((node_path, target)))
             declarations.setdefault(endpoints, set()).add(node_path)
+            sources.setdefault(endpoints, set()).add("authored")
+
+    features_by_concept: dict[str, set[str]] = {}
+    for feature_path, concepts in _concepts_by_feature(resolution).items():
+        for concept_id in concepts:
+            features_by_concept.setdefault(concept_id, set()).add(feature_path)
+    for concept_id, features in features_by_concept.items():
+        for endpoints in combinations(sorted(features), 2):
+            sources.setdefault(endpoints, set()).add(f"concept:{concept_id}")
+
+    consumers = _signal_consumers_by_feature(resolution)
+    for signal_id, signal in resolution.signals.items():
+        producer = _feature_path(signal.behavior)
+        for consumer in consumers.get(signal_id, set()):
+            if producer == consumer:
+                continue
+            endpoints = tuple(sorted((producer, consumer)))
+            sources.setdefault(endpoints, set()).add(f"signal:{signal_id}")
+
     return [
-        {
-            "kind": "related_to",
-            "endpoints": list(endpoints),
-            "declared_by": sorted(declarations[endpoints]),
-        }
-        for endpoints in sorted(declarations)
+        cast(
+            CompiledRelationship,
+            {
+                "kind": "related_to",
+                "endpoints": list(endpoints),
+                "declared_by": sorted(declarations.get(endpoints, ())),
+                "source": (
+                    "authored"
+                    if "authored" in sources[endpoints]
+                    else min(sources[endpoints])
+                ),
+            },
+        )
+        for endpoints in sorted(sources)
     ]
+
+
+def _relationships(
+    resolution: ResolvedDefinition,
+) -> list[CompiledRelationship]:
+    """Compile the reusable relationship derivation for the model builder."""
+
+    return derive_relationships(resolution)
 
 
 def _build_compiled_model(
