@@ -50,7 +50,7 @@ def test_raw_explain_queries_each_requestable_compiled_category(
     ("canonical_id", "snapshot"),
     [
         ("project", "project.txt"),
-        ("Assistant", "vocabulary.txt"),
+        ("Customer", "vocabulary.txt"),
         ("member", "actor.txt"),
         ("assistant", "concept.txt"),
         ("domains.assistants", "domain.txt"),

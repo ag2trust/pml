@@ -13,9 +13,9 @@ from typing import Any, Iterable
 from jsonschema import Draft202012Validator
 import yaml
 
-from pml.compiled_model import CompiledModel
 from pml.coupling import signal_coupling_warnings
 from pml.diagnostics import Diagnostic
+from pml.lint import lint_document, rule_scope_warnings
 from pml.resolver import ReferenceResolver, ResolvedDefinition, resolve_references
 
 
@@ -229,182 +229,6 @@ def _walk(value: Any, path: tuple[Any, ...] = ()) -> Iterable[tuple[tuple[Any, .
     elif isinstance(value, list):
         for index, child in enumerate(value):
             yield from _walk(child, path + (index,))
-
-
-def _cardinality_warnings(document: dict[str, Any]) -> list[Diagnostic]:
-    """Return deterministic advisory diagnostics for authored map sizes."""
-
-    warnings: list[Diagnostic] = []
-    for parts, value in _walk(document):
-        if not isinstance(value, dict):
-            continue
-        is_rules_map = (
-            parts == ("rules",)
-            or (
-                len(parts) == 3
-                and parts[0] == "domains"
-                and parts[2] == "rules"
-            )
-            or (
-                len(parts) == 5
-                and parts[0] == "domains"
-                and parts[2] == "features"
-                and parts[4] == "rules"
-            )
-            or (
-                len(parts) == 7
-                and parts[0] == "domains"
-                and parts[2] == "features"
-                and parts[4] == "behaviors"
-                and parts[6] == "rules"
-            )
-            or (
-                len(parts) == 3
-                and parts[0] == "architecture"
-                and parts[2] == "constraints"
-            )
-        )
-        if is_rules_map and len(value) > 7:
-            warnings.append(
-                Diagnostic(
-                    _path(parts),
-                    "PML-W-RULE-COUNT",
-                    "rules maps should contain no more than 7 rules",
-                    severity="warning",
-                )
-            )
-        if (
-            len(parts) == 5
-            and parts[0] == "domains"
-            and parts[2] == "features"
-            and parts[4] == "behaviors"
-            and len(value) > 7
-        ):
-            warnings.append(
-                Diagnostic(
-                    _path(parts),
-                    "PML-W-BEHAVIOR-COUNT",
-                    "features should contain no more than 7 behaviors",
-                    severity="warning",
-                )
-            )
-    return sorted(warnings, key=lambda diagnostic: diagnostic.path)
-
-
-def _term_pattern(term: str) -> re.Pattern[str]:
-    """Compile a case-insensitive whole-word pattern for one PML term."""
-
-    normalized = term.casefold().replace("_", " ")
-    return re.compile(rf"(?<!\w){re.escape(normalized)}(?!\w)")
-
-
-def _mentioned_terms(text: str, terms: dict[str, re.Pattern[str]]) -> set[str]:
-    """Return canonical terms mentioned by a statement."""
-
-    normalized = text.casefold().replace("_", " ")
-    return {term for term, pattern in terms.items() if pattern.search(normalized)}
-
-
-def _behavior_texts(behavior: dict[str, Any]) -> Iterable[str]:
-    """Yield the authored statements that make a behavior's terms local."""
-
-    conditions = behavior.get("conditions")
-    if isinstance(conditions, dict):
-        for statement in conditions.get("statements", []):
-            if isinstance(statement, str):
-                yield statement
-            elif isinstance(statement, dict):
-                concept = statement.get("concept")
-                state = statement.get("state")
-                if isinstance(concept, str):
-                    yield concept
-                if isinstance(state, str):
-                    yield state
-
-    trigger = behavior.get("trigger")
-    if isinstance(trigger, dict):
-        cases = trigger.get("cases") if trigger.get("kind") == "one_of" else [trigger.get("case")]
-        if isinstance(cases, list):
-            for case in cases:
-                if isinstance(case, dict) and isinstance(case.get("statement"), str):
-                    yield case["statement"]
-
-    outcome = behavior.get("outcome")
-    if isinstance(outcome, dict):
-        cases = outcome.get("cases") if outcome.get("kind") == "one_of" else [outcome.get("case")]
-        if isinstance(cases, list):
-            for case in cases:
-                if isinstance(case, dict) and isinstance(case.get("statement"), str):
-                    yield case["statement"]
-
-    for failure in behavior.get("failures", []):
-        if isinstance(failure, dict) and isinstance(failure.get("statement"), str):
-            yield failure["statement"]
-
-
-def _rule_scope_warnings(model: CompiledModel) -> list[Diagnostic]:
-    """Return deterministic rule-scope advice derived solely from a compiled model."""
-
-    term_groups = {
-        "actor": {actor["id"] for actor in model["actors"]},
-        "concept": {concept["id"] for concept in model["concepts"]},
-        "vocabulary": {entry["term"] for entry in model["vocabulary"]},
-        "behavior": {behavior["id"] for behavior in model["behaviors"]},
-    }
-    terms = {
-        term: _term_pattern(term)
-        for group in term_groups.values()
-        for term in group
-    }
-    features = {feature["path"]: feature for feature in model["features"]}
-    behaviors_by_feature: dict[str, list[dict[str, Any]]] = {}
-    for behavior in model["behaviors"]:
-        behaviors_by_feature.setdefault(behavior["feature"], []).append(behavior)
-    use_cases_by_feature: dict[str, list[dict[str, Any]]] = {}
-    for use_case in model["use_cases"]:
-        use_cases_by_feature.setdefault(use_case["feature"], []).append(use_case)
-
-    feature_terms: dict[str, set[str]] = {}
-    for feature_path, feature in features.items():
-        local = set(feature["actors"])
-        for behavior in behaviors_by_feature.get(feature_path, []):
-            local.add(behavior["id"])
-            for statement in _behavior_texts(behavior):
-                local.update(_mentioned_terms(statement, terms))
-        for use_case in use_cases_by_feature.get(feature_path, []):
-            for value in (use_case["actor"], use_case["goal"]):
-                local.update(_mentioned_terms(value, terms))
-        feature_terms[feature_path] = local
-
-    domain_terms: dict[str, set[str]] = {domain["path"]: set() for domain in model["domains"]}
-    for feature in model["features"]:
-        domain_terms[feature["domain"]].update(feature_terms[feature["path"]])
-
-    warnings: list[Diagnostic] = []
-    for obligation in sorted(model["obligations"], key=lambda item: item["id"]):
-        if obligation["kind"] != "rule":
-            continue
-        node = obligation["node"]
-        if node in feature_terms:
-            local = feature_terms[node]
-            message = "rule mentions no term used in this feature; consider domain or project scope"
-        elif node in domain_terms:
-            local = domain_terms[node]
-            message = "rule mentions no term used in this domain; consider project scope"
-        else:
-            continue
-        statement = obligation["definition"]["statement"]
-        mentioned = _mentioned_terms(statement, terms)
-        if mentioned and not mentioned.intersection(local):
-            warnings.append(
-                Diagnostic(
-                    obligation["id"],
-                    "PML-W-RULE-SCOPE",
-                    message,
-                    severity="warning",
-                )
-            )
-    return warnings
 
 
 def _is_transition_text(parts: tuple[Any, ...]) -> bool:
@@ -920,7 +744,7 @@ def validate_document(document: dict[str, Any]) -> ResolvedDefinition:
     resolver = ReferenceResolver(document)
     resolution = resolver.resolve()
     diagnostics.extend(_semantic_diagnostics(document, resolution))
-    diagnostics.extend(_cardinality_warnings(document))
+    diagnostics.extend(lint_document(document))
     if any(diagnostic.severity == "error" for diagnostic in diagnostics):
         return replace(
             resolution,
@@ -931,7 +755,7 @@ def validate_document(document: dict[str, Any]) -> ResolvedDefinition:
     from pml.model_builder import _build_compiled_model
 
     compiled_model = _build_compiled_model(resolver.document, resolver, resolution)
-    diagnostics.extend(_rule_scope_warnings(compiled_model))
+    diagnostics.extend(rule_scope_warnings(compiled_model))
     diagnostics.extend(signal_coupling_warnings(compiled_model))
     return replace(
         resolution,

@@ -163,6 +163,208 @@ def test_feature_with_eight_rules_emits_a_warning_and_compiles() -> None:
     assert resolution.compiled_model is not None
 
 
+def test_feature_rule_restatement_warns_for_the_best_matching_outcome() -> None:
+    document, feature = _cardinality_document()
+    feature["rules"] = {
+        "copied_outcome": {
+            "statement": (
+                "A confirmation MUST be visible for the saved Note reference after creation."
+            )
+        }
+    }
+    feature["behaviors"]["note_creation"]["outcome"] = {
+        "statement": "A confirmation is visible for the saved Note identifier after creation."
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert [(item.path, item.code, item.message, item.severity) for item in diagnostics] == [
+        (
+            "domains.notes.features.creation.rules.copied_outcome.statement",
+            "PML-W-RULE-RESTATEMENT",
+            "rule statement restates "
+            "'domains.notes.features.creation.behaviors.note_creation.outcome.statement'",
+            "warning",
+        )
+    ]
+
+
+def test_feature_rule_restatement_warns_for_a_structured_condition() -> None:
+    document = _conditions_document(
+        [{"concept": "testimonial", "state": "polished"}]
+    )
+    feature = document["domains"]["reviews"]["features"]["publishing"]
+    feature["rules"] = {
+        "polished_testimonial": {
+            "statement": "The Testimonial MUST be polished."
+        }
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert [(item.path, item.code, item.message, item.severity) for item in diagnostics] == [
+        (
+            "domains.reviews.features.publishing.rules.polished_testimonial.statement",
+            "PML-W-RULE-RESTATEMENT",
+            "rule statement restates "
+            "'domains.reviews.features.publishing.behaviors.publish.conditions[0]'",
+            "warning",
+        )
+    ]
+
+
+def test_unrelated_feature_rule_does_not_warn_for_restatement() -> None:
+    document, feature = _cardinality_document()
+    feature["rules"] = {
+        "weekly_summary": {"statement": "A Member MUST receive a weekly usage summary."}
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert not any(item.code == "PML-W-RULE-RESTATEMENT" for item in diagnostics)
+
+
+def test_generic_rule_without_an_authored_identifier_warns() -> None:
+    document, feature = _cardinality_document()
+    feature["rules"] = {
+        "generic_enforcement": {
+            "statement": "MUST be enforced for every affected resource."
+        }
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert [(item.path, item.code, item.severity) for item in diagnostics] == [
+        (
+            "domains.notes.features.creation.rules.generic_enforcement.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        )
+    ]
+
+
+def test_generic_rule_does_not_match_a_partial_punctuation_bearing_vocabulary_key() -> None:
+    document, feature = _cardinality_document()
+    document["vocabulary"] = {
+        "C++": {"meaning": "A supported programming language."}
+    }
+    feature["rules"] = {
+        "generic_enforcement": {
+            "statement": "C MUST be enforced for every affected resource."
+        }
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert [(item.path, item.code, item.severity) for item in diagnostics] == [
+        (
+            "domains.notes.features.creation.rules.generic_enforcement.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        )
+    ]
+
+
+def test_generic_rule_ignores_an_empty_vocabulary_key() -> None:
+    document, feature = _cardinality_document()
+    document["vocabulary"] = {"": {"meaning": "An empty vocabulary term."}}
+    feature["rules"] = {
+        "generic_enforcement": {
+            "statement": "MUST be enforced for every affected resource."
+        }
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert [(item.path, item.code, item.severity) for item in diagnostics] == [
+        (
+            "domains.notes.features.creation.rules.generic_enforcement.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        )
+    ]
+
+
+def test_generic_rule_ignores_a_punctuation_only_vocabulary_key() -> None:
+    document, feature = _cardinality_document()
+    document["vocabulary"] = {"+": {"meaning": "A punctuation-only term."}}
+    feature["rules"] = {
+        "generic_enforcement": {
+            "statement": "C++ MUST be enforced for every affected resource."
+        }
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert any(item.code == "PML-W-RULE-GENERIC" for item in diagnostics)
+
+
+def test_generic_rule_with_an_actor_or_concept_does_not_warn() -> None:
+    document, feature = _cardinality_document()
+    document["actors"]["reader"] = {"meaning": "A person reading a Testimonial."}
+    document["concepts"] = {
+        "testimonial_excerpt": {
+            "meaning": "A Testimonial excerpt available to a Reader."
+        }
+    }
+    feature["rules"] = {
+        "attribution": {
+            "statement": (
+                "Every Testimonial excerpt presented to a Reader MUST carry the Referrer's name."
+            )
+        }
+    }
+
+    diagnostics = validate_document(document).diagnostics
+
+    assert not any(item.code == "PML-W-RULE-GENERIC" for item in diagnostics)
+
+
+@pytest.mark.parametrize("invalid_contains", [None, "Not a list."])
+def test_malformed_surface_contains_returns_schema_diagnostics(
+    invalid_contains: object,
+) -> None:
+    document, feature = _cardinality_document()
+    feature["experience"] = {
+        "surfaces": {"creation_form": {"contains": invalid_contains}}
+    }
+
+    resolution = validate_document(document)
+
+    assert any(
+        item.path
+        == "domains.notes.features.creation.experience.surfaces.creation_form.contains"
+        and item.code == "schema"
+        for item in resolution.diagnostics
+    )
+    assert resolution.compiled_model is None
+
+
+@pytest.mark.parametrize("invalid_contains", [None, "Not a list."])
+def test_malformed_surface_state_contains_returns_schema_diagnostics(
+    invalid_contains: object,
+) -> None:
+    document, feature = _cardinality_document()
+    feature["experience"] = {
+        "surfaces": {
+            "creation_form": {
+                "contains": ["Creation form."],
+                "states": {"idle": {"contains": invalid_contains}},
+            }
+        }
+    }
+
+    resolution = validate_document(document)
+
+    assert any(
+        item.path
+        == "domains.notes.features.creation.experience.surfaces.creation_form.states.idle.contains"
+        and item.code == "schema"
+        for item in resolution.diagnostics
+    )
+    assert resolution.compiled_model is None
+
+
 @pytest.mark.parametrize(
     ("scope", "path"),
     [
@@ -284,10 +486,30 @@ def test_signal_fan_out_warning_is_emitted_above_five_consumer_features() -> Non
     assert resolution.compiled_model is not None
 
 
-def test_project_manifest_has_rule_scope_warnings() -> None:
+def test_project_manifest_has_lint_warnings() -> None:
     diagnostics = validate_file(ROOT / "pml.yaml")
 
     assert [(item.path, item.code, item.severity) for item in diagnostics] == [
+        (
+            "domains.language.features.conformance_monitoring.rules.passing_verdict_has_evidence.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        ),
+        (
+            "domains.language.features.definition_authoring.rules.accepted_definition_is_valid.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        ),
+        (
+            "domains.language.features.definition_authoring.rules.invalid_definition_has_diagnostics.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        ),
+        (
+            "domains.language.features.definition_authoring.rules.stable_terms.statement",
+            "PML-W-RULE-GENERIC",
+            "warning",
+        ),
         (
             "domains.language.features.conformance_monitoring.rules.protected_probes",
             "PML-W-RULE-SCOPE",
@@ -301,20 +523,18 @@ def test_project_manifest_has_rule_scope_warnings() -> None:
     ]
 
 
-def test_assistant_creation_example_has_rule_scope_warnings() -> None:
+def test_assistant_creation_example_has_lint_warnings() -> None:
     diagnostics = validate_file(ROOT / "examples" / "assistant-creation.pml.yaml")
 
-    assert [(item.path, item.code, item.message, item.severity) for item in diagnostics] == [
+    assert [(item.path, item.code, item.severity) for item in diagnostics] == [
         (
-            "domains.assistants.features.creation.rules.credentials_not_exposed",
-            "PML-W-RULE-SCOPE",
-            "rule mentions no term used in this feature; consider domain or project scope",
+            "domains.assistants.features.creation.rules.customer_ownership.statement",
+            "PML-W-RULE-GENERIC",
             "warning",
         ),
         (
-            "domains.assistants.features.creation.rules.customer_ownership",
+            "domains.assistants.features.creation.rules.credentials_not_exposed",
             "PML-W-RULE-SCOPE",
-            "rule mentions no term used in this feature; consider domain or project scope",
             "warning",
         ),
     ]
@@ -1893,7 +2113,11 @@ def test_structured_condition_concept_counts_as_a_feature_local_term() -> None:
     document = _conditions_document(
         [{"concept": "testimonial", "state": "polished"}]
     )
-    document["domains"]["reviews"]["features"]["publishing"]["rules"] = {
+    feature = document["domains"]["reviews"]["features"]["publishing"]
+    feature["behaviors"]["publish"]["outcome"] = {
+        "statement": "Publication succeeds."
+    }
+    feature["rules"] = {
         "polished_visible": {
             "statement": "A Testimonial MUST remain visible when polished."
         }
