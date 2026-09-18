@@ -15,6 +15,7 @@ from jsonschema import Draft202012Validator
 import yaml
 
 from pml.formats import FORMAT_CHECKER
+from pml.model_builder import derive_relationships
 from pml.obligations import (
     probe_eligibility,
     probe_ineligibility_diagnostic,
@@ -27,6 +28,7 @@ from pml.resolver import (
     enumerate_obligations,
     iter_architecture,
     iter_nodes,
+    resolve_references,
 )
 from pml.validator import Diagnostic, UniqueKeyLoader, _load, _path, load_document
 
@@ -1036,6 +1038,11 @@ def validate_product_state(
     nodes = dict(iter_nodes(definition))
     obligations = {item.id: item for item in enumerate_obligations(definition)}
     binding_map = bindings["bindings"]
+    related_by_node = {node_id: set() for node_id in nodes}
+    for relationship in derive_relationships(resolve_references(definition)):
+        first, second = relationship["endpoints"]
+        related_by_node.setdefault(first, set()).add(second)
+        related_by_node.setdefault(second, set()).add(first)
 
     state_root = metadata / "state"
     expected_paths = {
@@ -1100,12 +1107,7 @@ def validate_product_state(
             current = input_fingerprint(repo_root, node_binding["paths"])
             if state["input_fingerprint"] != current:
                 diagnostics.append(Diagnostic(f"{state_path}:input_fingerprint", "sync-required", "state does not cover current bound inputs"))
-        declared_related = set(nodes[node_id].get("related_to", []))
-        declared_related.update(
-            other_id
-            for other_id, other in nodes.items()
-            if node_id in other.get("related_to", [])
-        )
+        declared_related = related_by_node[node_id]
         recorded_related = state.get("related_fingerprints", {})
         for related in sorted(declared_related.difference(recorded_related)):
             diagnostics.append(Diagnostic(f"{state_path}:related_fingerprints", "missing-related", f"state is missing related-node fingerprint '{related}'"))
