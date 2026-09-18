@@ -9,7 +9,7 @@ import yaml
 
 import pml.project_state as project_state
 from pml.obligations import Obligation, enumerate_architecture_obligations, enumerate_obligations
-from pml.resolver import Resolver
+from pml.resolver import Resolver, iter_nodes
 from pml.cli import main
 from pml.project_state import (
     MAX_ARCHITECTURE_STATE_ENTRIES,
@@ -25,6 +25,7 @@ from pml.project_state import (
     write_architecture_state,
     write_product_state,
     load_state,
+    state_path_for,
     validate_architecture_state,
     validate_probe_evidence,
     validate_product_state,
@@ -347,6 +348,136 @@ def test_product_state_detects_changed_bound_input(tmp_path: Path) -> None:
         definition_source=owner / "minimal.pml.yaml",
     )
     assert any(item.code == "sync-required" for item in changed)
+
+
+def test_product_state_invalidates_derived_related_node_fingerprint(
+    tmp_path: Path,
+) -> None:
+    """A shared concept relation makes a related input change stale."""
+
+    document = {
+        "pml": "0.1-draft",
+        "project": {
+            "id": "derived_freshness",
+            "name": "Derived freshness",
+            "purpose": "Keep related verification current.",
+        },
+        "concepts": {
+            "note": {"meaning": "A Note.", "states": ["draft"]},
+        },
+        "domains": {
+            "notes": {
+                "purpose": "Manage Notes.",
+                "features": {
+                    "create": {
+                        "purpose": "Create a Note.",
+                        "behaviors": {
+                            "create": {
+                                "conditions": [
+                                    {"concept": "note", "state": "draft"},
+                                ],
+                                "trigger": {
+                                    "statement": "A Member creates a Note.",
+                                },
+                                "outcome": {
+                                    "statement": "The Note remains draft.",
+                                },
+                            },
+                        },
+                    },
+                    "review": {
+                        "purpose": "Review a Note.",
+                        "behaviors": {
+                            "review": {
+                                "conditions": [
+                                    {"concept": "note", "state": "draft"},
+                                ],
+                                "trigger": {
+                                    "statement": "A Member reviews a Note.",
+                                },
+                                "outcome": {
+                                    "statement": "The Note remains draft.",
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+    create_id = "domains.notes.features.create"
+    review_id = "domains.notes.features.review"
+    product, manifest, digest = write_architecture_layout(tmp_path, document, {})
+    (product / "src" / "create.txt").write_text("version 1\n")
+    (product / "src" / "review.txt").write_text("version 1\n")
+    bindings = {
+        "pml_bindings": "0.1",
+        "bindings": {},
+    }
+    for node_id, _ in iter_nodes(document):
+        path = "src/create.txt" if node_id.startswith(create_id) else "src/review.txt"
+        bindings["bindings"][node_id] = {
+            "paths": [path],
+            "verification": {
+                obligation.id: {"agent_judgment": 1.0}
+                for obligation in enumerate_obligations(document, node_id)
+            },
+        }
+    (manifest.parent / "bindings.yaml").write_text(
+        yaml.safe_dump(bindings, sort_keys=False)
+    )
+    digest = bindings_digest(bindings)
+    (product / ".pml" / "pml.lock").write_text(yaml.safe_dump({
+        "pml_lock": "0.1",
+        "definition": {
+            "source": str(manifest),
+            "revision": "approved",
+            "digest": canonical_hash(document),
+        },
+        "bindings": {"digest": digest},
+    }, sort_keys=False))
+
+    for node_id, node in iter_nodes(document):
+        path = "src/create.txt" if node_id.startswith(create_id) else "src/review.txt"
+        state = {
+            "pml_state": "0.1",
+            "node": node_id,
+            "definition_hash": canonical_hash(node),
+            "bindings_digest": digest,
+            "input_fingerprint": input_fingerprint(product, [path]),
+            "obligations": {
+                obligation.id: {"implemented": "unknown", "evidence": {}}
+                for obligation in enumerate_obligations(document, node_id)
+            },
+        }
+        if node_id == create_id:
+            state["related_fingerprints"] = {
+                review_id: input_fingerprint(product, ["src/review.txt"]),
+            }
+        elif node_id == review_id:
+            state["related_fingerprints"] = {
+                create_id: input_fingerprint(product, ["src/create.txt"]),
+            }
+        state_path = state_path_for(product, node_id)
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(yaml.safe_dump(state, sort_keys=False))
+
+    assert validate_product_state(
+        product, document, definition_source=manifest
+    ) == []
+
+    (product / "src" / "review.txt").write_text("version 2\n")
+
+    diagnostics = validate_product_state(
+        product, document, definition_source=manifest
+    )
+    assert any(
+        diagnostic.code == "sync-required"
+        and diagnostic.path.endswith("create.state.yaml:related_fingerprints"
+        f".{review_id}")
+        and diagnostic.message == f"related node '{review_id}' has changed"
+        for diagnostic in diagnostics
+    )
 
 
 def test_state_schema_rejects_authored_scores_and_freshness() -> None:
