@@ -76,8 +76,8 @@ purpose, actors, rules, use_cases, behaviors, experience, related_to, architectu
 Features do not have generic inputs or outputs: those fields tend to restate use
 cases or drift into API design.
 
-A feature may define at most nine behaviors. Tooling emits a warning when a
-feature defines more than seven behaviors.
+A feature may define at most nine behaviors. Tooling emits
+`PML-W-BEHAVIOR-COUNT` when a feature defines more than seven behaviors.
 
 ### `behaviors.<id>`
 
@@ -149,8 +149,12 @@ that apply across scenarios. Security requirements are ordinary rules rather tha
 separate language section.
 
 The location of a rule determines its scope: top-level, domain, feature, or behavior.
-Rules are not hard-capped, but tooling emits a warning when a rules map at any
-scope contains more than seven rules.
+Rules are not hard-capped, but tooling emits `PML-W-RULE-COUNT` when a rules map
+at any scope contains more than seven rules. At feature scope,
+`PML-W-RULE-RESTATEMENT` warns when a rule substantially repeats a behavior
+transition, condition, failure, or surface `contains` item. At any rule scope,
+`PML-W-RULE-GENERIC` warns when a rule uses `every`, `all`, `any`, or `each`
+without naming an actor, concept, vocabulary key, or behavior.
 
 ### `use_cases.<id>`
 

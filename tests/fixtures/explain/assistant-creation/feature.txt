@@ -7,7 +7,7 @@ Feature: domains.assistants.features.creation
   Rules:
     atomic_failure: WHEN creation fails, THE SYSTEM MUST leave no partial Assistant.
     credentials_not_exposed: Credentials MUST NOT be exposed to the browser.
-    customer_ownership: Customer ownership MUST be enforced for every affected resource.
+    customer_ownership: Ownership MUST be enforced for every affected resource.
     entitlement: A Member MUST enable only capabilities available to the Member's Customer.
     ownership: A Member MUST create an Assistant only for the Member's Customer.
   Use cases:
