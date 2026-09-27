@@ -1,5 +1,7 @@
 # Product Manifest Language
 
+[![boost my agents](https://boostmyagents.com/badge/brevitize.svg)](https://boostmyagents.com/d/brevitize)
+
 Product Manifest Language (PML) is a small, opinionated, declarative language for
 describing what a software product is and what it must do.
 
